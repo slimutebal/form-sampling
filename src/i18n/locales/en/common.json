@@ -29,5 +29,48 @@
     "language": "Language",
     "languageId": "Indonesian",
     "languageEn": "English"
+  },
+  "shiftStart": {
+    "loading": "Loading shift status…",
+    "fields": {
+      "date": "Shift Date",
+      "shiftCode": "Shift Code",
+      "sectorCode": "Sector",
+      "samplingHouseCode": "Sampling House",
+      "status": "Status"
+    },
+    "status": {
+      "NEW": "New",
+      "INITIALIZED": "Initialized",
+      "ACTIVE": "Active",
+      "READY_TO_CLOSE": "Ready to Close",
+      "FINALIZED": "Finalized",
+      "ARCHIVED": "Archived"
+    },
+    "resume": {
+      "pageTitle": "Active Shift",
+      "title": "Active Shift Found",
+      "resumeAction": "Resume Shift",
+      "startNewAction": "Start New Shift"
+    },
+    "form": {
+      "pageTitle": "Shift Registration",
+      "title": "Shift Registration",
+      "submit": "Review Registration"
+    },
+    "review": {
+      "title": "Registration Ready",
+      "message": "Registration is ready for setup.",
+      "edit": "Edit Registration"
+    },
+    "errors": {
+      "required": "This field is required.",
+      "invalidDate": "Enter a valid date.",
+      "loadFailed": "Unable to load local shift data.",
+      "corruptedState": "Local shift data is inconsistent.",
+      "generic": "Something went wrong. Please try again.",
+      "registrationFailed": "Unable to complete registration. Please try again.",
+      "retry": "Retry"
+    }
   }
 }

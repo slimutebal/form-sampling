@@ -1,5 +1,6 @@
-import { PlaceholderScreen } from '@/components/shared/PlaceholderScreen'
+import { localOperationalStore } from '@/app/local-operational-store'
+import { ShiftStartPage } from '@/features/shift-registration/shift-start-page'
 
 export function StartPage() {
-  return <PlaceholderScreen titleKey="screens.start" />
+  return <ShiftStartPage store={localOperationalStore} />
 }

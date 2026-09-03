@@ -38,6 +38,11 @@ describe('application shell', () => {
     expect(screen.getByRole('heading', { name: 'Pile' })).toBeInTheDocument()
   })
 
+  it('does not render bottom navigation on the pre-operational start route', () => {
+    renderApp(['/start'])
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
+  })
+
   it('switches translated shell text without reloading', async () => {
     const user = userEvent.setup()
     renderApp(['/more'])

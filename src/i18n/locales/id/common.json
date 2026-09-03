@@ -29,5 +29,48 @@
     "language": "Bahasa",
     "languageId": "Bahasa Indonesia",
     "languageEn": "Bahasa Inggris"
+  },
+  "shiftStart": {
+    "loading": "Memuat status shift…",
+    "fields": {
+      "date": "Tanggal Shift",
+      "shiftCode": "Kode Shift",
+      "sectorCode": "Sektor",
+      "samplingHouseCode": "Sampling House",
+      "status": "Status"
+    },
+    "status": {
+      "NEW": "Baru",
+      "INITIALIZED": "Diinisialisasi",
+      "ACTIVE": "Aktif",
+      "READY_TO_CLOSE": "Siap Ditutup",
+      "FINALIZED": "Difinalisasi",
+      "ARCHIVED": "Diarsipkan"
+    },
+    "resume": {
+      "pageTitle": "Shift Aktif",
+      "title": "Shift Aktif Ditemukan",
+      "resumeAction": "Lanjutkan Shift",
+      "startNewAction": "Mulai Shift Baru"
+    },
+    "form": {
+      "pageTitle": "Registrasi Shift",
+      "title": "Registrasi Shift",
+      "submit": "Tinjau Registrasi"
+    },
+    "review": {
+      "title": "Registrasi Siap",
+      "message": "Registrasi siap untuk tahap setup.",
+      "edit": "Ubah Registrasi"
+    },
+    "errors": {
+      "required": "Bagian ini wajib diisi.",
+      "invalidDate": "Masukkan tanggal yang valid.",
+      "loadFailed": "Gagal memuat data shift lokal.",
+      "corruptedState": "Data shift lokal tidak konsisten.",
+      "generic": "Terjadi kesalahan. Silakan coba lagi.",
+      "registrationFailed": "Registrasi tidak dapat diselesaikan. Silakan coba lagi.",
+      "retry": "Coba Lagi"
+    }
   }
 }
