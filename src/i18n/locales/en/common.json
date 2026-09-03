@@ -1,0 +1,33 @@
+{
+  "app": {
+    "name": "Form Sampling"
+  },
+  "navigation": {
+    "home": "Home",
+    "piles": "Piles",
+    "samples": "Samples",
+    "report": "Report",
+    "more": "More"
+  },
+  "welcome": {
+    "title": "Form Sampling",
+    "subtitle": "Field ore sampling and shift reporting.",
+    "continue": "Continue"
+  },
+  "placeholder": {
+    "screenNotice": "This screen is a navigation placeholder for Phase 1. No operational features yet."
+  },
+  "screens": {
+    "start": "Start Shift",
+    "home": "Home",
+    "piles": "Piles",
+    "samples": "Samples",
+    "report": "Report",
+    "more": "More"
+  },
+  "settings": {
+    "language": "Language",
+    "languageId": "Indonesian",
+    "languageEn": "English"
+  }
+}

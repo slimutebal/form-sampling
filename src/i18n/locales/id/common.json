@@ -1,0 +1,33 @@
+{
+  "app": {
+    "name": "Form Sampling"
+  },
+  "navigation": {
+    "home": "Beranda",
+    "piles": "Pile",
+    "samples": "Sampel",
+    "report": "Laporan",
+    "more": "Lainnya"
+  },
+  "welcome": {
+    "title": "Form Sampling",
+    "subtitle": "Sampling ore lapangan dan pelaporan shift.",
+    "continue": "Lanjutkan"
+  },
+  "placeholder": {
+    "screenNotice": "Layar ini adalah placeholder navigasi untuk Fase 1. Belum ada fitur operasional."
+  },
+  "screens": {
+    "start": "Mulai Shift",
+    "home": "Beranda",
+    "piles": "Pile",
+    "samples": "Sampel",
+    "report": "Laporan",
+    "more": "Lainnya"
+  },
+  "settings": {
+    "language": "Bahasa",
+    "languageId": "Bahasa Indonesia",
+    "languageEn": "Bahasa Inggris"
+  }
+}

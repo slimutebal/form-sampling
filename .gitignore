@@ -3,7 +3,9 @@ node_modules/
 
 # Build
 dist/
+dev-dist/
 coverage/
+*.tsbuildinfo
 
 # Environment
 .env
