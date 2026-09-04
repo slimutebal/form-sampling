@@ -87,14 +87,93 @@ export function validateMasterLocations(locations: readonly LocationReference[])
   return validateUniqueKeys(locations, (l) => l.code, 'DUPLICATE_LOCATION_CODE', 'LocationCode')
 }
 
+/**
+ * Sampling-house logical uniqueness is Sector + Sampling House
+ * (Phase 16 §2B) — the same Sampling_House_Code legitimately repeats
+ * across different sectors, so the key must include `sectorCode`.
+ */
 export function validateMasterSamplingHouses(
   samplingHouses: readonly SamplingHouseReference[],
 ): Result<readonly SamplingHouseReference[]> {
-  return validateUniqueKeys(samplingHouses, (s) => s.code, 'DUPLICATE_SAMPLING_HOUSE_CODE', 'SamplingHouseCode')
+  return validateUniqueKeys(
+    samplingHouses,
+    (s) => `${s.sectorCode}::${s.code}`,
+    'DUPLICATE_SAMPLING_HOUSE_CODE',
+    'Sector+SamplingHouseCode',
+  )
 }
 
+/**
+ * Pile_ID is globally unique within MasterData (Phase 16 §2C) —
+ * Stockpile_Code is deliberately NOT validated as unique here, since
+ * many piles legitimately share one stockpile.
+ */
 export function validateMasterPileAreas(pileAreas: readonly PileAreaReference[]): Result<readonly PileAreaReference[]> {
-  return validateUniqueKeys(pileAreas, (p) => p.code, 'DUPLICATE_PILE_AREA_CODE', 'PileAreaCode')
+  return validateUniqueKeys(pileAreas, (p) => p.pileId, 'DUPLICATE_PILE_AREA_PILE_ID', 'PileId')
+}
+
+/** Phase 16 §3 referential integrity: every Sampling_Houses.Sector_Code must resolve to a known Sector. */
+export function validateSamplingHouseSectorReferences(
+  samplingHouses: readonly SamplingHouseReference[],
+  sectors: readonly SectorReference[],
+): Result<readonly SamplingHouseReference[]> {
+  const knownSectorCodes = new Set<string>(sectors.map((sector) => sector.code as string))
+  const orphan = samplingHouses.find((house) => !knownSectorCodes.has(house.sectorCode as string))
+  if (orphan) {
+    return err<DomainError>({
+      code: 'MASTER_SAMPLING_HOUSE_SECTOR_NOT_FOUND',
+      message: `Sampling house ${orphan.code} references unknown SectorCode ${orphan.sectorCode}`,
+    })
+  }
+  return ok(samplingHouses)
+}
+
+/** Phase 16 §3 referential integrity: every Pile_Areas.Sector_Code must resolve to a known Sector. */
+export function validatePileAreaSectorReferences(
+  pileAreas: readonly PileAreaReference[],
+  sectors: readonly SectorReference[],
+): Result<readonly PileAreaReference[]> {
+  const knownSectorCodes = new Set<string>(sectors.map((sector) => sector.code as string))
+  const orphan = pileAreas.find((pileArea) => !knownSectorCodes.has(pileArea.sectorCode as string))
+  if (orphan) {
+    return err<DomainError>({
+      code: 'MASTER_PILE_AREA_SECTOR_NOT_FOUND',
+      message: `Pile area ${orphan.pileId} references unknown SectorCode ${orphan.sectorCode}`,
+    })
+  }
+  return ok(pileAreas)
+}
+
+/** Phase 16 §3 referential integrity: every Pile_Areas.Ore must resolve to a known Ore_Sampling_Config entry. */
+export function validatePileAreaOreReferences(
+  pileAreas: readonly PileAreaReference[],
+  oreSamplingConfigs: readonly OreSamplingConfig[],
+): Result<readonly PileAreaReference[]> {
+  const knownOreCodes = new Set<string>(oreSamplingConfigs.map((config) => config.oreCode as string))
+  const orphan = pileAreas.find((pileArea) => !knownOreCodes.has(pileArea.oreCode as string))
+  if (orphan) {
+    return err<DomainError>({
+      code: 'MASTER_PILE_AREA_ORE_NOT_FOUND',
+      message: `Pile area ${orphan.pileId} references unknown Ore ${orphan.oreCode}`,
+    })
+  }
+  return ok(pileAreas)
+}
+
+/** Phase 16 §3 referential integrity: every Trucks.Hauler_Code must resolve to a known Hauler. */
+export function validateTruckHaulerReferences(
+  trucks: readonly TruckReference[],
+  haulers: readonly HaulerReference[],
+): Result<readonly TruckReference[]> {
+  const knownHaulerCodes = new Set<string>(haulers.map((hauler) => hauler.code as string))
+  const orphan = trucks.find((truck) => !knownHaulerCodes.has(truck.haulerCode as string))
+  if (orphan) {
+    return err<DomainError>({
+      code: 'MASTER_TRUCK_HAULER_NOT_FOUND',
+      message: `Truck ${orphan.id} references unknown HaulerCode ${orphan.haulerCode}`,
+    })
+  }
+  return ok(trucks)
 }
 
 export function validateMasterHaulers(haulers: readonly HaulerReference[]): Result<readonly HaulerReference[]> {
@@ -128,6 +207,10 @@ export function createMasterData(params: MasterDataInput): Result<MasterData> {
     validateMasterHaulers(params.haulers),
     validateMasterTrucks(params.trucks),
     validateMasterOreSamplingConfigs(params.oreSamplingConfigs),
+    validateSamplingHouseSectorReferences(params.samplingHouses, params.sectors),
+    validatePileAreaSectorReferences(params.pileAreas, params.sectors),
+    validatePileAreaOreReferences(params.pileAreas, params.oreSamplingConfigs),
+    validateTruckHaulerReferences(params.trucks, params.haulers),
   ]
   for (const check of checks) {
     if (!check.ok) {

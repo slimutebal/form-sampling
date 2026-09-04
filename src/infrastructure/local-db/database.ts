@@ -16,8 +16,17 @@
  * (non-indexed) object fields — not a new table or index — Dexie
  * requires no additional `.stores()` version for them; existing v1/v2
  * rows simply have no such fields until a new import writes them.
+ *
+ * v4 (Phase 16): adds `masterDataCache` (a single row keyed `'current'`,
+ * holding the latest validated Google master-data snapshot for a
+ * future shift/setup — never the active shift's own
+ * `shiftWorkspaces` row) and `shiftSummarySync` (one offline outbox row
+ * per Shift_ID for the Google Shift_Summary sync). The v1/v2/v3
+ * `.stores()` declarations are preserved unchanged, so every existing
+ * shiftWorkspaces/haulageTransactions/samplePositions/importHistory/
+ * metadata row survives the upgrade untouched.
  */
-export const LOCAL_DATABASE_SCHEMA_VERSION = 3
+export const LOCAL_DATABASE_SCHEMA_VERSION = 4
 
 /** Stable production database name (Phase 7 §12). */
 export const DEFAULT_LOCAL_DATABASE_NAME = 'form-sampling'

@@ -18,11 +18,14 @@ import type { SamplePosition } from '../../domain/sample-handling/sample-positio
 import type { Shift } from '../../domain/shift/shift'
 import { DEFAULT_LOCAL_DATABASE_NAME } from './database'
 import {
+  CURRENT_MASTER_DATA_CACHE_KEY,
   CURRENT_SHIFT_METADATA_KEY,
   type HaulageTransactionRecord,
   type ImportHistoryRecord,
+  type MasterDataCacheRecord,
   type MetadataRecord,
   type SamplePositionRecord,
+  type ShiftSummarySyncRecord,
   type ShiftWorkspaceRecord,
 } from './records'
 
@@ -39,6 +42,8 @@ class LocalOperationalDatabase extends Dexie {
   readonly samplePositions!: Table<SamplePositionRecord, string>
   readonly metadata!: Table<MetadataRecord, string>
   readonly importHistory!: Table<ImportHistoryRecord, string>
+  readonly masterDataCache!: Table<MasterDataCacheRecord, string>
+  readonly shiftSummarySync!: Table<ShiftSummarySyncRecord, string>
 
   constructor(databaseName: string) {
     super(databaseName)
@@ -71,6 +76,20 @@ class LocalOperationalDatabase extends Dexie {
       samplePositions: 'id, shiftId, pileId, [shiftId+pileId]',
       importHistory: 'fingerprint',
     })
+    // v4 (Phase 16): adds masterDataCache (single row keyed 'current') and
+    // shiftSummarySync (one outbox row per shiftId) only — every v1/v2/v3
+    // table/index is repeated unchanged, so existing shiftWorkspaces/
+    // haulageTransactions/samplePositions/importHistory/metadata data
+    // survives the upgrade untouched.
+    this.version(4).stores({
+      shiftWorkspaces: 'shiftId',
+      haulageTransactions: 'id, shiftId, pileId, [shiftId+pileId]',
+      metadata: 'key',
+      samplePositions: 'id, shiftId, pileId, [shiftId+pileId]',
+      importHistory: 'fingerprint',
+      masterDataCache: 'key',
+      shiftSummarySync: 'shiftId',
+    })
   }
 }
 
@@ -100,6 +119,12 @@ export interface LocalShiftWorkspace {
   readonly pendingBatches: readonly PendingBatchCarryOver[]
   /** Carry-over pending samples from a handover import (Phase 12) — `[]` when none was imported. */
   readonly pendingSamples: readonly HandoverPendingSample[]
+}
+
+/** A cached master-data snapshot as returned to application code (Phase 16 §6/§7), distinct from any `LocalShiftWorkspace.masterData`. */
+export interface LocalMasterDataCacheEntry {
+  readonly masterData: MasterData
+  readonly fetchedAt: Date
 }
 
 export interface InitializeShiftWorkspaceParams {
@@ -688,6 +713,85 @@ export class LocalOperationalStore {
     try {
       const existing = await this.db.importHistory.get(fingerprint)
       return ok(existing !== undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Reads the latest cached Google master-data snapshot (Phase 16 §6/§7),
+   * for offline startup / a future shift's setup. `undefined` when no
+   * refresh has ever succeeded. Never reads from `shiftWorkspaces` — this
+   * is a distinct cache, independent of any active shift's own
+   * `masterData` snapshot.
+   */
+  async readCachedMasterData(): Promise<StoreResult<LocalMasterDataCacheEntry | undefined>> {
+    try {
+      const record = await this.db.masterDataCache.get(CURRENT_MASTER_DATA_CACHE_KEY)
+      return ok(record ? { masterData: record.masterData, fetchedAt: record.fetchedAt } : undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Atomically replaces the single cached master-data snapshot (Phase 16
+   * §6/§7) with `masterData`/`fetchedAt`. The caller (`refreshMasterData`)
+   * is responsible for only calling this once the full remote catalog is
+   * already validated — this method never touches `shiftWorkspaces`, so
+   * an active shift's own `masterData` snapshot can never be changed by
+   * a refresh.
+   */
+  async replaceMasterDataCache(masterData: MasterData, fetchedAt: Date): Promise<StoreResult<void>> {
+    // Snapshot before the first `await`, mirroring every other write
+    // method on this store (Phase 7 §29).
+    const masterDataSnapshot: MasterData = structuredClone(masterData)
+    const fetchedAtSnapshot = new Date(fetchedAt.getTime())
+    try {
+      await this.db.masterDataCache.put({
+        key: CURRENT_MASTER_DATA_CACHE_KEY,
+        masterData: masterDataSnapshot,
+        fetchedAt: fetchedAtSnapshot,
+      })
+      return ok(undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Upserts the one outbox row for `record.shiftId` (Phase 16 §10/§12).
+   * Deliberately a `put`, not an add-only write: a newer summary for the
+   * same Shift_ID always replaces the older queued payload in place, so
+   * there is never more than one logical outbox entry per shift.
+   */
+  async upsertShiftSummarySyncRecord(record: ShiftSummarySyncRecord): Promise<StoreResult<void>> {
+    const recordSnapshot: ShiftSummarySyncRecord = structuredClone(record)
+    try {
+      await this.db.shiftSummarySync.put(recordSnapshot)
+      return ok(undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /** Reads the one outbox row for a Shift_ID. `undefined` if nothing has ever been queued for it. */
+  async getShiftSummarySyncRecord(shiftId: ShiftId): Promise<StoreResult<ShiftSummarySyncRecord | undefined>> {
+    try {
+      const record = await this.db.shiftSummarySync.get(shiftId)
+      return ok(record)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /** Lists every outbox row eligible for a retry attempt (Phase 16 §13) — status PENDING or FAILED. */
+  async listPendingShiftSummarySyncRecords(): Promise<StoreResult<readonly ShiftSummarySyncRecord[]>> {
+    try {
+      const records = await this.db.shiftSummarySync
+        .filter((record) => record.status === 'PENDING' || record.status === 'FAILED')
+        .toArray()
+      return ok(records)
     } catch (caught) {
       return err(mapCaughtError(caught))
     }

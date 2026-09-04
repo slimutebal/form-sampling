@@ -252,3 +252,135 @@ describe('LocalOperationalStore — v2 to v3 schema migration (Phase 12 rule 9)'
     store.close()
   })
 })
+
+describe('LocalOperationalStore — v3 to v4 schema migration (Phase 16 §7)', () => {
+  it('existing v3 shiftWorkspace/haulageTransaction/samplePosition/importHistory data survives opening through the v4-aware store, and masterDataCache/shiftSummarySync become usable', async () => {
+    const databaseName = uniqueDatabaseName()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    const pile = buildFixtureSapPile('PILE-1')
+
+    // 1. Create a legacy schema-v3 database directly with Dexie, using the
+    // exact v1/v2/v3 `.stores()` shapes — bypassing LocalOperationalStore
+    // entirely so this test does not depend on the current (v4) store
+    // already knowing how to write v3 data.
+    const legacyDb = new Dexie(databaseName)
+    legacyDb.version(1).stores({
+      shiftWorkspaces: 'shiftId',
+      haulageTransactions: 'id, shiftId, pileId, [shiftId+pileId]',
+      metadata: 'key',
+    })
+    legacyDb.version(2).stores({
+      shiftWorkspaces: 'shiftId',
+      haulageTransactions: 'id, shiftId, pileId, [shiftId+pileId]',
+      metadata: 'key',
+      samplePositions: 'id, shiftId, pileId, [shiftId+pileId]',
+    })
+    legacyDb.version(3).stores({
+      shiftWorkspaces: 'shiftId',
+      haulageTransactions: 'id, shiftId, pileId, [shiftId+pileId]',
+      metadata: 'key',
+      samplePositions: 'id, shiftId, pileId, [shiftId+pileId]',
+      importHistory: 'fingerprint',
+    })
+
+    const workspaceRecord: ShiftWorkspaceRecord = {
+      shiftId: shift.id,
+      shift,
+      piles: [pile],
+      masterData,
+      fleetSetup,
+    }
+    await legacyDb.table('shiftWorkspaces').add(workspaceRecord)
+    await legacyDb.table('metadata').put({ key: CURRENT_SHIFT_METADATA_KEY, value: shift.id })
+
+    const transaction = buildFixtureHaulageTransaction({
+      id: 'TX-LEGACY-V3',
+      shiftId: 'SHIFT-1',
+      pile,
+      batch: 24,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    const transactionRecord: HaulageTransactionRecord = {
+      id: transaction.id,
+      shiftId: transaction.shiftId,
+      pileId: transaction.pileId,
+      transaction,
+    }
+    await legacyDb.table('haulageTransactions').add(transactionRecord)
+    await legacyDb.table('importHistory').add({
+      fingerprint: 'fp-legacy-v3',
+      sourceShiftId: 'SHIFT-PREV-1',
+      schemaVersion: 1,
+    })
+
+    // 2. Close the legacy connection before reopening through the real store.
+    legacyDb.close()
+
+    // 3. Open the same database name through the current (v4) store — this
+    // triggers Dexie's in-place v3 -> v4 upgrade.
+    const store = new LocalOperationalStore(databaseName)
+
+    // 4. Existing v3 data is still readable — nothing was deleted.
+    const loadedWorkspace = await store.loadCurrentShiftWorkspace()
+    expect(loadedWorkspace.ok).toBe(true)
+    if (!loadedWorkspace.ok) return
+    expect(loadedWorkspace.value?.shiftId).toBe('SHIFT-1')
+    expect(loadedWorkspace.value?.piles.map((p) => p.id)).toEqual(['PILE-1'])
+
+    const loadedTransaction = await store.getHaulageTransaction(fixtureTransactionId('TX-LEGACY-V3'))
+    expect(loadedTransaction.ok).toBe(true)
+    if (!loadedTransaction.ok) return
+    expect(loadedTransaction.value).toEqual(transaction)
+
+    const hasImport = await store.hasImportedFingerprint('fp-legacy-v3')
+    expect(hasImport.ok).toBe(true)
+    if (!hasImport.ok) return
+    expect(hasImport.value).toBe(true)
+
+    // 5. masterDataCache is usable after migration.
+    const cacheBeforeReplace = await store.readCachedMasterData()
+    expect(cacheBeforeReplace.ok).toBe(true)
+    if (!cacheBeforeReplace.ok) return
+    expect(cacheBeforeReplace.value).toBeUndefined()
+
+    const fetchedAt = new Date('2026-09-04T10:00:00.000Z')
+    const replaceResult = await store.replaceMasterDataCache(masterData, fetchedAt)
+    expect(replaceResult.ok).toBe(true)
+
+    const cacheAfterReplace = await store.readCachedMasterData()
+    expect(cacheAfterReplace.ok).toBe(true)
+    if (!cacheAfterReplace.ok) return
+    expect(cacheAfterReplace.value?.fetchedAt).toEqual(fetchedAt)
+
+    // 6. shiftSummarySync is usable after migration.
+    const upsertResult = await store.upsertShiftSummarySyncRecord({
+      shiftId: fixtureShiftId('SHIFT-1'),
+      summary: {
+        shiftId: fixtureShiftId('SHIFT-1'),
+        date: shift.date,
+        shiftCode: shift.shiftCode,
+        sectorCode: shift.sectorCode,
+        samplingHouseCode: shift.samplingHouseCode,
+        ritTotal: 1,
+        batchTotal: 1,
+        incrementTotal: 0,
+        wrongTruckTotal: 0,
+      },
+      status: 'PENDING',
+      attemptCount: 0,
+      updatedAt: fetchedAt,
+    })
+    expect(upsertResult.ok).toBe(true)
+
+    const pending = await store.listPendingShiftSummarySyncRecords()
+    expect(pending.ok).toBe(true)
+    if (!pending.ok) return
+    expect(pending.value.map((record) => record.shiftId)).toEqual(['SHIFT-1'])
+
+    store.close()
+  })
+})

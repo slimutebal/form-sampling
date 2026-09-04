@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { parseOreCode, parseSectorCode } from '../common/codes'
-import { parseEmployeeId, parseTruckId } from '../common/identifiers'
+import { parseOreCode, parseSamplingHouseCode, parseSectorCode } from '../common/codes'
+import { parseEmployeeId, parsePileId, parseTruckId } from '../common/identifiers'
 import { parseHaulerCode, parsePileAreaCode } from './master-codes'
-import { createEmployeeReference, createSectorReference, createTruckReference, type TruckReference } from './references'
+import {
+  createEmployeeReference,
+  createHaulerReference,
+  createPileAreaReference,
+  createSamplingHouseReference,
+  createSectorReference,
+  createTruckReference,
+  type PileAreaReference,
+  type SamplingHouseReference,
+  type TruckReference,
+} from './references'
 import {
   createOreSamplingConfig,
   parseBatchSize,
@@ -16,8 +26,14 @@ import {
   findOreSamplingConfig,
   findTruck,
   validateMasterOreSamplingConfigs,
+  validateMasterPileAreas,
+  validateMasterSamplingHouses,
   validateMasterSectors,
   validateMasterTrucks,
+  validatePileAreaOreReferences,
+  validatePileAreaSectorReferences,
+  validateSamplingHouseSectorReferences,
+  validateTruckHaulerReferences,
   type MasterData,
   type MasterDataInput,
 } from './master-data'
@@ -27,6 +43,22 @@ function truck(idValue: string, haulerValue: string): TruckReference {
   const haulerCode = parseHaulerCode(haulerValue)
   if (!id.ok || !haulerCode.ok) throw new Error('invalid test fixture')
   return createTruckReference(id.value, haulerCode.value)
+}
+
+function samplingHouse(sectorValue: string, codeValue: string): SamplingHouseReference {
+  const sectorCode = parseSectorCode(sectorValue)
+  const code = parseSamplingHouseCode(codeValue)
+  if (!sectorCode.ok || !code.ok) throw new Error('invalid test fixture')
+  return createSamplingHouseReference(sectorCode.value, code.value)
+}
+
+function pileArea(sectorValue: string, stockpileValue: string, pileIdValue: string, oreValue: string): PileAreaReference {
+  const sectorCode = parseSectorCode(sectorValue)
+  const stockpileCode = parsePileAreaCode(stockpileValue)
+  const pileId = parsePileId(pileIdValue)
+  const oreCode = parseOreCode(oreValue)
+  if (!sectorCode.ok || !stockpileCode.ok || !pileId.ok || !oreCode.ok) throw new Error('invalid test fixture')
+  return createPileAreaReference(sectorCode.value, stockpileCode.value, pileId.value, oreCode.value)
 }
 
 function oreConfig(oreCodeValue: string, interval: number, batchSize: number, packing: number): OreSamplingConfig {
@@ -112,6 +144,8 @@ describe('master collection duplicate validation', () => {
 
 describe('createMasterData', () => {
   function buildValidMasterData(): MasterData {
+    const haulerCode = parseHaulerCode('PT-ABC')
+    if (!haulerCode.ok) throw new Error('invalid test fixture')
     const result = createMasterData({
       employees: [],
       crews: [],
@@ -119,7 +153,7 @@ describe('createMasterData', () => {
       locations: [],
       samplingHouses: [],
       pileAreas: [],
-      haulers: [],
+      haulers: [createHaulerReference(haulerCode.value)],
       trucks: [truck('DT-2045', 'PT-ABC'), truck('DT-2071', 'PT-ABC')],
       oreSamplingConfigs: [oreConfig('SAP', 2, 20, 2), oreConfig('LIM', 5, 100, 10)],
     })
@@ -170,6 +204,8 @@ describe('createMasterData', () => {
 
   it('isolates the snapshot from later mutation of the caller-owned trucks array', () => {
     const trucks = [truck('DT-2045', 'PT-ABC')]
+    const haulerCode = parseHaulerCode('PT-ABC')
+    if (!haulerCode.ok) throw new Error('invalid test fixture')
 
     const result = createMasterData({
       employees: [],
@@ -178,7 +214,7 @@ describe('createMasterData', () => {
       locations: [],
       samplingHouses: [],
       pileAreas: [],
-      haulers: [],
+      haulers: [createHaulerReference(haulerCode.value)],
       trucks,
       oreSamplingConfigs: [],
     })
@@ -218,17 +254,18 @@ describe('createMasterData', () => {
     const ores = ['SAP', 'LIM', 'FUTURE_A', 'FUTURE_B', 'FUTURE_C'].map((code, index) =>
       oreConfig(code, index + 1, (index + 1) * 10, index + 1),
     )
-    const pileAreas = Array.from({ length: 9 }, (_, index) => {
-      const code = parsePileAreaCode(`AREA-${index + 1}`)
-      if (!code.ok) throw new Error('invalid test fixture')
-      return { code: code.value }
-    })
+    const pileAreas = Array.from({ length: 9 }, (_, index) =>
+      pileArea('SECTOR-1', `AREA-${index + 1}`, `PILE-${index + 1}`, 'SAP'),
+    )
     const trucks = Array.from({ length: 20 }, (_, index) => truck(`DT-${1000 + index}`, 'PT-ABC'))
     const sectors = Array.from({ length: 10 }, (_, index) => {
       const code = parseSectorCode(`SECTOR-${index + 1}`)
       if (!code.ok) throw new Error('invalid test fixture')
       return createSectorReference(code.value)
     })
+
+    const haulerCode = parseHaulerCode('PT-ABC')
+    if (!haulerCode.ok) throw new Error('invalid test fixture')
 
     const result = createMasterData({
       employees: [],
@@ -237,7 +274,7 @@ describe('createMasterData', () => {
       locations: [],
       samplingHouses: [],
       pileAreas,
-      haulers: [],
+      haulers: [createHaulerReference(haulerCode.value)],
       trucks,
       oreSamplingConfigs: ores,
     })
@@ -341,5 +378,114 @@ describe('MasterData branding', () => {
     const notValidated: MasterData = raw
 
     expect(notValidated).toBe(raw)
+  })
+})
+
+describe('Phase 16: sampling-house composite uniqueness', () => {
+  it('allows the same Sampling_House_Code to repeat across different sectors', () => {
+    const houses = [samplingHouse('BR1', 'SH_01'), samplingHouse('DS', 'SH_01')]
+    const result = validateMasterSamplingHouses(houses)
+    expect(result.ok).toBe(true)
+  })
+
+  it('rejects a duplicate Sector + Sampling House pair', () => {
+    const houses = [samplingHouse('BR1', 'SH_01'), samplingHouse('BR1', 'SH_01')]
+    const result = validateMasterSamplingHouses(houses)
+    expect(result.ok).toBe(false)
+  })
+})
+
+describe('Phase 16: pile area uniqueness', () => {
+  it('rejects a duplicate Pile_ID even under different stockpiles', () => {
+    const pileAreas = [pileArea('BR1', 'STOCK-A', 'PILE-1', 'SAP'), pileArea('BR1', 'STOCK-B', 'PILE-1', 'SAP')]
+    const result = validateMasterPileAreas(pileAreas)
+    expect(result.ok).toBe(false)
+  })
+
+  it('allows a repeated Stockpile_Code across multiple piles', () => {
+    const pileAreas = [pileArea('BR1', 'STOCK-A', 'PILE-1', 'SAP'), pileArea('BR1', 'STOCK-A', 'PILE-2', 'SAP')]
+    const result = validateMasterPileAreas(pileAreas)
+    expect(result.ok).toBe(true)
+  })
+})
+
+describe('Phase 16: referential integrity', () => {
+  it('rejects a sampling house whose Sector_Code is not a known Sector', () => {
+    const knownSector = parseSectorCode('BR1')
+    expect(knownSector.ok).toBe(true)
+    if (!knownSector.ok) return
+    const result = validateSamplingHouseSectorReferences(
+      [samplingHouse('DS', 'SH_01')],
+      [createSectorReference(knownSector.value)],
+    )
+    expect(result.ok).toBe(false)
+  })
+
+  it('accepts a sampling house whose Sector_Code resolves to a known Sector', () => {
+    const knownSector = parseSectorCode('BR1')
+    expect(knownSector.ok).toBe(true)
+    if (!knownSector.ok) return
+    const result = validateSamplingHouseSectorReferences([samplingHouse('BR1', 'SH_01')], [createSectorReference(knownSector.value)])
+    expect(result.ok).toBe(true)
+  })
+
+  it('rejects a pile area whose Sector_Code is not a known Sector', () => {
+    const knownSector = parseSectorCode('BR1')
+    expect(knownSector.ok).toBe(true)
+    if (!knownSector.ok) return
+    const result = validatePileAreaSectorReferences(
+      [pileArea('DS', 'STOCK-A', 'PILE-1', 'SAP')],
+      [createSectorReference(knownSector.value)],
+    )
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects a pile area whose Ore is not a known Ore_Sampling_Config entry', () => {
+    const result = validatePileAreaOreReferences(
+      [pileArea('BR1', 'STOCK-A', 'PILE-1', 'UNKNOWN_ORE')],
+      [oreConfig('SAP', 2, 20, 2)],
+    )
+    expect(result.ok).toBe(false)
+  })
+
+  it('accepts a pile area whose Ore resolves to a known Ore_Sampling_Config entry', () => {
+    const result = validatePileAreaOreReferences([pileArea('BR1', 'STOCK-A', 'PILE-1', 'SAP')], [oreConfig('SAP', 2, 20, 2)])
+    expect(result.ok).toBe(true)
+  })
+
+  it('rejects a truck whose Hauler_Code is not a known Hauler', () => {
+    const haulerCode = parseHaulerCode('PT-ABC')
+    expect(haulerCode.ok).toBe(true)
+    if (!haulerCode.ok) return
+    const result = validateTruckHaulerReferences([truck('DT-2045', 'PT-UNKNOWN')], [createHaulerReference(haulerCode.value)])
+    expect(result.ok).toBe(false)
+  })
+
+  it('accepts a truck whose Hauler_Code resolves to a known Hauler', () => {
+    const haulerCode = parseHaulerCode('PT-ABC')
+    expect(haulerCode.ok).toBe(true)
+    if (!haulerCode.ok) return
+    const result = validateTruckHaulerReferences([truck('DT-2045', 'PT-ABC')], [createHaulerReference(haulerCode.value, 'PT ABC Transport')])
+    expect(result.ok).toBe(true)
+  })
+
+  it('createMasterData rejects a full snapshot with an orphaned pile-area Sector reference', () => {
+    const knownSector = parseSectorCode('BR1')
+    expect(knownSector.ok).toBe(true)
+    if (!knownSector.ok) return
+    const result = createMasterData({
+      employees: [],
+      crews: [],
+      sectors: [createSectorReference(knownSector.value)],
+      locations: [],
+      samplingHouses: [],
+      pileAreas: [pileArea('OTHER-SECTOR', 'STOCK-A', 'PILE-1', 'SAP')],
+      haulers: [],
+      trucks: [],
+      oreSamplingConfigs: [oreConfig('SAP', 2, 20, 2)],
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('MASTER_PILE_AREA_SECTOR_NOT_FOUND')
   })
 })

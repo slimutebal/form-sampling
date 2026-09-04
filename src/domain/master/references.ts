@@ -1,5 +1,5 @@
-import type { SamplingHouseCode, SectorCode } from '../common/codes'
-import type { EmployeeId, TruckId } from '../common/identifiers'
+import type { OreCode, SamplingHouseCode, SectorCode } from '../common/codes'
+import type { EmployeeId, PileId, TruckId } from '../common/identifiers'
 import type { CrewCode, HaulerCode, LocationCode, PileAreaCode } from './master-codes'
 
 /**
@@ -18,16 +18,19 @@ export function createEmployeeReference(id: EmployeeId, name: string): EmployeeR
 }
 
 /**
- * Minimal crew master reference. No confirmed human-readable label
- * beyond the code exists in documentation, so only the code is
- * represented (§2 — prefer minimal confirmed structure).
+ * Crew master reference (Phase 16 real contract: `Crew_ID | Name | Job`).
+ * `jobCode` is a plain, language-neutral string — no closed enum is
+ * invented, since no confirmed business rule defines the set of jobs —
+ * and is optional because the Google source column may be blank.
  */
 export interface CrewReference {
   readonly code: CrewCode
+  readonly name: string
+  readonly jobCode?: string
 }
 
-export function createCrewReference(code: CrewCode): CrewReference {
-  return { code }
+export function createCrewReference(code: CrewCode, name: string, jobCode?: string): CrewReference {
+  return { code, name, jobCode }
 }
 
 /** Minimal sector master reference (`Sector`). */
@@ -49,36 +52,57 @@ export function createLocationReference(code: LocationCode): LocationReference {
 }
 
 /**
- * Minimal sampling-house master reference. No confirmed relationship
- * to a single Location is assumed (§2).
+ * Sampling-house master reference. Phase 16 real source data proves
+ * `Sampling_House_Code` is NOT globally unique — the same code (e.g.
+ * `SH_01`) can belong to different sectors — so `sectorCode` is part of
+ * the reference itself, and logical uniqueness is Sector + Sampling
+ * House, never the house code alone.
  */
 export interface SamplingHouseReference {
+  readonly sectorCode: SectorCode
   readonly code: SamplingHouseCode
 }
 
-export function createSamplingHouseReference(code: SamplingHouseCode): SamplingHouseReference {
-  return { code }
+export function createSamplingHouseReference(sectorCode: SectorCode, code: SamplingHouseCode): SamplingHouseReference {
+  return { sectorCode, code }
 }
 
 /**
- * Minimal pile-area master reference (`Pile_area`). Deliberately
- * distinct from Pile / PileId (§2, §14 caution).
+ * Pile-area master reference (Phase 16 real contract: `Sector_Code |
+ * Stockpile_Code | Pile_ID | Ore`). `stockpileCode` maps to the
+ * pre-existing `PileAreaCode` concept and is deliberately NOT unique —
+ * many piles share one stockpile. `pileId` (reusing the shared `PileId`
+ * identifier, distinct from a Pile domain instance) IS globally unique
+ * within MasterData.
  */
 export interface PileAreaReference {
-  readonly code: PileAreaCode
+  readonly sectorCode: SectorCode
+  readonly stockpileCode: PileAreaCode
+  readonly pileId: PileId
+  readonly oreCode: OreCode
 }
 
-export function createPileAreaReference(code: PileAreaCode): PileAreaReference {
-  return { code }
+export function createPileAreaReference(
+  sectorCode: SectorCode,
+  stockpileCode: PileAreaCode,
+  pileId: PileId,
+  oreCode: OreCode,
+): PileAreaReference {
+  return { sectorCode, stockpileCode, pileId, oreCode }
 }
 
-/** Minimal hauler master reference (`Hauler_PT`). */
+/**
+ * Hauler master reference (`Hauler_Code | Name`). `name` defaults to an
+ * empty string so existing fleet/haulage test fixtures that only care
+ * about `code` are unaffected by this Phase 16 addition.
+ */
 export interface HaulerReference {
   readonly code: HaulerCode
+  readonly name: string
 }
 
-export function createHaulerReference(code: HaulerCode): HaulerReference {
-  return { code }
+export function createHaulerReference(code: HaulerCode, name: string = ''): HaulerReference {
+  return { code, name }
 }
 
 /**
