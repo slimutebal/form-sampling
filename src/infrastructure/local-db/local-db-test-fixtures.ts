@@ -1,4 +1,9 @@
-import { parseOreCode, parseSamplingHouseCode, parseSectorCode, parseShiftCode } from '../../domain/common/codes'
+import {
+  parseOreCode,
+  parseSamplingHouseCode,
+  parseSectorCode,
+  parseShiftCode,
+} from '../../domain/common/codes'
 import {
   parseEmployeeId,
   parseFleetId,
@@ -27,7 +32,16 @@ import { parseRitNumber } from '../../domain/batch/rit-number'
 import { createFrontDefinition } from '../../domain/fleet/front'
 import { createBaseFleetDefinition } from '../../domain/fleet/fleet-definition'
 import { createFleetSetup, type FleetSetup } from '../../domain/fleet/fleet-setup'
-import { createHaulageTransaction, type HaulageTransaction } from '../../domain/haulage/haulage-transaction'
+import { createPendingBatch } from '../../domain/batch/pending-batch'
+import type { PendingBatchCarryOver } from '../../domain/handover/carry-over-pending-batch'
+import type {
+  HandoverPendingSample,
+  HandoverPendingSampleData,
+} from '../../domain/handover/carry-over-pending-sample'
+import {
+  createHaulageTransaction,
+  type HaulageTransaction,
+} from '../../domain/haulage/haulage-transaction'
 import { createMasterData, type MasterData } from '../../domain/master/master-data'
 import { parseHaulerCode } from '../../domain/master/master-codes'
 import {
@@ -44,7 +58,10 @@ import {
 } from '../../domain/master/sampling-config'
 import { createPile, type Pile } from '../../domain/pile/pile'
 import type { SampleDelivery } from '../../domain/sample-handling/delivery-status'
-import { createSamplePosition, type SamplePosition } from '../../domain/sample-handling/sample-position'
+import {
+  createSamplePosition,
+  type SamplePosition,
+} from '../../domain/sample-handling/sample-position'
 import { createShift, type Shift } from '../../domain/shift/shift'
 
 /**
@@ -115,7 +132,9 @@ export function buildFixtureMasterData(): MasterData {
 
   return must(
     createMasterData({
-      employees: [createEmployeeReference(fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), FIXTURE_EMPLOYEE_NAME)],
+      employees: [
+        createEmployeeReference(fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), FIXTURE_EMPLOYEE_NAME),
+      ],
       crews: [],
       sectors: [createSectorReference(sector)],
       locations: [],
@@ -163,6 +182,10 @@ export function buildFixtureSapPile(id: string): Pile {
   return createPile(fixturePileId(id), must(parseOreCode('SAP')))
 }
 
+export function buildFixtureLimPile(id: string): Pile {
+  return createPile(fixturePileId(id), must(parseOreCode('LIM')))
+}
+
 export function buildFixtureShift(id: string): Shift {
   return createShift({
     id: fixtureShiftId(id),
@@ -186,7 +209,9 @@ export interface BuildFixtureHaulageTransactionParams {
 }
 
 /** Builds a validated HaulageTransaction. Pass `truckId: FIXTURE_WRONG_TRUCK_TRUCK_ID` to get a WRONG_TRUCK snapshot. */
-export function buildFixtureHaulageTransaction(params: BuildFixtureHaulageTransactionParams): HaulageTransaction {
+export function buildFixtureHaulageTransaction(
+  params: BuildFixtureHaulageTransactionParams,
+): HaulageTransaction {
   return must(
     createHaulageTransaction({
       id: fixtureTransactionId(params.id),
@@ -213,7 +238,9 @@ export interface BuildFixtureSamplePositionParams {
 }
 
 /** Builds a validated SamplePosition. */
-export function buildFixtureSamplePosition(params: BuildFixtureSamplePositionParams): SamplePosition {
+export function buildFixtureSamplePosition(
+  params: BuildFixtureSamplePositionParams,
+): SamplePosition {
   return must(
     createSamplePosition({
       id: fixtureSamplePositionId(params.id),
@@ -226,4 +253,45 @@ export function buildFixtureSamplePosition(params: BuildFixtureSamplePositionPar
       delivery: params.delivery,
     }),
   )
+}
+
+/** Builds a validated PendingBatchCarryOver (Phase 12 handover carry-over). */
+export function buildFixturePendingBatchCarryOver(
+  pile: Pile,
+  batch: number,
+  lastRit: number,
+  status: 'CONTINUE' | 'HOLD',
+): PendingBatchCarryOver {
+  return {
+    pile,
+    pendingBatch: createPendingBatch({
+      pileId: pile.id,
+      batchNumber: must(parseBatchNumber(batch)),
+      lastRit: must(parseRitNumber(lastRit)),
+      status,
+    }),
+  }
+}
+
+export interface BuildFixtureHandoverPendingSampleParams {
+  readonly pile: Pile
+  readonly batch: number
+  readonly ritFrom: number
+  readonly ritTo: number
+  readonly sourceShiftId: string
+}
+
+/** Builds a validated HandoverPendingSample (Phase 12 handover carry-over). */
+export function buildFixtureHandoverPendingSample(
+  params: BuildFixtureHandoverPendingSampleParams,
+): HandoverPendingSample {
+  const data: HandoverPendingSampleData = {
+    pileId: params.pile.id,
+    oreCode: params.pile.oreCode,
+    batchNumber: must(parseBatchNumber(params.batch)),
+    ritFrom: must(parseRitNumber(params.ritFrom)),
+    ritTo: must(parseRitNumber(params.ritTo)),
+    sourceShiftId: fixtureShiftId(params.sourceShiftId),
+  }
+  return data as HandoverPendingSample
 }

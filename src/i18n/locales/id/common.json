@@ -212,5 +212,43 @@
       "duplicatePosition": "Sample position ini sudah pernah disimpan.",
       "generic": "Terjadi kesalahan. Silakan coba lagi."
     }
+  },
+  "handover": {
+    "title": "Shift Sebelumnya",
+    "description": "Impor arsip shift sebelumnya untuk melanjutkan pekerjaan tertunda.",
+    "selectFile": "Pilih File Excel",
+    "startWithoutPreviousShift": "Mulai Tanpa File Sebelumnya",
+    "checkingFile": "Memeriksa file…",
+    "previewTitle": "Pratinjau Handover",
+    "previousShift": "Shift Sebelumnya",
+    "pendingPiles": "Pile Tertunda",
+    "pendingSamples": "Sampel Tertunda",
+    "batchLastRit": "Batch {{batch}} → Rit terakhir {{rit}}",
+    "continueStatus": "LANJUTKAN",
+    "holdStatus": "TAHAN",
+    "holdPreserved": "Disimpan (tidak aktif)",
+    "confirmImport": "Konfirmasi Impor",
+    "chooseAnotherFile": "Pilih File Lain",
+    "mismatchTitle": "Shift Tidak Sesuai",
+    "mismatchImported": "Diimpor",
+    "mismatchExpected": "Diharapkan",
+    "mismatchMessage": "File ini mungkin bukan shift sebelumnya. Pilih file yang benar untuk melanjutkan.",
+    "noPendingWork": "Tidak ada pekerjaan tertunda pada arsip ini.",
+    "importedMessage": "Shift sebelumnya berhasil diimpor.",
+    "retry": "Coba Lagi",
+    "errors": {
+      "unrecognizedFile": "File ini bukan arsip Form Sampling yang dikenali.",
+      "unsupportedSchema": "Format arsip ini tidak didukung oleh versi aplikasi ini.",
+      "missingSheet": "Arsip ini kehilangan data wajib dan tidak dapat diimpor.",
+      "missingColumn": "Arsip ini kehilangan data wajib dan tidak dapat diimpor.",
+      "invalidShiftInfo": "Informasi shift pada arsip ini tidak valid.",
+      "shiftIdMismatch": "Informasi shift pada arsip ini tidak konsisten dan tidak dapat diimpor.",
+      "malformedPileOre": "Arsip ini memiliki data Pile/Ore yang tidak lengkap dan tidak dapat diimpor.",
+      "pileOreConflict": "Arsip ini memiliki data Ore yang saling bertentangan untuk Pile yang sama dan tidak dapat diimpor.",
+      "duplicateImport": "Shift sebelumnya sudah pernah diimpor. Tidak ada data yang diduplikasi.",
+      "previousShiftMismatch": "File ini tidak sesuai dengan shift sebelumnya yang diharapkan dan tidak dapat diimpor.",
+      "loadFailed": "Tidak dapat membaca file ini.",
+      "generic": "Terjadi kesalahan. Silakan coba lagi."
+    }
   }
 }

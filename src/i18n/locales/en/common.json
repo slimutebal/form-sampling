@@ -212,5 +212,43 @@
       "duplicatePosition": "This sample position was already saved.",
       "generic": "Something went wrong. Please try again."
     }
+  },
+  "handover": {
+    "title": "Previous Shift",
+    "description": "Import previous shift archive to continue pending work.",
+    "selectFile": "Select Excel File",
+    "startWithoutPreviousShift": "Start Without Previous File",
+    "checkingFile": "Checking file…",
+    "previewTitle": "Handover Preview",
+    "previousShift": "Previous Shift",
+    "pendingPiles": "Pending Piles",
+    "pendingSamples": "Pending Samples",
+    "batchLastRit": "Batch {{batch}} → last Rit {{rit}}",
+    "continueStatus": "CONTINUE",
+    "holdStatus": "HOLD",
+    "holdPreserved": "Preserved (not active)",
+    "confirmImport": "Confirm Import",
+    "chooseAnotherFile": "Choose Another File",
+    "mismatchTitle": "Shift Mismatch",
+    "mismatchImported": "Imported",
+    "mismatchExpected": "Expected",
+    "mismatchMessage": "This file may not be the previous shift. Choose the correct file to continue.",
+    "noPendingWork": "No pending work in this archive.",
+    "importedMessage": "Previous shift imported.",
+    "retry": "Retry",
+    "errors": {
+      "unrecognizedFile": "This file is not a recognized Form Sampling archive.",
+      "unsupportedSchema": "This archive's format is not supported by this app version.",
+      "missingSheet": "This archive is missing required data and cannot be imported.",
+      "missingColumn": "This archive is missing required data and cannot be imported.",
+      "invalidShiftInfo": "This archive's shift information is invalid.",
+      "shiftIdMismatch": "This archive's shift information is inconsistent and cannot be imported.",
+      "malformedPileOre": "This archive has an incomplete Pile/Ore record and cannot be imported.",
+      "pileOreConflict": "This archive has conflicting Ore data for the same Pile and cannot be imported.",
+      "duplicateImport": "Previous shift already imported. No data duplicated.",
+      "previousShiftMismatch": "This file does not match the expected previous shift and cannot be imported.",
+      "loadFailed": "Unable to read this file.",
+      "generic": "Something went wrong. Please try again."
+    }
   }
 }
