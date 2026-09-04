@@ -1,12 +1,18 @@
 import type { Clock } from '@/application/common/clock'
+import { buildShiftReport } from '@/application/reporting/build-shift-report'
+import type { ManpowerAssignment, ReportLanguage, ShiftReport } from '@/application/reporting/report-types'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err, ok } from '@/domain/common/result'
 import type { PendingBatchCarryOver } from '@/domain/handover/carry-over-pending-batch'
 import { HANDOVER_FILE_TYPE, SUPPORTED_HANDOVER_SCHEMA_VERSIONS } from '@/domain/handover/handover-schema'
 import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
+import type { MasterData } from '@/domain/master/master-data'
 import type { Pile } from '@/domain/pile/pile'
 import type { SamplePosition } from '@/domain/sample-handling/sample-position'
 import type { Shift } from '@/domain/shift/shift'
+
+/** The Report sheet defaults to Indonesian when no explicit report language is given (the app's own default UI language, `defaultLanguage` in `@/i18n`) — the two settings remain otherwise independent (ROADMAP Phase 14 §10). */
+const DEFAULT_REPORT_LANGUAGE: ReportLanguage = 'id'
 
 /**
  * The Excel/handover schema version this build writes (ARCHITECTURE.md
@@ -39,6 +45,12 @@ export interface ShiftExportInput {
   readonly pendingBatches: readonly PendingBatchCarryOver[]
   readonly applicationVersion: string
   readonly clock: Clock
+  /** Validated master-data snapshot the Phase 14 reporting engine resolves Manpower/Dispatcher names against. */
+  readonly masterData: MasterData
+  /** Explicit, caller-supplied manpower for this shift (ROADMAP Phase 14 §3). Defaults to none. */
+  readonly manpowerAssignments?: readonly ManpowerAssignment[]
+  /** The Report sheet's human-readable language — independent of the app's own UI language. Defaults to `'id'`. */
+  readonly reportLanguage?: ReportLanguage
 }
 
 export interface ExportAppDataRow {
@@ -108,11 +120,6 @@ export interface ExportPileSummaryRow {
   readonly Pending_Batch_Count: number
 }
 
-export interface ExportReportRow {
-  readonly Key: string
-  readonly Value: string | number
-}
-
 /**
  * The plain, immutable DTO the `integrations/excel` writer serializes
  * (rule 11) — one row array per required sheet (ROADMAP.md Phase 13),
@@ -127,7 +134,8 @@ export interface ShiftExportSnapshot {
   readonly haulageDetail: readonly ExportHaulageDetailRow[]
   readonly samplingDetail: readonly ExportSamplingDetailRow[]
   readonly pileSummary: readonly ExportPileSummaryRow[]
-  readonly report: readonly ExportReportRow[]
+  /** The Phase 14 report DTO (`@/application/reporting`) — already fully computed; the Excel writer only serializes it (ROADMAP Phase 14 §12). */
+  readonly report: ShiftReport
 }
 
 function buildError(code: string, message: string): Result<never, DomainError> {
@@ -162,9 +170,26 @@ function buildError(code: string, message: string): Result<never, DomainError> {
  *    identity (`EXPORT_DUPLICATE_PENDING_BATCH`, Phase 13) — never
  *    silently deduplicated; the same Pile with different BatchNumbers
  *    remains valid.
+ *
+ * The `report` field is delegated entirely to
+ * `@/application/reporting/build-shift-report` (ROADMAP Phase 14 §12) —
+ * this function never computes report aggregates itself, and any
+ * `REPORT_*` error that function returns (e.g.
+ * `REPORT_MANPOWER_EMPLOYEE_NOT_FOUND`) is propagated unchanged.
  */
 export function buildShiftExportSnapshot(input: ShiftExportInput): Result<ShiftExportSnapshot, DomainError> {
-  const { shift, piles, haulageTransactions, samplePositions, pendingBatches, applicationVersion, clock } = input
+  const {
+    shift,
+    piles,
+    haulageTransactions,
+    samplePositions,
+    pendingBatches,
+    applicationVersion,
+    clock,
+    masterData,
+    manpowerAssignments = [],
+    reportLanguage = DEFAULT_REPORT_LANGUAGE,
+  } = input
 
   const pileById = new Map<string, Pile>()
   for (const pile of piles) {
@@ -325,17 +350,18 @@ export function buildShiftExportSnapshot(input: ShiftExportInput): Result<ShiftE
     Pending_Batch_Count: pendingBatches.filter((row) => row.pile.id === pile.id).length,
   }))
 
-  const report: ExportReportRow[] = [
-    { Key: 'Shift_ID', Value: String(shift.id) },
-    { Key: 'Date', Value: String(shift.date) },
-    { Key: 'Shift', Value: String(shift.shiftCode) },
-    { Key: 'Sector', Value: String(shift.sectorCode) },
-    { Key: 'Location', Value: String(shift.samplingHouseCode) },
-    { Key: 'Pile_Count', Value: piles.length },
-    { Key: 'Haulage_Transaction_Count', Value: haulageTransactions.length },
-    { Key: 'Sample_Position_Count', Value: samplePositions.length },
-    { Key: 'Pending_Batch_Count', Value: pendingBatches.length },
-  ]
+  const reportResult = buildShiftReport({
+    language: reportLanguage,
+    shift,
+    piles,
+    haulageTransactions,
+    samplePositions,
+    masterData,
+    manpowerAssignments,
+  })
+  if (!reportResult.ok) {
+    return reportResult
+  }
 
   return ok({
     appData,
@@ -345,6 +371,6 @@ export function buildShiftExportSnapshot(input: ShiftExportInput): Result<ShiftE
     haulageDetail,
     samplingDetail,
     pileSummary,
-    report,
+    report: reportResult.value,
   })
 }

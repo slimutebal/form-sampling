@@ -12,6 +12,7 @@ import { createDeliveredDelivery, createNotPickedUpDelivery } from '@/domain/sam
 import { parseDeliveryDestinationCode } from '@/domain/sample-handling/delivery-destination'
 import type { Pile } from '@/domain/pile/pile'
 import {
+  FIXTURE_WRONG_TRUCK_TRUCK_ID,
   buildFixtureFleetSetup,
   buildFixtureHaulageTransaction,
   buildFixtureLimPile,
@@ -61,6 +62,7 @@ function minimalInput(overrides: Partial<ShiftExportInput> = {}): ShiftExportInp
     pendingBatches: [],
     applicationVersion: '9.9.9',
     clock: { now: () => new Date('2026-09-04T10:00:00.000Z') },
+    masterData: buildFixtureMasterData(),
     ...overrides,
   }
 }
@@ -164,6 +166,92 @@ describe('writeShiftExportWorkbookBytes', () => {
     expect(rows[0].Total_Bag).toBe(0.5)
   })
 
+  it('populates the Phase 14 Report sheet with header, sections and haulage rows', () => {
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const pile = buildFixtureSapPile('PILE-1')
+    const transaction = buildFixtureHaulageTransaction({
+      id: 'T-1',
+      shiftId: 'SHIFT-1',
+      pile,
+      batch: 1,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+
+    const snapshotResult = buildShiftExportSnapshot(
+      minimalInput({ piles: [pile], haulageTransactions: [transaction], masterData, reportLanguage: 'en' }),
+    )
+    expect(snapshotResult.ok).toBe(true)
+    if (!snapshotResult.ok) return
+    const bytes = writeShiftExportWorkbookBytes(snapshotResult.value)
+    const workbook = XLSX.read(bytes, { type: 'array' })
+
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets.Report, { header: 1 })
+    const flat = rows.map((row) => row.join('|'))
+
+    expect(rows[0]?.[0]).toBe('DAILY ORE QUALITY ASSURANCE REPORT')
+    expect(flat).toEqual(expect.arrayContaining([expect.stringContaining('Production Summary')]))
+    expect(flat).toEqual(expect.arrayContaining([expect.stringContaining('Haulage Detail')]))
+    expect(flat.some((line) => line.includes('PILE-1') && line.includes('SAP'))).toBe(true)
+  })
+
+  it('never exposes raw sample/truck-status/reason codes as Report sheet display text, only localized labels', () => {
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const pile = buildFixtureSapPile('PILE-1')
+    const validTransaction = buildFixtureHaulageTransaction({
+      id: 'T-1',
+      shiftId: 'SHIFT-1',
+      pile,
+      batch: 1,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    const wrongTruckTransaction = buildFixtureHaulageTransaction({
+      id: 'T-2',
+      shiftId: 'SHIFT-1',
+      pile,
+      batch: 1,
+      rit: 4,
+      masterData,
+      fleetSetup,
+      truckId: FIXTURE_WRONG_TRUCK_TRUCK_ID,
+    })
+
+    const snapshotResult = buildShiftExportSnapshot(
+      minimalInput({
+        piles: [pile],
+        haulageTransactions: [validTransaction, wrongTruckTransaction],
+        masterData,
+        reportLanguage: 'en',
+      }),
+    )
+    expect(snapshotResult.ok).toBe(true)
+    if (!snapshotResult.ok) return
+    const bytes = writeShiftExportWorkbookBytes(snapshotResult.value)
+    const workbook = XLSX.read(bytes, { type: 'array' })
+
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets.Report, { header: 1 })
+    const cells = rows.flat()
+
+    // Raw domain codes must never appear as their own cell value...
+    expect(cells).not.toContain('REQUIRED')
+    expect(cells).not.toContain('NOT_REQUIRED')
+    expect(cells).not.toContain('VALID')
+    expect(cells).not.toContain('WRONG_TRUCK')
+    expect(cells).not.toContain('NOT_IN_EFFECTIVE_FLEET')
+    expect(cells).not.toContain('HAULER_MISMATCH')
+
+    // ...only their localized English display labels do.
+    expect(cells).toContain('Required')
+    expect(cells).toContain('Valid')
+    expect(cells).toContain('Wrong Truck')
+    expect(cells).toContain('Not In Effective Fleet')
+  })
+
   describe('Phase 12 round-trip (Export -> Import)', () => {
     it('round-trips Shift identity, multiple pending batches, CONTINUE/HOLD, and pending Sample_Position rows; DELIVERED never becomes pending; no haulage leaks into carry-over', async () => {
       const masterData = buildFixtureMasterData()
@@ -221,6 +309,7 @@ describe('writeShiftExportWorkbookBytes', () => {
         pendingBatches,
         applicationVersion: '1.0.0',
         clock: { now: () => new Date('2026-09-04T22:00:00.000Z') },
+        masterData,
       })
       expect(snapshotResult.ok).toBe(true)
       if (!snapshotResult.ok) return
@@ -289,6 +378,7 @@ describe('writeShiftExportWorkbookBytes', () => {
         pendingBatches: [],
         applicationVersion: '1.0.0',
         clock: { now: () => new Date('2026-09-04T00:00:00.000Z') },
+        masterData: buildFixtureMasterData(),
       })
       expect(snapshotResult.ok).toBe(true)
       if (!snapshotResult.ok) return

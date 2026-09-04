@@ -16,6 +16,7 @@ import {
   buildFixtureSamplePosition,
   buildFixtureSapPile,
   buildFixtureShift,
+  fixtureEmployeeId,
 } from '@/test/fixtures/haulage-operation-test-fixtures'
 
 const FIXED_NOW = new Date('2026-09-04T12:00:00.000Z')
@@ -33,6 +34,7 @@ function baseInput(overrides: Partial<ShiftExportInput> = {}): ShiftExportInput 
     pendingBatches: [],
     applicationVersion: '1.2.3',
     clock: FIXED_CLOCK,
+    masterData: buildFixtureMasterData(),
     ...overrides,
   }
 }
@@ -274,6 +276,40 @@ describe('buildShiftExportSnapshot', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.error.code).toBe('EXPORT_SAMPLE_POSITION_PILE_ORE_MISMATCH')
+  })
+
+  it('includes a Phase 14 report DTO, defaulting to Indonesian', () => {
+    const result = buildShiftExportSnapshot(baseInput())
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.report.language).toBe('id')
+    expect(result.value.report.header.date).toBe('2026-09-04')
+    expect(result.value.report.productionSummary).toEqual([])
+  })
+
+  it('honors an explicit reportLanguage and manpowerAssignments', () => {
+    const result = buildShiftExportSnapshot(
+      baseInput({
+        reportLanguage: 'en',
+        manpowerAssignments: [{ employeeId: fixtureEmployeeId('12345'), jobDeskCode: 'FOREMAN' }],
+      }),
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.report.language).toBe('en')
+    expect(result.value.report.manpower).toHaveLength(1)
+    expect(result.value.report.manpower[0]?.employeeName).toBe('John Doe')
+  })
+
+  it('propagates a Phase 14 report validation error (unknown manpower EmployeeId)', () => {
+    const result = buildShiftExportSnapshot(
+      baseInput({
+        manpowerAssignments: [{ employeeId: fixtureEmployeeId('99999'), jobDeskCode: 'FOREMAN' }],
+      }),
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('REPORT_MANPOWER_EMPLOYEE_NOT_FOUND')
   })
 
   it('does not mutate any input array or object', () => {

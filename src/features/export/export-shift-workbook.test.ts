@@ -3,7 +3,7 @@ import { exportShiftWorkbook } from './export-shift-workbook'
 import { parseBatchNumber } from '@/domain/batch/batch-number'
 import { createPendingBatch } from '@/domain/batch/pending-batch'
 import { parseRitNumber } from '@/domain/batch/rit-number'
-import { buildFixtureSapPile, buildFixtureShift } from '@/test/fixtures/haulage-operation-test-fixtures'
+import { buildFixtureMasterData, buildFixtureSapPile, buildFixtureShift } from '@/test/fixtures/haulage-operation-test-fixtures'
 
 describe('exportShiftWorkbook', () => {
   it('produces workbook bytes and a matching deterministic filename', async () => {
@@ -19,6 +19,7 @@ describe('exportShiftWorkbook', () => {
       pendingBatches: [],
       applicationVersion: '1.0.0-test',
       clock: { now: () => fixedNow },
+      masterData: buildFixtureMasterData(),
     })
 
     expect(result.ok).toBe(true)
@@ -53,6 +54,7 @@ describe('exportShiftWorkbook', () => {
       ],
       applicationVersion: '1.0.0-test',
       clock: { now: () => new Date('2026-09-04T08:00:00.000Z') },
+      masterData: buildFixtureMasterData(),
     })
 
     expect(result.ok).toBe(false)
@@ -72,6 +74,7 @@ describe('exportShiftWorkbook', () => {
       pendingBatches: [],
       applicationVersion: '1.0.0-test',
       clock: { now: () => new Date('2026-09-04T08:00:00.000Z') },
+      masterData: buildFixtureMasterData(),
       writeWorkbookBytes: () => {
         throw new Error('secret SheetJS internals, must never leak to callers')
       },
@@ -121,6 +124,7 @@ describe('exportShiftWorkbook', () => {
       ],
       applicationVersion: '1.0.0-test',
       clock: { now: () => new Date('2026-09-04T08:00:00.000Z') },
+      masterData: buildFixtureMasterData(),
     })
 
     expect(result.ok).toBe(false)

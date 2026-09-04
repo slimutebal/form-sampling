@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx'
 import type { ShiftExportSnapshot } from '@/application/export/build-shift-export-snapshot'
 import { REQUIRED_HANDOVER_SHEET_COLUMNS } from '@/domain/handover/handover-schema'
+import { buildReportSheetAoa } from './report-sheet-writer'
 
 /**
  * Excel serialization lives here, in the integration layer, and only
@@ -16,7 +17,6 @@ import { REQUIRED_HANDOVER_SHEET_COLUMNS } from '@/domain/handover/handover-sche
  * needed to import an archive this module produces).
  */
 
-const REPORT_HEADERS = ['Key', 'Value'] as const
 const PILE_SUMMARY_HEADERS = [
   'Pile_ID',
   'Ore',
@@ -75,7 +75,7 @@ function asRows<T>(rows: readonly T[]): readonly Record<string, unknown>[] {
 export function writeShiftExportWorkbookBytes(snapshot: ShiftExportSnapshot): ArrayBuffer {
   const workbook = XLSX.utils.book_new()
 
-  XLSX.utils.book_append_sheet(workbook, rowsToSheet(REPORT_HEADERS, asRows(snapshot.report)), 'Report')
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(buildReportSheetAoa(snapshot.report)), 'Report')
   XLSX.utils.book_append_sheet(
     workbook,
     rowsToSheet(REQUIRED_HANDOVER_SHEET_COLUMNS.Shift_Info, asRows([snapshot.shiftInfo])),
