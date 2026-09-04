@@ -1548,7 +1548,6 @@ Initial Google integration should be behind:
 ```text
 MasterDataGateway
 ShiftSummaryGateway
-ArchiveGateway
 ```
 
 Application code calls interfaces, not Google SDK directly.
@@ -1575,7 +1574,6 @@ authentication
 permissions
 organization accounts
 security
-archive ownership
 ```
 
 are understood.
@@ -1683,7 +1681,6 @@ Possible future reasons:
 secure Google write access
 central authentication
 central audit
-managed archive
 multi-device synchronization
 administration portal
 ```
@@ -2612,7 +2609,6 @@ Deferred decisions:
 Production hosting
 Authentication
 Google Sheets access architecture
-Archive cloud storage implementation
 Remote telemetry
 Custom backend
 ```
@@ -2640,7 +2636,6 @@ External systems remain adapters:
 ```text
 Excel
 Google Sheets
-Cloud Archive
 Native Share
 ```
 

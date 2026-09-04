@@ -1121,8 +1121,9 @@ Master data
 
 ```text
 Shift summary
-Archive reference
 ```
+
+Google Sheets must not store an archive reference/link.
 
 Do not send every haulage transaction by default.
 
@@ -1168,37 +1169,38 @@ Application remains fully usable when Google is unavailable.
 
 ---
 
-# 19. Phase 17 — Archive Storage
+# 19. Phase 17 — Archive Storage (CLOSED)
 
-## Goal
+## Status
 
-Determine permanent location of generated Excel archives.
+**CLOSED.** No managed cloud archive (Google Drive or otherwise) is implemented as part of the application. This phase does not require archive sync, outbox, or storage-service implementation.
 
-Possible approach:
+## Confirmed Decision
 
-```text
-Google Drive
-```
-
-or another managed file storage.
-
-Repository is not intended to store operational Excel archives.
-
----
-
-## Target Organization
-
-Example:
+The final Excel workbook generated at shift finalization remains the archive. It serves three roles simultaneously:
 
 ```text
-Sampling Archive/
-└── 2026/
-    └── 09/
-        ├── Sampling_2026-09-03_DS.xlsx
-        └── Sampling_2026-09-03_NS.xlsx
+shift archive
+handover package
+portable backup
 ```
 
-Google Sheets summary may store archive reference/link.
+The application does not upload, sync, or manage storage of this file.
+
+## Operational Workflow
+
+```text
+Finalize Shift
+      ↓
+Export final XLSX
+      ↓
+User shares/stores it externally
+(currently via the WhatsApp workflow)
+      ↓
+Next shift imports the previous XLSX when required
+```
+
+Google Drive automatic archive storage is explicitly **not** part of the application. Google Sheets integration remains limited to Master Data and Shift Summary (see Phase 16) and does not store an archive link/reference.
 
 ---
 
@@ -1557,7 +1559,6 @@ Contains:
 ```text
 Google master sync
 Shift summary sync
-Archive integration
 ```
 
 ---

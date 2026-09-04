@@ -39,8 +39,9 @@ Internet hanya dibutuhkan untuk fungsi seperti:
 
 - sinkronisasi master data;
 - backup summary;
-- upload arsip;
 - fungsi lain yang membutuhkan layanan eksternal.
+
+Aplikasi tidak melakukan upload arsip Excel ke penyimpanan cloud terkelola (mis. Google Drive). Arsip XLSX dibagikan/disimpan oleh user secara eksternal (lihat Phase 17 — Archive Storage, CLOSED, pada `docs/ROADMAP.md`).
 
 Kegagalan koneksi tidak boleh menghentikan proses sampling.
 
@@ -243,10 +244,9 @@ Total Sample
 Total Bag
 Wrong Truck
 Pending Sample
-Archive Reference
 ```
 
-Summary dapat disimpan di Google Sheets.
+Summary dapat disimpan di Google Sheets. Summary tidak menyimpan referensi/link arsip Excel (lihat ADR-003 dan Phase 17 — Archive Storage, CLOSED, pada `docs/ROADMAP.md`).
 
 ---
 
@@ -869,8 +869,9 @@ Sample_Total
 Bag_Total
 Wrong_Truck
 Pending_Count
-Archive_Link
 ```
+
+`Archive_Link` is not part of the shift summary contract. No managed cloud archive exists to link to (Phase 17 — Archive Storage, CLOSED).
 
 ---
 
