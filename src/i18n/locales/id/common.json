@@ -129,5 +129,41 @@
       "dependency": "Front ini tidak dapat dihapus karena masih menjadi acuan fleet lain.",
       "generic": "Setup Fleet tidak dapat divalidasi. Periksa konfigurasi lalu coba lagi."
     }
+  },
+  "pileHaulage": {
+    "title": "Operasi Pile",
+    "ore": "Ore",
+    "batch": "Batch",
+    "nextRit": "Rit Berikutnya",
+    "rit": "Rit",
+    "sampleRequired": "Perlu Sampel",
+    "noSample": "Tidak Ada Sampel",
+    "increment": "Increment",
+    "front": "Front",
+    "truck": "Truck",
+    "selectFront": "Pilih Front",
+    "selectTruck": "Pilih Truck",
+    "recordHaulage": "Catat Haulage",
+    "recordSampleHaulage": "Catat Haulage Sampel",
+    "recording": "Menyimpan…",
+    "recorded": "Tercatat",
+    "recordedFeedback": "Rit {{rit}} tercatat",
+    "skipped": "Terlewat",
+    "recordedPositions": "Posisi Tercatat",
+    "skippedPositions": "Posisi Terlewat",
+    "planExhausted": "Tidak ada posisi haulage terencana yang tersisa.",
+    "loading": "Memuat data haulage…",
+    "retry": "Coba Lagi",
+    "errors": {
+      "loadFailed": "Gagal memuat data haulage untuk Pile ini.",
+      "planEmpty": "Belum ada posisi haulage terencana untuk Pile ini.",
+      "planInvalid": "Rencana haulage untuk Pile ini tidak valid.",
+      "samplingConfigMissing": "Belum ada konfigurasi sampling untuk ore Pile ini.",
+      "fleetContextInvalid": "Konfigurasi fleet/truck untuk Pile ini tidak valid.",
+      "operationalContextInvalid": "Pilihan Truck sudah tidak valid untuk Front ini. Pilih ulang Front dan Truck lalu coba lagi.",
+      "storeContextInvalid": "Pile ini bukan bagian dari workspace shift aktif.",
+      "duplicateTransaction": "Entri haulage ini sudah pernah tercatat.",
+      "generic": "Terjadi kesalahan. Silakan coba lagi."
+    }
   }
 }

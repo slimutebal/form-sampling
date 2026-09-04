@@ -129,5 +129,41 @@
       "dependency": "This front cannot be removed because another fleet references it.",
       "generic": "Fleet Setup could not be validated. Review the configuration and try again."
     }
+  },
+  "pileHaulage": {
+    "title": "Pile Operation",
+    "ore": "Ore",
+    "batch": "Batch",
+    "nextRit": "Next Rit",
+    "rit": "Rit",
+    "sampleRequired": "Sample Required",
+    "noSample": "No Sample",
+    "increment": "Increment",
+    "front": "Front",
+    "truck": "Truck",
+    "selectFront": "Select Front",
+    "selectTruck": "Select Truck",
+    "recordHaulage": "Record Haulage",
+    "recordSampleHaulage": "Record Sample Haulage",
+    "recording": "Recording…",
+    "recorded": "Recorded",
+    "recordedFeedback": "Rit {{rit}} recorded",
+    "skipped": "Skipped",
+    "recordedPositions": "Recorded Positions",
+    "skippedPositions": "Skipped Positions",
+    "planExhausted": "No remaining planned haulage positions.",
+    "loading": "Loading haulage…",
+    "retry": "Retry",
+    "errors": {
+      "loadFailed": "Unable to load haulage data for this Pile.",
+      "planEmpty": "No planned haulage positions exist for this Pile yet.",
+      "planInvalid": "The haulage plan for this Pile is invalid.",
+      "samplingConfigMissing": "No sampling configuration exists for this Pile's ore.",
+      "fleetContextInvalid": "The fleet/truck configuration for this Pile is invalid.",
+      "operationalContextInvalid": "Truck selection is no longer valid for this Front. Reselect Front and Truck and try again.",
+      "storeContextInvalid": "This Pile is not part of the active shift workspace.",
+      "duplicateTransaction": "This haulage entry was already recorded.",
+      "generic": "Something went wrong. Please try again."
+    }
   }
 }
