@@ -250,5 +250,20 @@
       "loadFailed": "Tidak dapat membaca file ini.",
       "generic": "Terjadi kesalahan. Silakan coba lagi."
     }
+  },
+  "whatsAppReport": {
+    "title": "Laporan WhatsApp",
+    "reportLanguage": "Bahasa Laporan",
+    "copyReport": "Salin Laporan",
+    "share": "Bagikan",
+    "copied": "Disalin ke clipboard",
+    "sharedFeedback": "Terbagikan",
+    "errors": {
+      "copyUnsupported": "Salin tidak tersedia di perangkat ini.",
+      "copyFailed": "Gagal menyalin. Silakan coba lagi.",
+      "shareUnsupported": "Bagikan tidak tersedia di perangkat ini. Gunakan Salin Laporan.",
+      "shareFailed": "Gagal membagikan. Silakan coba lagi.",
+      "generic": "Terjadi kesalahan. Silakan coba lagi."
+    }
   }
 }

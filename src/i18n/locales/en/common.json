@@ -250,5 +250,20 @@
       "loadFailed": "Unable to read this file.",
       "generic": "Something went wrong. Please try again."
     }
+  },
+  "whatsAppReport": {
+    "title": "WhatsApp Report",
+    "reportLanguage": "Report Language",
+    "copyReport": "Copy Report",
+    "share": "Share",
+    "copied": "Copied to clipboard",
+    "sharedFeedback": "Shared",
+    "errors": {
+      "copyUnsupported": "Copy is not available on this device.",
+      "copyFailed": "Copy failed. Please try again.",
+      "shareUnsupported": "Share is not available on this device. Use Copy instead.",
+      "shareFailed": "Share failed. Please try again.",
+      "generic": "Something went wrong. Please try again."
+    }
   }
 }
