@@ -1,14 +1,20 @@
 import Dexie from 'dexie'
 import { afterEach, describe, expect, it } from 'vitest'
+import { parseDeliveryDestinationCode } from '../../domain/sample-handling/delivery-destination'
+import { createDeliveredDelivery, createNotPickedUpDelivery } from '../../domain/sample-handling/delivery-status'
 import type { Pile } from '../../domain/pile/pile'
 import {
+  FIXTURE_EMPLOYEE_ID,
   FIXTURE_WRONG_TRUCK_TRUCK_ID,
   buildFixtureFleetSetup,
   buildFixtureHaulageTransaction,
   buildFixtureMasterData,
+  buildFixtureSamplePosition,
   buildFixtureSapPile,
   buildFixtureShift,
+  fixtureEmployeeId,
   fixturePileId,
+  fixtureSamplePositionId,
   fixtureShiftId,
   fixtureTransactionId,
 } from './local-db-test-fixtures'
@@ -659,6 +665,292 @@ describe('LocalOperationalStore — haulage transactions', () => {
       throw new Error('expected WRONG_TRUCK')
     }
     expect(getResult.value.truckValidation.reasons).toEqual(['NOT_IN_EFFECTIVE_FLEET'])
+    store.close()
+  })
+})
+
+describe('LocalOperationalStore — sample positions', () => {
+  async function setupWorkspace(store: LocalOperationalStore, shiftIdValue: string, pileIdValues: string[]) {
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift(shiftIdValue)
+    const piles = pileIdValues.map((id) => buildFixtureSapPile(id))
+    const initResult = await store.initializeShiftWorkspace({ shift, piles, masterData, fleetSetup })
+    if (!initResult.ok) throw new Error('invalid test setup')
+    return { masterData, fleetSetup, piles }
+  }
+
+  it('1-5. adding then listing a SamplePosition preserves every field exactly', async () => {
+    const store = newStore()
+    const { masterData, piles } = await setupWorkspace(store, 'SHIFT-1', ['PILE-1'])
+
+    const position = buildFixtureSamplePosition({
+      id: 'SP-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      ritFrom: 2,
+      ritTo: 10,
+      masterData,
+      delivery: createNotPickedUpDelivery(),
+    })
+
+    const addResult = await store.addSamplePosition(position)
+    expect(addResult.ok).toBe(true)
+
+    const byId = await store.getSamplePosition(fixtureSamplePositionId('SP-1'))
+    expect(byId.ok).toBe(true)
+    if (!byId.ok) return
+    expect(byId.value).toEqual(position)
+
+    const byShift = await store.listSamplePositionsForShift(fixtureShiftId('SHIFT-1'))
+    expect(byShift.ok).toBe(true)
+    if (!byShift.ok) return
+    expect(byShift.value).toEqual([position])
+
+    const byShiftPile = await store.listSamplePositionsForShiftPile(fixtureShiftId('SHIFT-1'), fixturePileId('PILE-1'))
+    expect(byShiftPile.ok).toBe(true)
+    if (!byShiftPile.ok) return
+    expect(byShiftPile.value).toEqual([position])
+    store.close()
+  })
+
+  it('6. adding the same SamplePositionId twice fails with DUPLICATE_SAMPLE_POSITION_ID, keeping the original', async () => {
+    const store = newStore()
+    const { masterData, piles } = await setupWorkspace(store, 'SHIFT-1', ['PILE-1'])
+
+    const original = buildFixtureSamplePosition({
+      id: 'SP-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      ritFrom: 2,
+      ritTo: 10,
+      masterData,
+      delivery: createNotPickedUpDelivery(),
+    })
+    const first = await store.addSamplePosition(original)
+    expect(first.ok).toBe(true)
+
+    const conflicting = buildFixtureSamplePosition({
+      id: 'SP-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 25,
+      ritFrom: 2,
+      ritTo: 10,
+      masterData,
+      delivery: createNotPickedUpDelivery(),
+    })
+    const second = await store.addSamplePosition(conflicting)
+    expect(second.ok).toBe(false)
+    if (second.ok) return
+    expect(second.error.code).toBe('DUPLICATE_SAMPLE_POSITION_ID')
+
+    const byId = await store.getSamplePosition(fixtureSamplePositionId('SP-1'))
+    expect(byId.ok).toBe(true)
+    if (!byId.ok) return
+    expect(Number(byId.value?.batchNumber)).toBe(24)
+    store.close()
+  })
+
+  it('7. a SamplePosition referencing a Shift without a workspace is rejected with SHIFT_WORKSPACE_NOT_FOUND', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const pile = buildFixtureSapPile('PILE-1')
+
+    const position = buildFixtureSamplePosition({
+      id: 'SP-ORPHAN',
+      shiftId: 'SHIFT-NEVER-INITIALIZED',
+      pile,
+      batch: 24,
+      ritFrom: 2,
+      ritTo: 10,
+      masterData,
+      delivery: createNotPickedUpDelivery(),
+    })
+
+    const result = await store.addSamplePosition(position)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('SHIFT_WORKSPACE_NOT_FOUND')
+    store.close()
+  })
+
+  it('8. a SamplePosition whose pileId is not part of the shift workspace is rejected with PILE_NOT_IN_SHIFT_WORKSPACE', async () => {
+    const store = newStore()
+    const { masterData } = await setupWorkspace(store, 'SHIFT-1', ['PILE-1'])
+    const strangerPile = buildFixtureSapPile('PILE-NOT-IN-WORKSPACE')
+
+    const position = buildFixtureSamplePosition({
+      id: 'SP-ORPHAN-PILE',
+      shiftId: 'SHIFT-1',
+      pile: strangerPile,
+      batch: 24,
+      ritFrom: 2,
+      ritTo: 10,
+      masterData,
+      delivery: createNotPickedUpDelivery(),
+    })
+
+    const result = await store.addSamplePosition(position)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('PILE_NOT_IN_SHIFT_WORKSPACE')
+    store.close()
+  })
+
+  it('9. an overlapping SamplePosition for the same Shift/Pile/Batch is rejected atomically with SAMPLE_POSITION_OVERLAP', async () => {
+    const store = newStore()
+    const { masterData, piles } = await setupWorkspace(store, 'SHIFT-1', ['PILE-1'])
+
+    const existing = buildFixtureSamplePosition({
+      id: 'SP-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      ritFrom: 2,
+      ritTo: 10,
+      masterData,
+      delivery: createNotPickedUpDelivery(),
+    })
+    const firstAdd = await store.addSamplePosition(existing)
+    expect(firstAdd.ok).toBe(true)
+
+    const overlapping = buildFixtureSamplePosition({
+      id: 'SP-2',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      ritFrom: 8,
+      ritTo: 20,
+      masterData,
+      delivery: createNotPickedUpDelivery(),
+    })
+    const secondAdd = await store.addSamplePosition(overlapping)
+    expect(secondAdd.ok).toBe(false)
+    if (secondAdd.ok) return
+    expect(secondAdd.error.code).toBe('SAMPLE_POSITION_OVERLAP')
+
+    const byShift = await store.listSamplePositionsForShift(fixtureShiftId('SHIFT-1'))
+    expect(byShift.ok).toBe(true)
+    if (!byShift.ok) return
+    expect(byShift.value.map((p) => p.id)).toEqual(['SP-1'])
+    store.close()
+  })
+
+  it('10. a non-overlapping range on the same Pile/Batch is accepted', async () => {
+    const store = newStore()
+    const { masterData, piles } = await setupWorkspace(store, 'SHIFT-1', ['PILE-1'])
+
+    const first = buildFixtureSamplePosition({
+      id: 'SP-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      ritFrom: 2,
+      ritTo: 10,
+      masterData,
+      delivery: createNotPickedUpDelivery(),
+    })
+    const second = buildFixtureSamplePosition({
+      id: 'SP-2',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      ritFrom: 11,
+      ritTo: 20,
+      masterData,
+      delivery: createNotPickedUpDelivery(),
+    })
+
+    expect((await store.addSamplePosition(first)).ok).toBe(true)
+    expect((await store.addSamplePosition(second)).ok).toBe(true)
+    store.close()
+  })
+
+  it('11. the same numeric range on a different Batch is accepted', async () => {
+    const store = newStore()
+    const { masterData, piles } = await setupWorkspace(store, 'SHIFT-1', ['PILE-1'])
+
+    const first = buildFixtureSamplePosition({
+      id: 'SP-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      ritFrom: 2,
+      ritTo: 10,
+      masterData,
+      delivery: createNotPickedUpDelivery(),
+    })
+    const second = buildFixtureSamplePosition({
+      id: 'SP-2',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 25,
+      ritFrom: 2,
+      ritTo: 10,
+      masterData,
+      delivery: createNotPickedUpDelivery(),
+    })
+
+    expect((await store.addSamplePosition(first)).ok).toBe(true)
+    expect((await store.addSamplePosition(second)).ok).toBe(true)
+    store.close()
+  })
+
+  it('13. a SamplePosition survives close/reopen of the same database', async () => {
+    const databaseName = uniqueDatabaseName()
+    const firstSession = new LocalOperationalStore(databaseName)
+    const { masterData, piles } = await setupWorkspace(firstSession, 'SHIFT-1', ['PILE-1'])
+
+    const position = buildFixtureSamplePosition({
+      id: 'SP-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      ritFrom: 2,
+      ritTo: 10,
+      masterData,
+      delivery: createNotPickedUpDelivery(),
+    })
+    expect((await firstSession.addSamplePosition(position)).ok).toBe(true)
+    firstSession.close()
+
+    const reopenedSession = new LocalOperationalStore(databaseName)
+    const reopened = await reopenedSession.getSamplePosition(fixtureSamplePositionId('SP-1'))
+    expect(reopened.ok).toBe(true)
+    if (!reopened.ok) return
+    expect(reopened.value).toEqual(position)
+    reopenedSession.close()
+  })
+
+  it('a DELIVERED SamplePosition with a dispatcher round-trips unchanged', async () => {
+    const store = newStore()
+    const { masterData, piles } = await setupWorkspace(store, 'SHIFT-1', ['PILE-1'])
+
+    const destination = parseDeliveryDestinationCode('LAB-A')
+    if (!destination.ok) throw new Error('invalid test fixture')
+    const position = buildFixtureSamplePosition({
+      id: 'SP-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      ritFrom: 2,
+      ritTo: 10,
+      masterData,
+      delivery: createDeliveredDelivery(destination.value, fixtureEmployeeId(FIXTURE_EMPLOYEE_ID)),
+    })
+    expect((await store.addSamplePosition(position)).ok).toBe(true)
+
+    const byId = await store.getSamplePosition(fixtureSamplePositionId('SP-1'))
+    expect(byId.ok).toBe(true)
+    if (!byId.ok) return
+    expect(byId.value?.delivery).toEqual({
+      status: 'DELIVERED',
+      destination: 'LAB-A',
+      dispatcherEmployeeId: FIXTURE_EMPLOYEE_ID,
+    })
     store.close()
   })
 })

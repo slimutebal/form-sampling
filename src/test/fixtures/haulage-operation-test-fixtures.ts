@@ -3,16 +3,20 @@ import { parseBatchNumber } from '@/domain/batch/batch-number'
 import { parseRitNumber } from '@/domain/batch/rit-number'
 import { parseOreCode, parseSamplingHouseCode, parseSectorCode, parseShiftCode } from '@/domain/common/codes'
 import {
+  parseEmployeeId,
   parseFleetId,
   parseFrontId,
   parseHaulageTransactionId,
   parsePileId,
+  parseSamplePositionId,
   parseShiftId,
   parseTruckId,
+  type EmployeeId,
   type FleetId,
   type FrontId,
   type HaulageTransactionId,
   type PileId,
+  type SamplePositionId,
   type ShiftId,
   type TruckId,
 } from '@/domain/common/identifiers'
@@ -24,7 +28,12 @@ import { createFrontDefinition } from '@/domain/fleet/front'
 import { createHaulageTransaction, type HaulageTransaction } from '@/domain/haulage/haulage-transaction'
 import { parseHaulerCode } from '@/domain/master/master-codes'
 import { createMasterData, type MasterData } from '@/domain/master/master-data'
-import { createHaulerReference, createSectorReference, createTruckReference } from '@/domain/master/references'
+import {
+  createEmployeeReference,
+  createHaulerReference,
+  createSectorReference,
+  createTruckReference,
+} from '@/domain/master/references'
 import {
   createOreSamplingConfig,
   parseBatchSize,
@@ -32,6 +41,8 @@ import {
   parseSamplingInterval,
 } from '@/domain/master/sampling-config'
 import { createPile, type Pile } from '@/domain/pile/pile'
+import type { SampleDelivery } from '@/domain/sample-handling/delivery-status'
+import { createSamplePosition, type SamplePosition } from '@/domain/sample-handling/sample-position'
 import { createShift, type Shift } from '@/domain/shift/shift'
 
 /**
@@ -80,14 +91,24 @@ export function fixturePosition(batch: number, rit: number): BatchPosition {
   return createBatchPosition(must(parseBatchNumber(batch)), must(parseRitNumber(rit)))
 }
 
+export function fixtureSamplePositionId(value: string): SamplePositionId {
+  return must(parseSamplePositionId(value))
+}
+
+export function fixtureEmployeeId(value: string): EmployeeId {
+  return must(parseEmployeeId(value))
+}
+
 const SECTOR_CODE = 'S1'
 const HAULER_CODE = 'H1'
 export const FIXTURE_FLEET_ID = 'FLEET-A'
 export const FIXTURE_FRONT_ID = 'F1'
 export const FIXTURE_IN_FLEET_TRUCK_ID = 'T1'
 export const FIXTURE_WRONG_TRUCK_TRUCK_ID = 'T2'
+export const FIXTURE_EMPLOYEE_ID = '12345'
+export const FIXTURE_EMPLOYEE_NAME = 'John Doe'
 
-/** A minimal validated MasterData snapshot: one sector/hauler, two known trucks, SAP + LIM ore rules. */
+/** A minimal validated MasterData snapshot: one employee, one sector/hauler, two known trucks, SAP + LIM ore rules. */
 export function buildFixtureMasterData(): MasterData {
   const sector = must(parseSectorCode(SECTOR_CODE))
   const hauler = must(parseHaulerCode(HAULER_CODE))
@@ -96,7 +117,7 @@ export function buildFixtureMasterData(): MasterData {
 
   return must(
     createMasterData({
-      employees: [],
+      employees: [createEmployeeReference(fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), FIXTURE_EMPLOYEE_NAME)],
       crews: [],
       sectors: [createSectorReference(sector)],
       locations: [],
@@ -182,6 +203,33 @@ export function buildFixtureHaulageTransaction(params: BuildFixtureHaulageTransa
       truckId: fixtureTruckId(params.truckId ?? FIXTURE_IN_FLEET_TRUCK_ID),
       masterData: params.masterData,
       fleetSetup: params.fleetSetup,
+    }),
+  )
+}
+
+export interface BuildFixtureSamplePositionParams {
+  readonly id: string
+  readonly shiftId: string
+  readonly pile: Pile
+  readonly batch: number
+  readonly ritFrom: number
+  readonly ritTo: number
+  readonly masterData: MasterData
+  readonly delivery: SampleDelivery
+}
+
+/** Builds a validated SamplePosition (NOT_PICKED_UP by default via `delivery`). */
+export function buildFixtureSamplePosition(params: BuildFixtureSamplePositionParams): SamplePosition {
+  return must(
+    createSamplePosition({
+      id: fixtureSamplePositionId(params.id),
+      shiftId: fixtureShiftId(params.shiftId),
+      pile: params.pile,
+      batchNumber: must(parseBatchNumber(params.batch)),
+      ritFrom: must(parseRitNumber(params.ritFrom)),
+      ritTo: must(parseRitNumber(params.ritTo)),
+      masterData: params.masterData,
+      delivery: params.delivery,
     }),
   )
 }

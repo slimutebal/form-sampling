@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { parseOreCode, parseSectorCode } from '../common/codes'
-import { parseTruckId } from '../common/identifiers'
+import { parseEmployeeId, parseTruckId } from '../common/identifiers'
 import { parseHaulerCode, parsePileAreaCode } from './master-codes'
-import { createSectorReference, createTruckReference, type TruckReference } from './references'
+import { createEmployeeReference, createSectorReference, createTruckReference, type TruckReference } from './references'
 import {
   createOreSamplingConfig,
   parseBatchSize,
@@ -12,6 +12,7 @@ import {
 } from './sampling-config'
 import {
   createMasterData,
+  findEmployee,
   findOreSamplingConfig,
   findTruck,
   validateMasterOreSamplingConfigs,
@@ -287,6 +288,38 @@ describe('createMasterData', () => {
     if (!unknown.ok) return
 
     expect(findTruck(masterData, unknown.value)).toBeUndefined()
+  })
+
+  it('lookup: known EmployeeId returns the correct employee', () => {
+    const employeeId = parseEmployeeId('12345')
+    expect(employeeId.ok).toBe(true)
+    if (!employeeId.ok) return
+    const result = createMasterData({
+      employees: [createEmployeeReference(employeeId.value, 'John Doe')],
+      crews: [],
+      sectors: [],
+      locations: [],
+      samplingHouses: [],
+      pileAreas: [],
+      haulers: [],
+      trucks: [],
+      oreSamplingConfigs: [],
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    const found = findEmployee(result.value, employeeId.value)
+    expect(found).toBeDefined()
+    expect(found?.name).toBe('John Doe')
+  })
+
+  it('lookup: unknown EmployeeId produces explicit not-found (undefined)', () => {
+    const masterData = buildValidMasterData()
+    const unknown = parseEmployeeId('99999')
+    expect(unknown.ok).toBe(true)
+    if (!unknown.ok) return
+
+    expect(findEmployee(masterData, unknown.value)).toBeUndefined()
   })
 })
 

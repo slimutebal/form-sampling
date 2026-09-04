@@ -1,8 +1,9 @@
-import type { HaulageTransactionId, PileId, ShiftId } from '../../domain/common/identifiers'
+import type { HaulageTransactionId, PileId, SamplePositionId, ShiftId } from '../../domain/common/identifiers'
 import type { FleetSetup } from '../../domain/fleet/fleet-setup'
 import type { HaulageTransaction } from '../../domain/haulage/haulage-transaction'
 import type { MasterData } from '../../domain/master/master-data'
 import type { Pile } from '../../domain/pile/pile'
+import type { SamplePosition } from '../../domain/sample-handling/sample-position'
 import type { Shift } from '../../domain/shift/shift'
 
 /**
@@ -29,6 +30,20 @@ export interface HaulageTransactionRecord {
   readonly shiftId: ShiftId
   readonly pileId: PileId
   readonly transaction: HaulageTransaction
+}
+
+/**
+ * IndexedDB row for the `samplePositions` table (primary key: id,
+ * Phase 11). `shiftId`/`pileId` are top-level indexed copies derived
+ * from `samplePosition`, never independently supplied (mirrors
+ * `HaulageTransactionRecord`), so a query index can never disagree with
+ * the stored snapshot.
+ */
+export interface SamplePositionRecord {
+  readonly id: SamplePositionId
+  readonly shiftId: ShiftId
+  readonly pileId: PileId
+  readonly samplePosition: SamplePosition
 }
 
 /** The single metadata key used to mark the local current-shift pointer. */

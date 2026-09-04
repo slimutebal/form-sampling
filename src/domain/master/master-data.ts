@@ -2,7 +2,7 @@ import type { Brand } from '../common/brand'
 import type { OreCode } from '../common/codes'
 import type { DomainError, Result } from '../common/result'
 import { err, ok } from '../common/result'
-import type { TruckId } from '../common/identifiers'
+import type { EmployeeId, TruckId } from '../common/identifiers'
 import type {
   CrewReference,
   EmployeeReference,
@@ -163,4 +163,13 @@ export function findOreSamplingConfig(masterData: MasterData, oreCode: OreCode):
  */
 export function findTruck(masterData: MasterData, truckId: TruckId): TruckReference | undefined {
   return masterData.trucks.find((truck) => truck.id === truckId)
+}
+
+/**
+ * Looks up an employee by EmployeeId (BR-DELIVERY-003: a Dispatcher NIK
+ * must come from the employee master). Returns `undefined` explicitly on
+ * a miss — callers must not assume any fallback/default employee.
+ */
+export function findEmployee(masterData: MasterData, employeeId: EmployeeId): EmployeeReference | undefined {
+  return masterData.employees.find((employee) => employee.id === employeeId)
 }

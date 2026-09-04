@@ -1,17 +1,20 @@
 import Dexie, { type Table } from 'dexie'
-import type { HaulageTransactionId, PileId, ShiftId } from '../../domain/common/identifiers'
+import type { HaulageTransactionId, PileId, SamplePositionId, ShiftId } from '../../domain/common/identifiers'
 import type { Result } from '../../domain/common/result'
 import { err, ok } from '../../domain/common/result'
 import type { FleetSetup } from '../../domain/fleet/fleet-setup'
 import type { HaulageTransaction } from '../../domain/haulage/haulage-transaction'
 import type { MasterData } from '../../domain/master/master-data'
 import type { Pile } from '../../domain/pile/pile'
+import { validateNoSampleOverlap } from '../../domain/sample-handling/sample-overlap'
+import type { SamplePosition } from '../../domain/sample-handling/sample-position'
 import type { Shift } from '../../domain/shift/shift'
-import { DEFAULT_LOCAL_DATABASE_NAME, LOCAL_DATABASE_SCHEMA_VERSION } from './database'
+import { DEFAULT_LOCAL_DATABASE_NAME } from './database'
 import {
   CURRENT_SHIFT_METADATA_KEY,
   type HaulageTransactionRecord,
   type MetadataRecord,
+  type SamplePositionRecord,
   type ShiftWorkspaceRecord,
 } from './records'
 
@@ -25,14 +28,27 @@ import {
 class LocalOperationalDatabase extends Dexie {
   readonly shiftWorkspaces!: Table<ShiftWorkspaceRecord, string>
   readonly haulageTransactions!: Table<HaulageTransactionRecord, string>
+  readonly samplePositions!: Table<SamplePositionRecord, string>
   readonly metadata!: Table<MetadataRecord, string>
 
   constructor(databaseName: string) {
     super(databaseName)
-    this.version(LOCAL_DATABASE_SCHEMA_VERSION).stores({
+    // v1 is preserved verbatim (same tables/indexes) so that a database
+    // opened by an older client version, or already containing v1 data,
+    // upgrades in place rather than losing existing shiftWorkspaces/
+    // haulageTransactions/metadata rows (Phase 11 §21).
+    this.version(1).stores({
       shiftWorkspaces: 'shiftId',
       haulageTransactions: 'id, shiftId, pileId, [shiftId+pileId]',
       metadata: 'key',
+    })
+    // v2 (Phase 11): adds samplePositions only — every v1 table/index is
+    // repeated unchanged.
+    this.version(2).stores({
+      shiftWorkspaces: 'shiftId',
+      haulageTransactions: 'id, shiftId, pileId, [shiftId+pileId]',
+      metadata: 'key',
+      samplePositions: 'id, shiftId, pileId, [shiftId+pileId]',
     })
   }
 }
@@ -121,10 +137,11 @@ function toWorkspace(record: ShiftWorkspaceRecord): LocalShiftWorkspace {
  * database (Phase 7). Encapsulates Dexie entirely — no table object,
  * `put`, `delete`, or `db.delete()` is ever exposed to callers. Every
  * operation here is intentional: create-only workspace initialization,
- * add-only haulage transactions, and scoped reads. Only validated
- * domain objects (Shift, Pile, MasterData, FleetSetup,
- * HaulageTransaction — all Phase 2–6 output) may enter through this
- * API; there is no raw/untrusted-object write path.
+ * add-only haulage transactions, add-only sample positions, and scoped
+ * reads. Only validated domain objects (Shift, Pile, MasterData,
+ * FleetSetup, HaulageTransaction, SamplePosition — all Phase 2–11
+ * output) may enter through this API; there is no raw/untrusted-object
+ * write path.
  */
 export class LocalOperationalStore {
   private readonly db: LocalOperationalDatabase
@@ -336,6 +353,104 @@ export class LocalOperationalStore {
         .equals([shiftId, pileId])
         .toArray()
       return ok(records.map((record) => record.transaction))
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Appends one validated SamplePosition (Phase 11 §21-23). Create-only:
+   * a repeated `samplePosition.id` fails with
+   * `DUPLICATE_SAMPLE_POSITION_ID` rather than overwriting the original.
+   * Verifies referential integrity against the stored Shift workspace and
+   * its Pile list, and checks overlap against every existing
+   * SamplePosition for the same Shift/Pile via `validateNoSampleOverlap`
+   * (BR-SP-004) — all inside the same atomic Dexie transaction as the
+   * insert, so a concurrent write cannot slip an overlapping position
+   * past the check. Never recomputes the sample range or Total Bag —
+   * `samplePosition` is stored exactly as given.
+   */
+  async addSamplePosition(samplePosition: SamplePosition): Promise<StoreResult<void>> {
+    // Snapshot the entire validated position synchronously, before the
+    // first `await` below (Phase 7 §29 pattern) — protects against a
+    // caller mutation racing the asynchronous workspace/pile/overlap
+    // checks below.
+    const samplePositionSnapshot: SamplePosition = structuredClone(samplePosition)
+    const shiftId = samplePositionSnapshot.shiftId
+    const pileId = samplePositionSnapshot.pileId
+    const id = samplePositionSnapshot.id
+
+    try {
+      await this.db.transaction('rw', this.db.shiftWorkspaces, this.db.samplePositions, async () => {
+        const workspace = await this.db.shiftWorkspaces.get(shiftId)
+        if (!workspace) {
+          raiseExpectedError('SHIFT_WORKSPACE_NOT_FOUND', `No shift workspace exists for ShiftId ${shiftId}`)
+        }
+
+        const pileExists = workspace.piles.some((pile) => pile.id === pileId)
+        if (!pileExists) {
+          raiseExpectedError('PILE_NOT_IN_SHIFT_WORKSPACE', `PileId ${pileId} is not part of shift workspace ${shiftId}`)
+        }
+
+        const existingById = await this.db.samplePositions.get(id)
+        if (existingById) {
+          raiseExpectedError('DUPLICATE_SAMPLE_POSITION_ID', `Duplicate SamplePositionId: ${id}`)
+        }
+
+        const existingRecords = await this.db.samplePositions
+          .where('[shiftId+pileId]')
+          .equals([shiftId, pileId])
+          .toArray()
+        const existingPositions = existingRecords.map((record) => record.samplePosition)
+        const overlapCheck = validateNoSampleOverlap(samplePositionSnapshot, existingPositions)
+        if (!overlapCheck.ok) {
+          raiseExpectedError(overlapCheck.error.code, overlapCheck.error.message)
+        }
+
+        await this.db.samplePositions.add({ id, shiftId, pileId, samplePosition: samplePositionSnapshot })
+      })
+      return ok(undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /** Reads one stored SamplePosition by id. `undefined` if not found. */
+  async getSamplePosition(id: SamplePositionId): Promise<StoreResult<SamplePosition | undefined>> {
+    try {
+      const record = await this.db.samplePositions.get(id)
+      return ok(record?.samplePosition)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Lists every stored SamplePosition for a Shift, via the `shiftId`
+   * index. Array order reflects no confirmed operational sequence
+   * (mirrors `listHaulageTransactionsForShift`) — callers must not treat
+   * it as creation order.
+   */
+  async listSamplePositionsForShift(shiftId: ShiftId): Promise<StoreResult<readonly SamplePosition[]>> {
+    try {
+      const records = await this.db.samplePositions.where('shiftId').equals(shiftId).toArray()
+      return ok(records.map((record) => record.samplePosition))
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Lists every stored SamplePosition for a Shift/Pile, via the compound
+   * `[shiftId+pileId]` index.
+   */
+  async listSamplePositionsForShiftPile(
+    shiftId: ShiftId,
+    pileId: PileId,
+  ): Promise<StoreResult<readonly SamplePosition[]>> {
+    try {
+      const records = await this.db.samplePositions.where('[shiftId+pileId]').equals([shiftId, pileId]).toArray()
+      return ok(records.map((record) => record.samplePosition))
     } catch (caught) {
       return err(mapCaughtError(caught))
     }
