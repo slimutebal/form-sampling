@@ -7,7 +7,7 @@ export function WelcomePage() {
   const { t } = useTranslation()
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-6 px-4 text-center">
+    <div className="safe-top safe-bottom safe-x mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-6 px-4 text-center">
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold">{t('welcome.title')}</h1>
         <p className="text-sm text-muted-foreground">{t('welcome.subtitle')}</p>

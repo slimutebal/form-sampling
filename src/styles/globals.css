@@ -16,6 +16,26 @@ body {
   overflow-x: hidden;
 }
 
+/*
+ * Central safe-area policy (mobile hardening pass): every shell that
+ * touches a physical screen edge (GlobalStatusBar/PageHeader at the top,
+ * BottomNav at the bottom, the pre-shift Welcome/AppLayout shells on the
+ * sides) reads insets from here instead of each page re-deriving its own
+ * env() padding.
+ */
+@layer utilities {
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
 :root {
   --background: #ffffff;
   --foreground: #0f172a;

@@ -66,15 +66,19 @@ export function GlobalStatusBar({ syncReader, activeShiftReader }: GlobalStatusB
     setUpdateExpanded(false)
   }
 
+  const isNormal = online && sync.status === 'ALL_SYNCED'
+
   return (
-    <div className="border-b border-border bg-muted/60 text-xs">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-1.5">
+    <div className={cn('safe-top safe-x border-b border-border bg-muted/60 text-xs', isNormal && 'bg-background')}>
+      <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 px-4', isNormal ? 'py-1' : 'py-1.5')}>
         <span
           className={cn('flex items-center gap-1 font-medium', online ? 'text-muted-foreground' : 'text-amber-700')}
         >
           {online ? <Wifi aria-hidden="true" size={14} /> : <WifiOff aria-hidden="true" size={14} />}
           {online ? t('pwa.online') : t('pwa.offline')}
         </span>
+
+        <span aria-hidden="true" className="text-muted-foreground">·</span>
 
         <span
           className={cn(

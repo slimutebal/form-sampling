@@ -31,9 +31,9 @@ export function AppLayout() {
   const [phase, handleRetry] = useCurrentWorkspace(localOperationalStore)
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col">
+    <div className="safe-x mx-auto flex min-h-dvh w-full max-w-md flex-col">
       <GlobalStatusBar syncReader={localOperationalStore} activeShiftReader={localOperationalStore} />
-      <main className="flex-1 pb-20">
+      <main className="flex-1 pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
         {phase.kind === 'loading' ? (
           <div className="px-4 py-4" aria-live="polite">
             <p className="text-sm text-muted-foreground">{t('activeShell.loading')}</p>

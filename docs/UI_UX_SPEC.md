@@ -335,8 +335,11 @@ APP
 read-only view under More.
 
 **Active-shift Fleet management amendment (CONFIRMED):** the bottom nav's
-final five items are Beranda / Fleet / Pile / Penanganan Sampel / Laporan
-— **More is removed**. Fleet Setup is no longer a one-time, write-once
+final five items are Beranda / Fleet / Pile / Sample / Laporan
+— **More is removed**. (Mobile hardening pass, pre-v1.0.0: the Samples
+label was further shortened from "Penanganan Sampel"/"Sample Handling" to
+"Sample" in both languages so it reliably fits one line at 360px width —
+see §107. The Samples screen's own heading is unaffected.) Fleet Setup is no longer a one-time, write-once
 step: it gets its own top-level `/fleet` destination because moving a
 loading point mid-shift is a critical operational workflow, not a
 secondary setting (§57 already said "critical operational workflow tidak
@@ -2880,3 +2883,120 @@ having zero ACTIVE Fronts — BASE mode needs none. Application layer:
 `appendNewBaseFront` (`src/application/fleet-setup/append-new-base-front.ts`).
 The resulting Front appears on `/fleet` and the Pile List (§29) exactly
 like any other ACTIVE Front, with its own independent lineage.
+
+---
+
+# 107. Mobile Presentation Hardening (Pre-v1.0.0)
+
+Real-iPhone testing ahead of the v1.0.0 GitHub Pages release surfaced
+presentation-only issues — status-bar overlap, an over-scaled/"scaled
+website" feel, and a bottom nav that behaved like a web footer rather
+than a native app bar. This section is presentation/UX only: no
+business rule, schema, or workflow changed.
+
+**Viewport / zoom lock (CONFIRMED, intentional for field use):**
+`index.html`'s viewport meta is
+`width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover`.
+Pinch/accidental browser zoom is disabled deliberately — this is a field
+app, not a document viewer — while `viewport-fit=cover` still lets the
+app draw under the iPhone notch/Dynamic Island so the safe-area policy
+below can control it precisely. No Safari input-zoom workaround
+(`font-size: 16px` was already the input/select text size — see below)
+was added; real-device testing confirmed it was unnecessary.
+
+**Safe-area policy — one shell per entry point, no per-page patches:**
+
+```text
+GlobalStatusBar   owns the top inset for every active-shift route
+                  (AppLayout): safe-top padding, since it is the first
+                  element painted at the true top of the screen there.
+
+PageHeader        owns the top inset everywhere else it is the topmost
+                  element (every pre-shift Start Shift step: Shift
+                  Start/Resume, Handover, Manpower, Fleet Setup) *and*
+                  covers the case where GlobalStatusBar has scrolled out
+                  of view on an AppLayout route. It does this via
+                  `sticky top-[env(safe-area-inset-top)]` rather than a
+                  fixed `top-0` + padding — the sticky offset itself
+                  clears the notch only once PageHeader is actually the
+                  element resting at the screen edge, so its own normal
+                  in-flow position (already below GlobalStatusBar) never
+                  gets a second, wasted top inset stacked underneath the
+                  first.
+
+AppLayout /       own left/right insets (`safe-x`) and, respectively,
+WelcomePage       top+bottom insets, for their own root shells.
+
+BottomNav         owns the bottom inset (`safe-bottom`) plus left/right
+                  (`safe-x`) so it clears the iPhone home indicator and
+                  stays clear of Android gesture-nav cutouts in
+                  landscape.
+```
+
+`safe-top` / `safe-bottom` / `safe-x` are small utility classes in
+`src/styles/globals.css` wrapping the four `env(safe-area-inset-*)`
+values — introduced so no individual page hand-rolls its own inset
+math for the shell edges above (per-page bottom padding that already
+existed for in-page spacing, e.g. `pb-[calc(1rem+env(safe-area-inset-bottom))]`
+on individual forms, is unrelated and untouched).
+
+**Dynamic viewport height:** `AppLayout` and `WelcomePage` (the two full
+-height shells) already used `min-h-dvh`; no `100vh`/`min-h-screen`
+usage existed anywhere else in the app to convert. Nothing else needed
+scroll behavior changes beyond BottomNav's below.
+
+**Typography/density (targeted, not a blanket scale transform):**
+measured against actual rendered sizes, most of the app already sat
+inside or below the field-readable ranges this pass targets (§12).
+Adjustments were made only where a shared primitive was measurably off:
+
+```text
+PageHeader title      20px -> 22px, header vertical padding tightened
+Card                  p-4 -> p-3.5 (a touch more compact)
+CardTitle             16px -> 17px
+Button (all sizes)    14px -> 15px base font
+Home dashboard KPI    24px -> 28px (primary-metric emphasis, §12)
+```
+
+Inputs/selects (16px, avoids iOS auto-zoom), field labels (14px), and
+touch target heights (44px minimum via existing `h-11`) were already on
+target and left unchanged.
+
+**GlobalStatusBar:** unchanged states (offline / pending / failed /
+update-available / offline-ready) — only the normal healthy row (online
++ fully synced) got tighter padding and a compact "Online · All synced"
+reading via a plain middle-dot separator between the existing
+online/sync text nodes (not a merged string, so nothing here changed
+GlobalStatusBar's queryable text).
+
+**Bottom navigation — mobile hardening (supersedes the plain fixed bar
+originally described earlier in this document):**
+
+```text
+Label:        Beranda | Fleet | Pile | Sample | Laporan (§14 amendment
+              above) — "Sample" replaces "Penanganan Sampel"/"Sample
+              Handling" in both languages so it fits one line at 360px.
+              The Samples screen's own heading is a separate key and is
+              unaffected.
+
+Visibility:   visible by default; hides on a deliberate downward
+              scroll of the document (this app scrolls the document
+              itself, not an inner container) past a 16px direction
+              threshold (absorbs rubber-band/jitter); returns
+              immediately on upward scroll past the same threshold;
+              forced visible within 8px of the top or whenever the
+              page's content is shorter than the viewport (nothing to
+              scroll); resets to visible on every route change. Animated
+              via `translateY` + a short transition, not a layout
+              reflow — BottomNav is `fixed`, so hiding it never
+              reclaims/jumps page content, and `AppLayout`'s `<main>`
+              keeps a constant bottom reserve sized to the nav's own
+              height + safe-area inset regardless of visibility.
+
+Contrast:     translucent `bg-background` + backdrop blur, a top
+              border, and a subtle upward drop shadow separate the nav
+              from page content without a decorative gradient. The
+              active item keeps its existing color differentiation
+              (primary vs. muted-foreground) plus a soft rounded
+              highlight behind its icon.
+```
