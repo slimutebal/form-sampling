@@ -35,7 +35,11 @@ export function RecordedHaulageList({ recordedPositions }: RecordedHaulageListPr
                   {t('pileHaulage.batch')} {Number(position.batchNumber)} • {t('pileHaulage.rit')}{' '}
                   {Number(position.ritNumber)}
                 </p>
-                <span className="text-sm font-medium text-emerald-700">{t('pileHaulage.recorded')}</span>
+                <span className="text-sm font-medium text-emerald-700">
+                  {transactions[0]?.samplingEvaluation.sampleRequired
+                    ? t('pileHaulage.sampled')
+                    : t('pileHaulage.recorded')}
+                </span>
               </div>
               <ul className="flex flex-col gap-0.5 pl-2 text-sm text-muted-foreground">
                 {transactions.map((transaction) => (

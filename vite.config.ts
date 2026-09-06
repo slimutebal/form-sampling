@@ -30,7 +30,9 @@ export default defineConfig({
         short_name: 'Sampling',
         description: 'Field ore sampling and shift reporting.',
         start_url: '/',
+        scope: '/',
         display: 'standalone',
+        orientation: 'portrait-primary',
         background_color: '#ffffff',
         theme_color: '#0f172a',
         icons: [
@@ -40,9 +42,39 @@ export default defineConfig({
             type: 'image/svg+xml',
             purpose: 'any',
           },
+          {
+            src: 'icons/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: 'icons/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: 'icons/icon-512-maskable.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
         ],
       },
+      workbox: {
+        // Application shell + versioned static assets only (ROADMAP Phase
+        // 18 §4/§38) — no runtimeCaching entries are configured here, so
+        // Google Sheets responses/generated XLSX/uploaded handover files
+        // are never written to Cache Storage; IndexedDB remains the sole
+        // operational store.
+        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
+        // Lets client-side (React Router) navigation resolve offline —
+        // any non-precached navigation request falls back to the shell.
+        navigateFallback: '/index.html',
+      },
       devOptions: {
+        // Service worker is generated for production builds only.
         enabled: false,
       },
     }),

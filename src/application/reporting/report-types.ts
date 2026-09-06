@@ -1,8 +1,9 @@
 import type { BatchNumber } from '@/domain/batch/batch-number'
 import type { RitNumber } from '@/domain/batch/rit-number'
-import type { OreCode, SamplingHouseCode, ShiftCode } from '@/domain/common/codes'
+import type { OreCode, ShiftCode } from '@/domain/common/codes'
 import type { EmployeeId, FleetId, FrontId, HaulageTransactionId, PileId, TruckId } from '@/domain/common/identifiers'
 import type { ShiftDate } from '@/domain/common/shift-date'
+import type { PileAreaCode } from '@/domain/master/master-codes'
 import type { DeliveryDestinationCode } from '@/domain/sample-handling/delivery-destination'
 import type { SampleDelivery } from '@/domain/sample-handling/delivery-status'
 import type { TotalBag } from '@/domain/sample-handling/total-bag'
@@ -13,15 +14,21 @@ import type { IsoWeek } from './iso-week'
 export type ReportLanguage = 'id' | 'en'
 
 /**
- * One caller-supplied manpower assignment for the reporting shift. Not
- * an authoritative persisted domain concept yet (ROADMAP Phase 14 §3) —
- * the workspace has no manpower state of its own, so the report
- * generator only ever accepts this as explicit input. `jobDeskCode` is
- * deliberately a plain, language-neutral string: no closed enum of job
- * desks is invented here because no confirmed business rule defines one.
+ * One caller-supplied manpower assignment for the reporting shift.
+ * Mirrors `@/domain/manpower/manpower-assignment`'s persisted shape
+ * (Phase 18 §4) rather than re-deriving `name` from a master lookup here:
+ * `personId` may resolve against either the Employee or the Crew master
+ * (`@/application/manpower/create-manpower-from-draft` already validated
+ * and resolved it once, at Manpower Setup time), so this module must not
+ * assume it is always an `EmployeeId`. `jobDeskCode` is deliberately a
+ * plain, language-neutral string: no closed enum of job desks is invented
+ * here because no confirmed business rule defines one. `isPic` is
+ * intentionally not part of this type — PIC is internal shift metadata
+ * only and must never surface as a report column (§4/§11).
  */
 export interface ManpowerAssignment {
-  readonly employeeId: EmployeeId
+  readonly personId: string
+  readonly name: string
   readonly jobDeskCode: string
 }
 
@@ -29,15 +36,19 @@ export interface ReportHeader {
   readonly title: string
   readonly date: ShiftDate
   readonly shiftCode: ShiftCode
+  /** Report display of `shiftCode` (Phase 18 §1: `DS`→`D`, `NS`→`N`) — the stored code itself never changes. */
+  readonly shiftCodeLabel: string
   readonly isoWeek: IsoWeek
 }
 
 export interface ReportManpowerRow {
   readonly date: ShiftDate
   readonly shiftCode: ShiftCode
-  readonly location: SamplingHouseCode
+  /** `Sector/SamplingHouseCode` (Phase 18 §1, e.g. `BR1/SH_01`) — a formatted display string, not itself a master code. */
+  readonly location: string
   readonly jobDeskCode: string
-  readonly employeeId: EmployeeId
+  /** NIK/Employee ID or Crew ID — whichever `personId` this assignment resolved from (Phase 18 §4). */
+  readonly employeeId: string
   readonly employeeName: string
 }
 
@@ -102,6 +113,8 @@ export interface HaulageDetailRow {
   readonly transactionId: HaulageTransactionId
   readonly truckId: TruckId
   readonly oreCode: OreCode
+  /** `undefined` when this Pile has no resolvable Pile_Areas master row (Phase 18 §11) — never blocks the rest of the report over one unresolved Stockpile. */
+  readonly stockpileCode?: PileAreaCode
   readonly pileId: PileId
   readonly batchNumber: BatchNumber
   readonly ritNumber: RitNumber
@@ -143,6 +156,7 @@ export interface ReportLabelSet {
     readonly employeeName: string
     readonly pileId: string
     readonly ore: string
+    readonly stockpile: string
     readonly rit: string
     readonly batch: string
     readonly increment: string

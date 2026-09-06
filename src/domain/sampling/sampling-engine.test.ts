@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { parseRitNumber } from '../batch/rit-number'
-import { parseSamplingInterval } from '../master/sampling-config'
-import { evaluateSampling, isSampleRequired } from './sampling-engine'
+import { parseBatchSize, parseSamplingInterval } from '../master/sampling-config'
+import { evaluateSampling, isSampleRequired, maxSampleIncrementsForBatch } from './sampling-engine'
 import type { RitNumber } from '../batch/rit-number'
-import type { SamplingInterval } from '../master/sampling-config'
+import type { BatchSize, SamplingInterval } from '../master/sampling-config'
 
 function rit(value: number): RitNumber {
   const parsed = parseRitNumber(value)
@@ -13,6 +13,12 @@ function rit(value: number): RitNumber {
 
 function interval(value: number): SamplingInterval {
   const parsed = parseSamplingInterval(value)
+  if (!parsed.ok) throw new Error('invalid test fixture')
+  return parsed.value
+}
+
+function batchSize(value: number): BatchSize {
+  const parsed = parseBatchSize(value)
   if (!parsed.ok) throw new Error('invalid test fixture')
   return parsed.value
 }
@@ -133,5 +139,19 @@ describe('evaluateSampling', () => {
       const evaluation = evaluateSampling(rit(7), future)
       expect(evaluation.sampleRequired).toBe(false)
     })
+  })
+})
+
+describe('maxSampleIncrementsForBatch', () => {
+  it('SAP config (batch 20 / interval 2) -> 10', () => {
+    expect(maxSampleIncrementsForBatch(batchSize(20), interval(2))).toBe(10)
+  })
+
+  it('LIM config (batch 100 / interval 5) -> 20', () => {
+    expect(maxSampleIncrementsForBatch(batchSize(100), interval(5))).toBe(20)
+  })
+
+  it('rounds down when the batch size does not divide evenly', () => {
+    expect(maxSampleIncrementsForBatch(batchSize(10), interval(3))).toBe(3)
   })
 })

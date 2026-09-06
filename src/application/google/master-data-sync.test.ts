@@ -70,14 +70,14 @@ describe('refreshMasterData', () => {
     const cache = new FakeMasterDataCacheStore({ masterData: previous, fetchedAt: previousFetchedAt })
 
     const result = await refreshMasterData({
-      reader: fakeReader(err({ code: 'GOOGLE_REQUEST_FAILED', message: 'network down' })),
+      reader: fakeReader(err({ code: 'MASTER_DATA_REMOTE_INVALID', message: 'invalid remote payload' })),
       cache,
       clock: fixedClock,
     })
 
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.error.code).toBe('GOOGLE_REQUEST_FAILED')
+    expect(result.error.code).toBe('MASTER_DATA_REMOTE_INVALID')
     expect(cache.replaceCallCount).toBe(0)
 
     const cached = await cache.readCachedMasterData()

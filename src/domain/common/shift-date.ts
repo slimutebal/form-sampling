@@ -54,3 +54,36 @@ export function parseShiftDate(value: string): Result<ShiftDate> {
 
   return ok(value as ShiftDate)
 }
+
+/**
+ * The calendar day immediately before `date` (plain `YYYY-MM-DD` day
+ * arithmetic, reusing the same leap-year/days-in-month rules as
+ * `parseShiftDate`). Deliberately avoids `Date` objects for the same
+ * reason `parseShiftDate` does — no timezone conversion, no silent
+ * overflow. Pure calendar math only; carries no shift-sequencing
+ * business meaning of its own (see `deriveExpectedPreviousShift`, which
+ * is the one place that meaning is assigned).
+ */
+export function previousCalendarDate(date: ShiftDate): ShiftDate {
+  const match = SHIFT_DATE_PATTERN.exec(date)
+  if (!match) {
+    throw new Error(`Invalid ShiftDate reached previousCalendarDate: ${date}`)
+  }
+  const [, yearText, monthText, dayText] = match
+  let year = Number(yearText)
+  let month = Number(monthText)
+  let day = Number(dayText)
+
+  day -= 1
+  if (day < 1) {
+    month -= 1
+    if (month < 1) {
+      month = 12
+      year -= 1
+    }
+    day = daysInMonth(year, month)
+  }
+
+  const pad = (value: number, length: number) => String(value).padStart(length, '0')
+  return `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}` as ShiftDate
+}

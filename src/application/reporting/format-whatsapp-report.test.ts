@@ -56,19 +56,30 @@ describe('formatWhatsAppReport — header', () => {
     expect(text).toContain('*LAPORAN HARIAN JAMINAN KUALITAS BIJIH*')
   })
 
-  it('includes Date, Shift and ISO Week', () => {
+  it('includes the fixed contract greeting, subtitle, combined Date/Shift and Week lines (Phase 18 §1)', () => {
     const report = buildReport({ language: 'en' })
     const text = formatWhatsAppReport(report)
-    expect(text).toContain('Date: 2026-09-04')
-    expect(text).toContain('Shift: D')
-    expect(text).toContain('ISO Week: 2026-W36')
+    expect(text).toContain('Dear All,')
+    expect(text).toContain('-- Ore & Sample Production --')
+    expect(text).toContain('Date/Shift: 04-Sep-26 / D')
+    expect(text).toContain('Week: 36')
+  })
+
+  it.each([
+    ['DS', 'D'],
+    ['NS', 'N'],
+  ] as const)('maps internal shift code %s to report display %s (Phase 18 §1)', (shiftCode, expectedLabel) => {
+    const shift = { ...buildFixtureShift('SHIFT-1'), shiftCode } as BuildShiftReportInput['shift']
+    const report = buildReport({ shift })
+    const text = formatWhatsAppReport(report)
+    expect(text).toContain(`Date/Shift: 04-Sep-26 / ${expectedLabel}`)
   })
 })
 
 describe('formatWhatsAppReport — manpower', () => {
   it('renders Job Desk, Employee ID and Name for each row', () => {
     const report = buildReport({
-      manpowerAssignments: [{ employeeId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), jobDeskCode: 'FOREMAN' }],
+      manpowerAssignments: [{ personId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), name: FIXTURE_EMPLOYEE_NAME, jobDeskCode: 'FOREMAN' }],
     })
     const text = formatWhatsAppReport(report)
     expect(text).toContain(`Job Desk: FOREMAN`)
@@ -84,7 +95,7 @@ describe('formatWhatsAppReport — manpower', () => {
 
   it('EN manpower report contains Location exactly once', () => {
     const report = buildReport({
-      manpowerAssignments: [{ employeeId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), jobDeskCode: 'FOREMAN' }],
+      manpowerAssignments: [{ personId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), name: FIXTURE_EMPLOYEE_NAME, jobDeskCode: 'FOREMAN' }],
     })
     const text = formatWhatsAppReport(report)
     expect(text).toContain(`Location: ${report.manpower[0].location}`)
@@ -94,7 +105,7 @@ describe('formatWhatsAppReport — manpower', () => {
   it('ID manpower report contains localized Location label exactly once', () => {
     const report = buildReport({
       language: 'id',
-      manpowerAssignments: [{ employeeId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), jobDeskCode: 'FOREMAN' }],
+      manpowerAssignments: [{ personId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), name: FIXTURE_EMPLOYEE_NAME, jobDeskCode: 'FOREMAN' }],
     })
     const text = formatWhatsAppReport(report)
     expect(text).toContain(`Lokasi: ${report.manpower[0].location}`)
@@ -104,8 +115,8 @@ describe('formatWhatsAppReport — manpower', () => {
   it('multiple manpower rows do not duplicate Location', () => {
     const report = buildReport({
       manpowerAssignments: [
-        { employeeId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), jobDeskCode: 'FOREMAN' },
-        { employeeId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), jobDeskCode: 'SAMPLER' },
+        { personId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), name: FIXTURE_EMPLOYEE_NAME, jobDeskCode: 'FOREMAN' },
+        { personId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), name: FIXTURE_EMPLOYEE_NAME, jobDeskCode: 'SAMPLER' },
       ],
     })
     const text = formatWhatsAppReport(report)
@@ -216,6 +227,45 @@ describe('formatWhatsAppReport — sample handling', () => {
   })
 })
 
+describe('formatWhatsAppReport — haulage detail (Phase 18 §1/§11)', () => {
+  it('includes every haulage transaction, wrong-truck rows included with their Remark', () => {
+    const pile = buildFixtureSapPile('PILE-1')
+    const report = buildReport({
+      piles: [pile],
+      haulageTransactions: [
+        buildFixtureHaulageTransaction({ id: 'T-1', shiftId: 'SHIFT-1', pile, batch: 1, rit: 1, masterData, fleetSetup }),
+        buildFixtureHaulageTransaction({
+          id: 'T-2',
+          shiftId: 'SHIFT-1',
+          pile,
+          batch: 1,
+          rit: 2,
+          masterData,
+          fleetSetup,
+          truckId: FIXTURE_WRONG_TRUCK_TRUCK_ID,
+        }),
+      ],
+    })
+    const text = formatWhatsAppReport(report)
+
+    expect(text).toContain('*Haulage Detail*')
+    expect(text).toContain('Transaction_ID: T-1')
+    expect(text).toContain('Transaction_ID: T-2')
+    expect(text).toContain('Reasons: Not In Effective Fleet')
+  })
+
+  it('never renders "undefined" for a Pile with no resolvable Stockpile', () => {
+    const pile = buildFixtureSapPile('PILE-1')
+    const report = buildReport({
+      piles: [pile],
+      haulageTransactions: [buildFixtureHaulageTransaction({ id: 'T-1', shiftId: 'SHIFT-1', pile, batch: 1, rit: 1, masterData, fleetSetup })],
+    })
+    const text = formatWhatsAppReport(report)
+
+    expect(text).not.toContain('undefined')
+  })
+})
+
 describe('formatWhatsAppReport — wrong truck', () => {
   it('renders localized reason labels, never the raw reason code', () => {
     const pile = buildFixtureSapPile('PILE-1')
@@ -272,14 +322,14 @@ describe('formatWhatsAppReport — pending samples', () => {
 describe('formatWhatsAppReport — determinism, immutability, no dummy text', () => {
   it('is deterministic for the same report', () => {
     const report = buildReport({
-      manpowerAssignments: [{ employeeId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), jobDeskCode: 'FOREMAN' }],
+      manpowerAssignments: [{ personId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), name: FIXTURE_EMPLOYEE_NAME, jobDeskCode: 'FOREMAN' }],
     })
     expect(formatWhatsAppReport(report)).toBe(formatWhatsAppReport(report))
   })
 
   it('never mutates the underlying ShiftReport', () => {
     const report = buildReport({
-      manpowerAssignments: [{ employeeId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), jobDeskCode: 'FOREMAN' }],
+      manpowerAssignments: [{ personId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), name: FIXTURE_EMPLOYEE_NAME, jobDeskCode: 'FOREMAN' }],
     })
     const before = structuredClone(report)
     formatWhatsAppReport(report)

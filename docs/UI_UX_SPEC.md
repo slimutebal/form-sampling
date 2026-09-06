@@ -308,7 +308,11 @@ APP
 │
 └── Active Shift
     │
-    ├── Home
+    ├── Home (+ Language, Master Data refresh, App version)
+    │
+    ├── Fleet
+    │   ├── Active Fronts (+ Add Front / continuation)
+    │   └── Front History (read-only)
     │
     ├── Piles
     │   ├── Pile List
@@ -319,20 +323,33 @@ APP
     │   ├── Delivered
     │   └── Handle Sample
     │
-    ├── Report
-    │   ├── Shift Summary
-    │   ├── WhatsApp Preview
-    │   ├── Excel Export
-    │   └── Finalization
-    │
-    └── More
-        ├── Fleet
-        ├── Manpower
-        ├── Handover History
-        ├── Sync
-        ├── Language
-        └── Settings
+    └── Report
+        ├── Shift Summary
+        ├── WhatsApp Preview
+        ├── Excel Export
+        └── Finalization
 ```
+
+**Phase 18 amendment:** Manpower Setup is a real Start Shift step
+(Registration → Handover → Manpower → Fleet Setup → Home), not only a
+read-only view under More.
+
+**Active-shift Fleet management amendment (CONFIRMED):** the bottom nav's
+final five items are Beranda / Fleet / Pile / Penanganan Sampel / Laporan
+— **More is removed**. Fleet Setup is no longer a one-time, write-once
+step: it gets its own top-level `/fleet` destination because moving a
+loading point mid-shift is a critical operational workflow, not a
+secondary setting (§57 already said "critical operational workflow tidak
+disembunyikan di More" — the old read-only Fleet summary living only in
+More was itself the violation this amendment fixes). More's remaining
+useful actions (Language, Master Data refresh, App version) moved into
+Home as secondary controls below the primary dashboard/quick actions; the
+Sync Status card was dropped entirely there — it duplicated what
+`GlobalStatusBar` (rendered above every active-shift page, not just Home)
+already shows. Pile doubles as both the active-pile list and, per pile,
+the operational checker page (see §58/§59 for the Fleet Setup fields this
+step now exposes, §24 for Manpower Setup's confirmed UX, and §105 for the
+active-shift Fleet page itself).
 
 ---
 
@@ -617,6 +634,31 @@ Sampler
 
 Name tidak diketik manual jika master tersedia.
 
+**Phase 18 confirmed implementation, corrected post-inspection §1**
+(`src/features/manpower/manpower-setup-page.tsx`): one search box against
+both the Employee and Crew master, a selected-personnel list where each
+row has an editable Job Desk field, and a "+ Tambah Personel" flow.
+There is **no PIC checkbox** — Penanggung Jawab / PIC is derived
+automatically from which master the person resolved against
+(Employee/Staff → always PIC; Crew → never PIC), never a manual toggle.
+A Staff row shows a read-only "Penanggung Jawab" label; a Crew row shows
+none. Example:
+
+```text
+SCM0333
+Raharjo Rahman
+Penanggung Jawab
+```
+
+Multiple Staff rows may be added at once, all automatically PIC — this
+is intentional, not a bug to constrain to one. Job Desk prefills from the
+Crew master's `jobCode` when known; a Crew with a blank master job still
+requires the operator to type one. A Staff/Employee Job Desk may remain
+blank — the Employee master has no exact Job field, so the app never
+invents whether a Staff member is e.g. SPV or Foreman. Continuing with
+zero personnel selected is allowed (Manpower is not mandatory to start a
+shift).
+
 ---
 
 # 25. Start Shift Review
@@ -735,6 +777,31 @@ COMPLETE
 PENDING
 ```
 
+**Phase 18 final correction (§3/§4) — active Fronts shown per Pile, Front
+chosen here:** the confirmed implementation
+(`src/features/piles/piles-list-page.tsx`) keeps the card compact —
+Pile_ID + Ore only, no Batch/Rit/Progress column on this list — but adds
+every ACTIVE Front whose Destination is that Pile as a small tappable
+chip underneath, so the operator picks the Front *here*, not inside the
+checker:
+
+```text
+BR-C4_S06                         SAP
+[BR1/03]  [BR1/05]
+
+L9_27                              LIM
+[BR1/04]
+```
+
+Each chip is a link carrying both ids explicitly in the route —
+`/piles/:pileId?front=<FrontId>` — never a mutable global "current
+Front" variable. A Pile with exactly one active Front still shows one
+chip (one tap into the checker); a Pile with no active Front shows a
+muted "Tidak ada Front aktif" note instead of a chip. HISTORICAL Fronts
+(BUSINESS_RULES.md §38) never appear. Front grouping:
+`deriveFrontLineage` (`src/domain/fleet/front-lineage.ts`), never
+recomputed ad hoc in this component.
+
 ---
 
 # 30. Add Pile
@@ -758,6 +825,43 @@ Activate
 ```
 
 Do not ask operator to enter Ore manually.
+
+**Phase 18 amendment — New Pile Master, corrected post-inspection §2/§3:**
+when a searched Pile_ID matches no existing master row, the search offers
+"+ Tambah Pile Baru 'L18_S99'" (the searched query) instead of
+dead-ending. The New Pile form (`src/features/pile-master/new-pile-form.tsx`)
+takes only the Pile ID (from the query) — Sector, Stockpile, and Ore are
+all **read-only, system-derived** from the Pile ID's confirmed canonical
+naming grammar (BR-MASTER-004), never a free-text Stockpile field or an
+Ore dropdown:
+
+```text
+Pile ID
+[ DS-C4_L06 ]
+
+Sector      DS
+Stockpile   DS-C_04
+Ore         LIM
+
+[ TAMBAH PILE ]
+```
+
+If the searched Pile_ID does not match a confirmed canonical family, the
+form shows a stable validation message (`PILE_ID_PATTERN_NOT_SUPPORTED`)
+instead of falling back to manual Stockpile/Ore selection — the operator
+can still select an existing exact master Pile, just not invent a new
+naming pattern. Because creation writes to the shared Google `Pile_Areas`
+master (`docs/GOOGLE_APPS_SCRIPT_CONTRACT.md`), submission is blocked
+outright while offline, with an explicit message — never a
+silently-disabled button. The Pile is only activated locally after the
+remote write is **verified** (write-then-verify via the existing JSONP
+master-data reader — see the contract doc), never merely sent. Existing
+cached piles and in-progress operational work remain usable offline
+regardless.
+
+This same New Pile Master creation is also available one step earlier,
+directly from Fleet Setup's Destination/Pile field (§58) — see that
+section for the pre-workspace mechanism.
 
 ---
 
@@ -789,6 +893,92 @@ Truck
 
 [ RECORD HAULAGE ]
 ```
+
+**Post-inspection correction §6 — fresh Pile Initial Position:** the
+previous permanent blocking message ("Batch awal untuk pile baru ini
+belum dikonfirmasi…") is now confirmed and replaced with an editable
+form for a genuinely fresh Pile (no handover carry-over, no prior
+haulage):
+
+```text
+INITIAL POSITION
+
+Batch Awal
+[ 001 ]
+
+Rit Awal
+[ 001 ]
+
+[ CONFIRM ]
+```
+
+Both fields are prefilled with the confirmed default (Batch 001 / Rit
+001) but freely editable — a supervisor may override to e.g. 025/001 or
+025/011 before the first haulage. After confirmation, the normal Pile
+Operation screen renders using that exact confirmed position:
+
+```text
+PILE DS-C4_L06
+
+Batch aktif / Rit berikutnya
+001 / 001
+
+Front
+[...]
+
+Truck
+[...]
+
+Sample
+AUTO
+
+[ SIMPAN DT ]
+```
+
+A "Ubah Posisi Awal" (Change Starting Position) secondary action remains
+available on this same screen for as long as no haulage has been
+recorded yet for this Pile — reopening the Initial Position form,
+prefilled with the current confirmed value. Once the first haulage
+transaction is saved, this action disappears entirely: the starting
+position is locked, and all subsequent progression comes from the
+existing batch/haulage engine (no new calculation rule). A Pile with
+real handover/continuation carry-over never shows this Initial Position
+form at all.
+
+**Phase 18 final correction (§5/§6/§8) — Front is read-only context, no
+dropdown; compact Sample count; searchable Truck checker:** the Front is
+already known once the operator reaches this screen (chosen on the Pile
+List, §29) — it is never asked again here. The confirmed layout
+(`src/features/piles/pile-operational-header.tsx`,
+`src/features/piles/haulage-entry-form.tsx`):
+
+```text
+PILE
+BR-C4_S06
+
+FRONT
+BR1/03
+
+BATCH        RIT BERIKUTNYA       SAMPEL
+1            4 / 20               1 / 10
+
+Truck
+[ search or tap: STM-A40_0012 ]
+
+[ CATAT HAULAGE ]
+```
+
+Truck is a search-then-select field (`SearchableCombobox`, §60), not a
+plain dropdown as the earlier example above still shows: the Front's
+effective-fleet Trucks are offered first as one-tap chips, and searching
+reaches every other known master Truck. Selecting a Truck outside the
+effective fleet is allowed — it is never refused — and the resulting
+transaction is simply classified `WRONG_TRUCK` by the domain
+(BUSINESS_RULES.md §BR-TRUCK-003, and see §38 below). If the route's
+Front context is missing or stale (e.g. it was superseded by a
+continuation, §38, since the operator last had this Pile open), the
+screen shows a stable translated error and a way back to the Pile List
+— it never falls back to guessing another Front.
 
 ---
 
@@ -958,6 +1148,19 @@ dan event dicatat dalam audit.
 
 Exact permission mengikuti final business decision.
 
+**Phase 18 final correction (§6) — confirmed, simpler than the mockup
+above:** there is no separate "⚠ WRONG TRUCK" interstitial screen and no
+"CONTINUE ANYWAY" confirm dialog. The Truck checker (§31) simply lets
+the operator search and select any known master Truck, including one
+outside the Front's effective fleet — the selection itself is the only
+action, and `createHaulageTransaction` classifies it `WRONG_TRUCK`
+transparently on save (`src/domain/fleet/truck-validation.ts`). The
+transaction is recorded exactly like a normal one (BR-TRUCK-003 — Wrong
+Truck Does Not Disappear); it surfaces afterward in the Wrong Truck
+section of the report (§50) and Excel export, not through a blocking
+prompt at entry time. A truck that does not exist in master data at all
+(§39 below) is a different, still-blocking case.
+
 ---
 
 # 39. Unknown Truck
@@ -1020,6 +1223,24 @@ Sample
 Jangan menampilkan ratusan row sekaligus pada layar utama.
 
 Full history tersedia melalui separate view.
+
+**Phase 18 final correction (§7) — TERSAMPEL vs TERCATAT:** the
+confirmed recorded-position history (`RecordedHaulageList`,
+`src/features/piles/recorded-haulage-list.tsx`) labels a position
+**TERSAMPEL** when its transaction's `samplingEvaluation.sampleRequired`
+is true, and **TERCATAT** otherwise — replacing a single generic
+"Recorded" status for every row:
+
+```text
+Batch 1 • Rit 2     TERSAMPEL
+STM-A40_0012
+
+Batch 1 • Rit 1     TERCATAT
+STM-A40_0011
+```
+
+Presentation only — the source is the existing transaction/sample
+result (Phase 4 sampling engine), never a separately editable status.
 
 ---
 
@@ -1197,6 +1418,18 @@ Total Bags       31
 [ VIEW DETAILS ]
 ```
 
+**Phase 18 final correction (§9) — this structured view was removed, not
+just hidden:** this screen and §50's stacked Production Detail view were
+implemented as a standalone `ReportSections` component
+(`src/features/report/report-sections.tsx`) rendered above the WhatsApp
+report preview (§51) — a second, duplicate presentation of the exact
+same `ShiftReport` data. `ReportPage`
+(`src/features/report/ReportPage.tsx`) now renders only §51's WhatsApp
+preview as the single operational report screen; `report-sections.tsx`
+and its test have been deleted rather than left unused. The fixed report
+text format (§19/§20) and the Copy/Share/Excel-export actions are
+unchanged.
+
 ---
 
 # 50. Production Detail
@@ -1216,6 +1449,12 @@ Wrong Truck    1
 ```
 
 Avoid wide desktop-style tables.
+
+**Phase 18 final correction (§9):** this per-Pile production breakdown
+was part of the same removed `ReportSections` view — see §49's
+correction note above. This data still exists inside the WhatsApp report
+text (§51) and the Excel export (§53); it is not lost, only no longer
+duplicated as a separate structured screen.
 
 ---
 
@@ -1245,6 +1484,11 @@ Shift: ...
 ```
 
 Preview harus sama dengan text yang akan dicopy/share.
+
+**Phase 18 final correction (§9):** this is now the ONLY report preview
+rendered on `/report` — see §49/§50's correction notes. Copy/Share
+remain exactly as implemented (`WhatsAppReportPreview`,
+`src/features/report/WhatsAppReportPreview.tsx`).
 
 ---
 
@@ -1365,9 +1609,9 @@ Night Shift
 
 ---
 
-# 57. More Screen
+# 57. More Screen (REMOVED — CONFIRMED)
 
-Contains secondary functions:
+Originally proposed to contain:
 
 ```text
 Fleet Setup
@@ -1379,7 +1623,25 @@ Application Settings
 About / Version
 ```
 
-Critical operational workflow tidak disembunyikan di More.
+Critical operational workflow tidak disembunyikan di More — that
+principle is exactly why More itself was removed once active-shift Fleet
+management became a real, frequently-used workflow (§105): a read-only
+Fleet summary buried in More was already a violation. `MorePage` no
+longer exists. Its content was redistributed:
+
+```text
+Fleet Setup summary  -> replaced by the real /fleet page (§105)
+Language              -> moved into Home, secondary section
+Master Data refresh   -> moved into Home, secondary section
+About / Version        -> moved into Home, secondary section
+Sync Status            -> dropped — duplicated GlobalStatusBar (§16),
+                          which is already visible above every
+                          active-shift page, not just Home
+Manpower / Handover
+History                -> never implemented as a More sub-screen; still
+                          NEEDS_CONFIRMATION if a dedicated view is
+                          wanted later
+```
 
 ---
 
@@ -1409,6 +1671,46 @@ DT-2098
 
 [ + ADD TRUCK ]
 ```
+
+**Phase 18 confirmed implementation** (`src/features/fleet-setup/front-editor.tsx`):
+
+- Front is a closed selector "01".."25", never free text — the combined
+  `Sector/FrontNo` code (`BR1/01`) is always derived, shown read-only,
+  never typed (BR-FLEET-001).
+- **Phase 18 final correction (§1):** a Front Number already used by
+  another Front in this same Fleet Setup session is hidden from the
+  selector — once `BR1/01` exists, "01" no longer appears among "02".."25".
+  The DUPLICATE_FRONT_ID domain guard (BUSINESS_RULES.md §9) still runs
+  as defense-in-depth; it is simply unreachable through this selector
+  now. Editing a Front keeps its own current number visible.
+- The user-facing "Tipe Fleet" concept is removed entirely — whether a
+  Front is BASE or DERIVED is implied by whether Fleet Reference is
+  "Tidak Ada"/"None" or a specific Front, with no separate selector.
+- Destination/Pile is a searchable combobox (`SearchableCombobox`,
+  `src/components/shared/SearchableCombobox.tsx`) over the current
+  shift's Sector piles only — never a giant native select — and its
+  Ore/Stockpile are always derived from the selected master row, never
+  retyped. A search with no match offers "+ Tambah Pile Baru" (New Pile
+  Master, §30 amendment).
+
+**Post-inspection correction §2 — New Pile Master creation from inside
+Fleet Setup:** the same New Pile Master form (§30) can be reached
+directly from this Destination/Pile field's "no results" state, without
+leaving Fleet Setup. This matters because Fleet Setup always runs
+*before* `initializeShiftWorkspace` in the Start Shift flow
+(Registration → Handover → Manpower → Fleet Setup → workspace init once
+→ `/home`) — there is no `ShiftWorkspace` row yet at this point, so this
+path cannot reuse `activateNewMasterPile`/`activateNewPile` (built around
+an already-initialized shift). Instead a setup-time-only operation
+(`createPileAreaForSetup` / `createAppsScriptPileAreaForSetup`,
+`src/application/pile-master/create-pile-area-for-setup.ts`) writes to
+the shared Google master, verifies it (write-then-verify, same as §30),
+and returns a merged/re-validated in-memory `MasterData` — which
+`StartPage`/`FleetSetupPage` keep in state and immediately select as this
+Front's Destination. `initializeShiftWorkspace` is never called early
+just to create a Pile; the final initialized workspace's `MasterData`
+snapshot already contains the newly created pile because it is this same
+updated in-memory snapshot, not the original one.
 
 ---
 
@@ -1696,11 +1998,21 @@ No active piles
 [ ADD PILE ]
 ```
 
+**Phase 18 confirmed copy:** "Belum ada pile aktif pada shift ini." (id) /
+"No active piles for this shift yet." (en).
+
 ### No Pending Samples
 
 ```text
 No pending samples
 ```
+
+**Phase 18 confirmed copy** (explanatory, not just a label — Sample
+Handling has no manual "create sample" screen, so the empty state must
+say why): "Belum ada sample untuk ditangani. Sample akan muncul otomatis
+setelah rit sampling tercatat pada Pile." (id) / "No samples to handle
+yet. Samples appear automatically once a sampling rit is recorded on a
+Pile." (en).
 
 ### No Wrong Trucks
 
@@ -2426,4 +2738,145 @@ Operational simplicity
 Visual preference
 ```
 
+---
+
+# 105. Active-Shift Fleet Page (CONFIRMED)
+
+`/fleet` (`src/features/fleet/FleetPage.tsx` → `FleetActivePage`), the
+extension of §58/§59's pre-shift Fleet Setup into ACTIVE-shift territory
+(BUSINESS_RULES.md §38). Available throughout the active shift via the
+bottom nav (§14).
+
+```text
+FLEET AKTIF
+
+BR1/02
+Destination: ...
+Hauler: ...
+Units: 5
+[Detail]
+
+BR1/07
+Reference: BR1/04
+Destination: L18_S10
+Units: 7
+[Detail]
+
+[ + TAMBAH FRONT ]
+
+RIWAYAT FRONT
+
+BR1/01
+Dilanjutkan oleh BR1/04
+```
+
+Active Fronts list every Front `deriveFrontLineage` (BUSINESS_RULES.md
+§38) classifies as ACTIVE, independent lineages included side by side.
+"[Detail]" expands an inline truck-chip list (`EffectiveFleetPreview`,
+reused from §58) rather than navigating to a separate screen. History
+rows are read-only — no Edit/Remove affordance exists on a HISTORICAL
+Front, mirroring §58's "never revalidate historical state" rule.
+
+**+ Tambah Front** opens a continuation editor
+(`src/features/fleet/front-continuation-editor.tsx`):
+
+```text
+Front Baru
+BR1/07
+
+Referensi
+BR1/04
+
+Destination
+L18_S09   [editable]
+
+Unit Referensi
+A
+B
+D
+E
+
+Perubahan Unit
++ Tambah
+- Keluarkan
+
+Fleet Efektif
+A
+B
+E
+F
+
+[SIMPAN FRONT]
+```
+
+Front No is always auto-derived (MAX + 1, BUSINESS_RULES.md §38) — unlike
+§58's pre-shift editor, there is no manual 01–25 selector here. Fleet
+Reference only offers ACTIVE Fronts (a HISTORICAL Front is never an
+offerable reference target). Destination defaults to the reference
+Front's own Destination but stays editable, reusing the same
+`SearchableCombobox` + New Pile Master fallback as §58/§59 — no separate
+Destination UI was invented. Every validation and fleet-math step
+(inherited trucks, Add/Remove delta, effective fleet preview,
+single-successor enforcement) is delegated to
+`appendFrontContinuation`/`resolveEffectiveFleetAgainstMaster` — this
+screen never computes fleet membership itself (§97 no-spreadsheet-UI
+principle).
+
 UI must adapt to domain requirements, but domain rules must not be embedded into UI code.
+
+---
+
+# 106. New Independent BASE Front During an Active Shift (Phase 18 final correction §2)
+
+§105's continuation editor only ever moves a loading point that already
+exists (Fleet Reference = an ACTIVE Front). A completely new, unrelated
+Front sometimes opens mid-shift instead — a second Hauler starts hauling
+to a different Pile, say — with no predecessor to move from at all. The
+same "+ Tambah Front" editor (`front-continuation-editor.tsx`) now
+supports this as a second mode, selected the same way §58's pre-shift
+`FrontEditor` distinguishes BASE from DERIVED: Fleet Reference = **Tidak
+Ada**.
+
+```text
+Front Baru
+BR1/05
+
+Fleet Reference
+Tidak Ada
+
+Hauler
+STM
+
+Destination/Pile
+L9_27
+
+Truck
++ STM-A40_xxxx
++ STM-A40_xxxx
+
+Fleet Efektif
+2 unit
+
+[SIMPAN FRONT]
+```
+
+This is a compact version of §58's initial Fleet Setup BASE branch, not
+a second fleet model — same `createBaseFleetDefinition`, same
+`TruckAction`/`SelectedTrucks` add-truck controls, same
+`SearchableCombobox` Destination field. Differences from CONTINUATION
+mode:
+
+```text
+Hauler        operator picks it — nothing to inherit
+Destination   required — no reference to default from
+Trucks        added fresh from the chosen Hauler — no inherited list, no Add/Remove delta
+Predecessor   none — no Front becomes HISTORICAL from this save
+```
+
+Front No is still auto-derived by the same MAX+1 rule (BUSINESS_RULES.md
+§38) — a BASE Front opened mid-shift is still the next chronological
+Front for its Sector. "+ Tambah Front" (§105) is never disabled for
+having zero ACTIVE Fronts — BASE mode needs none. Application layer:
+`appendNewBaseFront` (`src/application/fleet-setup/append-new-base-front.ts`).
+The resulting Front appears on `/fleet` and the Pile List (§29) exactly
+like any other ACTIVE Front, with its own independent lineage.

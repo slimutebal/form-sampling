@@ -360,7 +360,7 @@ describe('SampleHandlingPage', () => {
     expect(await screen.findByText('Sample position saved')).toBeInTheDocument()
     expect(store.addCalls).toHaveLength(1)
     // Pending is recalculated: both sampled Rits are now handled.
-    expect(screen.getByText('No Pending Samples')).toBeInTheDocument()
+    expect(screen.getByText('No samples to handle yet. Samples appear automatically once a sampling rit is recorded on a Pile.')).toBeInTheDocument()
   })
 
   it('Q. save failure leaves pending unchanged, shows a translated error, and never a raw message', async () => {
@@ -561,7 +561,7 @@ describe('SampleHandlingPage', () => {
     })
     renderPage({ store: new FakeSampleHandlingStore(ok([]), ok([delivered])) })
 
-    await screen.findByText('No Pending Samples')
+    await screen.findByText('No samples to handle yet. Samples appear automatically once a sampling rit is recorded on a Pile.')
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })

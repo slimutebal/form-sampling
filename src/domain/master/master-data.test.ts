@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { parseOreCode, parseSamplingHouseCode, parseSectorCode } from '../common/codes'
 import { parseEmployeeId, parsePileId, parseTruckId } from '../common/identifiers'
-import { parseHaulerCode, parsePileAreaCode } from './master-codes'
+import { parseCrewCode, parseHaulerCode, parsePileAreaCode } from './master-codes'
 import {
+  createCrewReference,
   createEmployeeReference,
   createHaulerReference,
   createPileAreaReference,
@@ -22,8 +23,10 @@ import {
 } from './sampling-config'
 import {
   createMasterData,
+  findCrew,
   findEmployee,
   findOreSamplingConfig,
+  findPileArea,
   findTruck,
   validateMasterOreSamplingConfigs,
   validateMasterPileAreas,
@@ -357,6 +360,69 @@ describe('createMasterData', () => {
     if (!unknown.ok) return
 
     expect(findEmployee(masterData, unknown.value)).toBeUndefined()
+  })
+
+  it('lookup: known CrewCode returns the correct crew', () => {
+    const crewCode = parseCrewCode('CREW-1')
+    expect(crewCode.ok).toBe(true)
+    if (!crewCode.ok) return
+    const result = createMasterData({
+      employees: [],
+      crews: [createCrewReference(crewCode.value, 'Jane Roe', 'Sampler')],
+      sectors: [],
+      locations: [],
+      samplingHouses: [],
+      pileAreas: [],
+      haulers: [],
+      trucks: [],
+      oreSamplingConfigs: [],
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    const found = findCrew(result.value, crewCode.value)
+    expect(found).toBeDefined()
+    expect(found?.name).toBe('Jane Roe')
+  })
+
+  it('lookup: unknown CrewCode produces explicit not-found (undefined)', () => {
+    const masterData = buildValidMasterData()
+    const unknown = parseCrewCode('UNKNOWN-CREW')
+    expect(unknown.ok).toBe(true)
+    if (!unknown.ok) return
+
+    expect(findCrew(masterData, unknown.value)).toBeUndefined()
+  })
+
+  it('lookup: known PileId returns the correct pile area', () => {
+    const knownPileArea = pileArea('S1', 'STOCK-1', 'PILE-1', 'SAP')
+    const result = createMasterData({
+      employees: [],
+      crews: [],
+      sectors: [createSectorReference(knownPileArea.sectorCode)],
+      locations: [],
+      samplingHouses: [],
+      pileAreas: [knownPileArea],
+      haulers: [],
+      trucks: [],
+      oreSamplingConfigs: [oreConfig('SAP', 2, 20, 2)],
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    const found = findPileArea(result.value, knownPileArea.pileId)
+    expect(found).toBeDefined()
+    expect(found?.stockpileCode).toBe('STOCK-1')
+    expect(found?.oreCode).toBe('SAP')
+  })
+
+  it('lookup: unknown PileId produces explicit not-found (undefined)', () => {
+    const masterData = buildValidMasterData()
+    const unknown = parsePileId('NO-SUCH-PILE')
+    expect(unknown.ok).toBe(true)
+    if (!unknown.ok) return
+
+    expect(findPileArea(masterData, unknown.value)).toBeUndefined()
   })
 })
 

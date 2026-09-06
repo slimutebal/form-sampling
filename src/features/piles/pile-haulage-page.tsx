@@ -1,27 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { HaulageTransactionStore } from '@/application/haulage-operation/haulage-transaction-store'
+import { deriveCurrentBatchSampleCount } from '@/application/haulage-operation/current-batch-sample-count'
 import { deriveHaulageProgress } from '@/application/haulage-operation/derive-haulage-progress'
 import { previewNextSampling } from '@/application/haulage-operation/next-sampling-preview'
-import {
-  isFrontTruckSelectionCurrent,
-  operationalFleetOptions,
-} from '@/application/haulage-operation/operational-fleet-options'
+import type { OperationalFleetOption } from '@/application/haulage-operation/operational-fleet-options'
 import { recordHaulage } from '@/application/haulage-operation/create-haulage-record'
 import {
   generateHaulageTransactionId as defaultGenerateHaulageTransactionId,
   type HaulageTransactionIdGenerator,
 } from '@/application/haulage-operation/haulage-id-generator'
+import { confirmFreshPileStartPosition } from '@/application/pile-workspace/confirm-fresh-pile-start-position'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { BatchPosition } from '@/domain/batch/batch-position'
+import type { DomainError, Result } from '@/domain/common/result'
+import { findOreSamplingConfig, type MasterData } from '@/domain/master/master-data'
 import type { FleetSetup } from '@/domain/fleet/fleet-setup'
 import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
-import type { MasterData } from '@/domain/master/master-data'
+import type { FreshPileStartPosition } from '@/domain/pile/fresh-pile-start-position'
 import type { Pile } from '@/domain/pile/pile'
 import type { Shift } from '@/domain/shift/shift'
 import { loadErrorTranslationKey, pileHaulageErrorTranslationKey } from '@/features/piles/error-messages'
+import { FreshPileStartPositionForm } from '@/features/piles/fresh-pile-start-position-form'
 import { HaulageEntryForm } from '@/features/piles/haulage-entry-form'
 import { PileOperationalHeader } from '@/features/piles/pile-operational-header'
 import { RecordedHaulageList } from '@/features/piles/recorded-haulage-list'
@@ -35,6 +37,14 @@ export interface PileHaulagePageProps {
   masterData: MasterData
   fleetSetup: FleetSetup
   /**
+   * The single Front/Fleet this checker session operates on — resolved
+   * and validated (exists, ACTIVE, destination matches `pile`) by the
+   * caller (`PileDetailPage`, via `operationalFleetOptionForFront`)
+   * before this component ever renders (Phase 18 §5). There is no Front
+   * dropdown here — the operator already chose it on the Pile list.
+   */
+  frontOption: OperationalFleetOption
+  /**
    * The authoritative, caller-supplied haulage plan for this Pile
    * (see `@/application/haulage-operation/haulage-plan`). Order is
    * ground truth — never derived from stored/loaded transaction order.
@@ -44,6 +54,20 @@ export interface PileHaulagePageProps {
   store: HaulageTransactionStore
   /** Injectable so tests can supply a fixed id instead of a random UUID. */
   generateTransactionId?: HaulageTransactionIdGenerator
+  /**
+   * True when this Pile has no CONTINUE carry-over from handover
+   * (post-inspection correction §6) — eligible for a confirmed fresh-pile
+   * starting position. A handover/continuation Pile is never eligible,
+   * so it never shows the Initial Position form.
+   */
+  freshPileEligible?: boolean
+  /**
+   * Persists a confirmed fresh-pile starting position and refreshes the
+   * workspace so `pile`/`expectedPositions` reflect it on the next
+   * render. This component only ever calls it after its own
+   * `confirmFreshPileStartPosition` lock/range check passes.
+   */
+  onConfirmFreshPileStartPosition?: (startPosition: FreshPileStartPosition) => Promise<Result<void, DomainError>>
 }
 
 type LoadPhase =
@@ -65,19 +89,24 @@ export function PileHaulagePage({
   pile,
   masterData,
   fleetSetup,
+  frontOption,
   expectedPositions,
   store,
   generateTransactionId = defaultGenerateHaulageTransactionId,
+  freshPileEligible = false,
+  onConfirmFreshPileStartPosition,
 }: PileHaulagePageProps) {
   const { t } = useTranslation()
 
   const [phase, setPhase] = useState<LoadPhase>({ kind: 'loading' })
   const [reloadToken, setReloadToken] = useState(0)
-  const [selectedFleetId, setSelectedFleetId] = useState('')
   const [selectedTruckId, setSelectedTruckId] = useState('')
   const [saving, setSaving] = useState(false)
   const [recordErrorCode, setRecordErrorCode] = useState<string>()
   const [successMessage, setSuccessMessage] = useState<string>()
+  const [editingStartPosition, setEditingStartPosition] = useState(false)
+  const [confirmingStartPosition, setConfirmingStartPosition] = useState(false)
+  const [startPositionErrorCode, setStartPositionErrorCode] = useState<string>()
   const isSubmittingRef = useRef(false)
 
   useEffect(() => {
@@ -104,10 +133,7 @@ export function PileHaulagePage({
     setReloadToken((token) => token + 1)
   }, [])
 
-  const frontOptionsResult = useMemo(
-    () => operationalFleetOptions(masterData, fleetSetup),
-    [masterData, fleetSetup],
-  )
+  const allTruckIds = useMemo(() => masterData.trucks.map((truck) => truck.id as string), [masterData])
 
   const progressResult = useMemo(() => {
     if (phase.kind !== 'loaded') {
@@ -130,10 +156,44 @@ export function PileHaulagePage({
     return previewNextSampling(pile, masterData, nextPosition)
   }, [nextPosition, pile, masterData])
 
-  function handleFrontChange(fleetId: string) {
-    setSelectedFleetId(fleetId)
-    setSelectedTruckId('')
-    setRecordErrorCode(undefined)
+  const sampleCount = useMemo(() => {
+    if (!nextPosition || phase.kind !== 'loaded') {
+      return undefined
+    }
+    const config = findOreSamplingConfig(masterData, pile.oreCode)
+    if (!config) {
+      return undefined
+    }
+    return deriveCurrentBatchSampleCount(phase.transactions, shift.id, pile.id, nextPosition.batchNumber, config)
+  }, [nextPosition, phase, masterData, pile, shift.id])
+
+  const existingTransactionCount = phase.kind === 'loaded' ? phase.transactions.length : 0
+  // Once haulage exists for this Pile, the starting position is locked
+  // (post-inspection correction §6) — no edit affordance survives that,
+  // regardless of `editingStartPosition`'s stale local state.
+  const canEditStartPosition = freshPileEligible && phase.kind === 'loaded' && existingTransactionCount === 0
+  const needsInitialStartPosition = canEditStartPosition && !pile.freshPileStartPosition
+  const startPositionFormVisible = needsInitialStartPosition || (canEditStartPosition && editingStartPosition)
+
+  async function handleConfirmStartPosition(batchNumber: number, ritNumber: number) {
+    if (!onConfirmFreshPileStartPosition) return
+    const guarded = confirmFreshPileStartPosition({ batchNumber, ritNumber, existingTransactionCount })
+    if (!guarded.ok) {
+      setStartPositionErrorCode(guarded.error.code)
+      return
+    }
+    setConfirmingStartPosition(true)
+    setStartPositionErrorCode(undefined)
+    try {
+      const result = await onConfirmFreshPileStartPosition(guarded.value)
+      if (!result.ok) {
+        setStartPositionErrorCode(result.error.code)
+        return
+      }
+      setEditingStartPosition(false)
+    } finally {
+      setConfirmingStartPosition(false)
+    }
   }
 
   function handleTruckChange(truckId: string) {
@@ -145,20 +205,7 @@ export function PileHaulagePage({
     if (isSubmittingRef.current) {
       return
     }
-    if (!nextPosition || !selectedFleetId || !selectedTruckId) {
-      return
-    }
-
-    // Defensive re-check, independent of HaulageEntryForm's own `disabled`
-    // state: the selected Fleet/Truck must still be current against the
-    // latest resolved options. A FleetSetup change (e.g. a truck removed
-    // from the fleet) can leave stale ids in local state without the
-    // operator having touched the selects again. This must run before
-    // `generateTransactionId()` — no id is generated, no domain call is
-    // made, and nothing is written when the selection is stale.
-    const currentFrontOptions = frontOptionsResult.ok ? frontOptionsResult.value : []
-    if (!isFrontTruckSelectionCurrent(currentFrontOptions, selectedFleetId, selectedTruckId)) {
-      setRecordErrorCode('HAULAGE_OPERATIONAL_CONTEXT_INVALID')
+    if (!nextPosition || !selectedTruckId) {
       return
     }
 
@@ -173,7 +220,7 @@ export function PileHaulagePage({
         shift,
         pile,
         nextPosition,
-        selectedFleetId,
+        selectedFleetId: frontOption.fleetId as string,
         selectedTruckId,
         masterData,
         fleetSetup,
@@ -232,9 +279,8 @@ export function PileHaulagePage({
     )
   }
 
-  const planErrorCode = !frontOptionsResult.ok
-    ? frontOptionsResult.error.code
-    : progressResult && !progressResult.ok
+  const planErrorCode =
+    progressResult && !progressResult.ok
       ? progressResult.error.code
       : samplingPreviewResult && !samplingPreviewResult.ok
         ? samplingPreviewResult.error.code
@@ -246,7 +292,18 @@ export function PileHaulagePage({
     <div>
       <PageHeader title={t('pileHaulage.title')} />
       <div className="flex flex-col gap-4 px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-        {planErrorCode ? (
+        {startPositionFormVisible ? (
+          <FreshPileStartPositionForm
+            initialBatchNumber={pile.freshPileStartPosition ? Number(pile.freshPileStartPosition.batchNumber) : 1}
+            initialRitNumber={pile.freshPileStartPosition ? Number(pile.freshPileStartPosition.ritNumber) : 1}
+            onConfirm={(batchNumber, ritNumber) => void handleConfirmStartPosition(batchNumber, ritNumber)}
+            onCancel={pile.freshPileStartPosition ? () => setEditingStartPosition(false) : undefined}
+            saving={confirmingStartPosition}
+            errorKey={startPositionErrorCode ? pileHaulageErrorTranslationKey(startPositionErrorCode) : undefined}
+          />
+        ) : null}
+
+        {!startPositionFormVisible && planErrorCode ? (
           <Card>
             <CardContent role="alert">
               <p>{t(pileHaulageErrorTranslationKey(planErrorCode))}</p>
@@ -254,13 +311,15 @@ export function PileHaulagePage({
           </Card>
         ) : null}
 
-        {!planErrorCode && progress?.nextPosition && samplingPreviewResult?.ok ? (
+        {!startPositionFormVisible && !planErrorCode && progress?.nextPosition && samplingPreviewResult?.ok && sampleCount ? (
           <>
             <PileOperationalHeader
               pile={pile}
+              frontId={frontOption.frontId}
               nextPosition={progress.nextPosition}
               batchSize={samplingPreviewResult.value.batchSize}
               samplingEvaluation={samplingPreviewResult.value.samplingEvaluation}
+              sampleCount={sampleCount}
             />
 
             {successMessage ? (
@@ -276,19 +335,24 @@ export function PileHaulagePage({
             ) : null}
 
             <HaulageEntryForm
-              frontOptions={frontOptionsResult.ok ? frontOptionsResult.value : []}
-              selectedFleetId={selectedFleetId}
+              effectiveTruckIds={frontOption.effectiveTruckIds}
+              allTruckIds={allTruckIds}
               selectedTruckId={selectedTruckId}
-              onFrontChange={handleFrontChange}
               onTruckChange={handleTruckChange}
               onSubmit={() => void handleRecord()}
               saving={saving}
               isSample={samplingPreviewResult.value.samplingEvaluation.sampleRequired}
             />
+
+            {canEditStartPosition ? (
+              <Button type="button" variant="secondary" onClick={() => setEditingStartPosition(true)}>
+                {t('pileHaulage.initialPosition.change')}
+              </Button>
+            ) : null}
           </>
         ) : null}
 
-        {!planErrorCode && progress && !progress.nextPosition ? (
+        {!startPositionFormVisible && !planErrorCode && progress && !progress.nextPosition ? (
           <Card>
             <CardContent>
               <p>{t('pileHaulage.planExhausted')}</p>

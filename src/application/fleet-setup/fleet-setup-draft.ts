@@ -2,7 +2,10 @@ export type FleetSetupDraftKind = 'BASE' | 'DERIVED'
 
 export interface FleetSetupDraftEntry {
   readonly fleetId: string
-  readonly frontId: string
+  /** Raw form value "01".."25" (Phase 18 §5) — the operator never types a combined FrontId directly. */
+  readonly frontNumber: string
+  /** Blank Pile_ID means "no destination configured" (Phase 18 §5). */
+  readonly destinationPileId: string
   readonly haulerCode: string
   readonly kind: FleetSetupDraftKind
   readonly referenceFleetId: string
@@ -14,7 +17,8 @@ export interface FleetSetupDraftEntry {
 export function createEmptyFleetSetupDraftEntry(fleetId: string): FleetSetupDraftEntry {
   return {
     fleetId,
-    frontId: '',
+    frontNumber: '',
+    destinationPileId: '',
     haulerCode: '',
     kind: 'BASE',
     referenceFleetId: '',
@@ -31,4 +35,9 @@ export function cloneFleetSetupDraftEntry(entry: FleetSetupDraftEntry): FleetSet
     addedTruckIds: [...entry.addedTruckIds],
     removedTruckIds: [...entry.removedTruckIds],
   }
+}
+
+/** Display-only FrontId, e.g. `formatFrontId('BR1', '01') === 'BR1/01'` — mirrors `createFrontId`'s format without re-validating (used only where an already-valid `frontNumber` is being rendered, never submitted). */
+export function formatFrontId(sectorCode: string, frontNumber: string): string {
+  return `${sectorCode}/${frontNumber}`
 }

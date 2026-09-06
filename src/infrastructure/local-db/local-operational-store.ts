@@ -11,7 +11,10 @@ import type { FleetSetup } from '../../domain/fleet/fleet-setup'
 import type { PendingBatchCarryOver } from '../../domain/handover/carry-over-pending-batch'
 import type { HandoverPendingSample } from '../../domain/handover/carry-over-pending-sample'
 import type { HaulageTransaction } from '../../domain/haulage/haulage-transaction'
-import type { MasterData } from '../../domain/master/master-data'
+import type { ManpowerAssignment } from '../../domain/manpower/manpower-assignment'
+import { createMasterData, type MasterData } from '../../domain/master/master-data'
+import type { PileAreaReference } from '../../domain/master/references'
+import type { FreshPileStartPosition } from '../../domain/pile/fresh-pile-start-position'
 import type { Pile } from '../../domain/pile/pile'
 import { validateNoSampleOverlap } from '../../domain/sample-handling/sample-overlap'
 import type { SamplePosition } from '../../domain/sample-handling/sample-position'
@@ -119,6 +122,8 @@ export interface LocalShiftWorkspace {
   readonly pendingBatches: readonly PendingBatchCarryOver[]
   /** Carry-over pending samples from a handover import (Phase 12) — `[]` when none was imported. */
   readonly pendingSamples: readonly HandoverPendingSample[]
+  /** Manpower assigned to this shift (Phase 18 §4) — `[]` for a row written before this field existed. Always a concrete array, never `undefined`. */
+  readonly manpower: readonly ManpowerAssignment[]
 }
 
 /** A cached master-data snapshot as returned to application code (Phase 16 §6/§7), distinct from any `LocalShiftWorkspace.masterData`. */
@@ -135,6 +140,8 @@ export interface InitializeShiftWorkspaceParams {
   /** Optional so every existing Phase 7-11 call site (no handover carry-over) keeps compiling unchanged — defaults to `[]`. */
   readonly pendingBatches?: readonly PendingBatchCarryOver[]
   readonly pendingSamples?: readonly HandoverPendingSample[]
+  /** Manpower assigned to this shift (Phase 18 §4). Optional so every existing pre-Phase-18 call site keeps compiling unchanged — defaults to `[]`. */
+  readonly manpower?: readonly ManpowerAssignment[]
   /**
    * When this Shift is being created from a confirmed handover import
    * (Phase 12 critical fix), pass the import-history record to commit
@@ -196,6 +203,7 @@ function toWorkspace(record: ShiftWorkspaceRecord): LocalShiftWorkspace {
     // `?? []`: an existing v1/v2 row genuinely has no such fields on disk.
     pendingBatches: record.pendingBatches ?? [],
     pendingSamples: record.pendingSamples ?? [],
+    manpower: record.manpower ?? [],
   }
 }
 
@@ -294,6 +302,7 @@ export class LocalOperationalStore {
     const pendingSamplesSnapshot: readonly HandoverPendingSample[] = structuredClone(
       params.pendingSamples ?? [],
     )
+    const manpowerSnapshot: readonly ManpowerAssignment[] = structuredClone(params.manpower ?? [])
     const handoverImportSnapshot: ImportHistoryRecord | undefined = params.handoverImport
       ? structuredClone(params.handoverImport)
       : undefined
@@ -399,6 +408,7 @@ export class LocalOperationalStore {
             fleetSetup: fleetSetupSnapshot,
             pendingBatches: pendingBatchesSnapshot,
             pendingSamples: pendingSamplesSnapshot,
+            manpower: manpowerSnapshot,
           }
           await this.db.shiftWorkspaces.add(record)
           await this.db.metadata.put({ key: CURRENT_SHIFT_METADATA_KEY, value: shiftId })
@@ -456,6 +466,226 @@ export class LocalOperationalStore {
     try {
       const record = await this.db.shiftWorkspaces.get(shiftId)
       return ok(record ? toWorkspace(record) : undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Adds one Pile to an already-initialized Shift workspace's `piles`
+   * list (Phase 18 "Add Pile" wiring correction). A fresh workspace
+   * legitimately starts with only its handover carry-over piles (or none
+   * at all) — `masterData.pileAreas` is a selection catalog, not an
+   * active-pile list — so this is the one write path that activates a
+   * new production Pile once the operator explicitly picks it. Create-
+   * only: a PileId already present in the workspace fails with
+   * `DUPLICATE_PILE_ID_IN_SHIFT_WORKSPACE` (the same code
+   * `initializeShiftWorkspace` uses for the same kind of collision)
+   * rather than being silently ignored or overwriting the existing
+   * entry. `SHIFT_WORKSPACE_NOT_FOUND` if no workspace exists for
+   * `shiftId`. No schema change: `piles` is an existing field on the
+   * stored record, and every other field is carried through unchanged.
+   */
+  async addPileToWorkspace(shiftId: ShiftId, pile: Pile): Promise<StoreResult<void>> {
+    // Snapshot before the first `await`, mirroring every other write
+    // method on this store (Phase 7 §29).
+    const pileSnapshot: Pile = structuredClone(pile)
+
+    try {
+      await this.db.transaction('rw', this.db.shiftWorkspaces, async () => {
+        const existing = await this.db.shiftWorkspaces.get(shiftId)
+        if (!existing) {
+          raiseExpectedError(
+            'SHIFT_WORKSPACE_NOT_FOUND',
+            `No shift workspace exists for ShiftId ${shiftId}`,
+          )
+        }
+
+        if (existing.piles.some((candidate) => candidate.id === pileSnapshot.id)) {
+          raiseExpectedError(
+            'DUPLICATE_PILE_ID_IN_SHIFT_WORKSPACE',
+            `Duplicate PileId in shift workspace: ${pileSnapshot.id}`,
+          )
+        }
+
+        await this.db.shiftWorkspaces.put({
+          ...existing,
+          piles: [...existing.piles, pileSnapshot],
+        })
+      })
+      return ok(undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Sets or replaces the confirmed fresh-pile starting Batch/Rit
+   * (`Pile.freshPileStartPosition`, post-inspection correction §6) on one
+   * Pile within an already-initialized Shift workspace. `PILE_NOT_FOUND_
+   * IN_SHIFT_WORKSPACE` if the Pile is not in this workspace's `piles`
+   * list; `SHIFT_WORKSPACE_NOT_FOUND` if no workspace exists for
+   * `shiftId`. Whether this is allowed at all (i.e. no haulage has been
+   * recorded yet for this Pile) is an application-layer decision
+   * (`@/application/pile-workspace/confirm-fresh-pile-start-position`) —
+   * this store method only ever performs the write once told to. No
+   * schema change: `freshPileStartPosition` is a plain optional field on
+   * the existing `Pile` shape already stored inside `piles`.
+   */
+  async confirmFreshPileStartPosition(
+    shiftId: ShiftId,
+    pileId: PileId,
+    startPosition: FreshPileStartPosition,
+  ): Promise<StoreResult<void>> {
+    // Snapshot before the first `await`, mirroring every other write
+    // method on this store (Phase 7 §29).
+    const startPositionSnapshot: FreshPileStartPosition = structuredClone(startPosition)
+
+    try {
+      await this.db.transaction('rw', this.db.shiftWorkspaces, async () => {
+        const existing = await this.db.shiftWorkspaces.get(shiftId)
+        if (!existing) {
+          raiseExpectedError(
+            'SHIFT_WORKSPACE_NOT_FOUND',
+            `No shift workspace exists for ShiftId ${shiftId}`,
+          )
+        }
+
+        const pileIndex = existing.piles.findIndex((candidate) => candidate.id === pileId)
+        if (pileIndex < 0) {
+          raiseExpectedError(
+            'PILE_NOT_FOUND_IN_SHIFT_WORKSPACE',
+            `No Pile ${pileId} exists in shift workspace ${shiftId}`,
+          )
+        }
+
+        const updatedPiles = existing.piles.map((candidate, index) =>
+          index === pileIndex ? { ...candidate, freshPileStartPosition: startPositionSnapshot } : candidate,
+        )
+
+        await this.db.shiftWorkspaces.put({
+          ...existing,
+          piles: updatedPiles,
+        })
+      })
+      return ok(undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Appends one newly created master Pile_Area to an already-initialized
+   * Shift workspace's OWN `masterData.pileAreas` snapshot, and activates
+   * its Pile in the same transaction (Phase 18 §6). This is the one other
+   * deliberate exception to the normally-frozen `masterData` snapshot
+   * (mirrors `addPileToWorkspace`'s own exception for `piles`) — needed
+   * because a brand-new Pile_Area does not exist in any snapshot yet, and
+   * this shift's own Report (Haulage Detail's Stockpile column) reads
+   * `workspace.masterData.pileAreas`. The caller is responsible for
+   * writing the same row to the shared Google master and to the global
+   * `masterDataCache` (via `replaceMasterDataCache`) BEFORE calling this —
+   * see `@/application/pile-master/activate-new-pile`. `masterData` is
+   * rebuilt through `createMasterData` (re-validated, re-branded) rather
+   * than hand-cast, so a genuinely inconsistent merge is rejected instead
+   * of silently accepted. Create-only: a PileId already present in the
+   * workspace fails with `DUPLICATE_PILE_ID_IN_SHIFT_WORKSPACE` (the same
+   * code `addPileToWorkspace` uses).
+   */
+  async activateNewMasterPile(
+    shiftId: ShiftId,
+    pile: Pile,
+    pileArea: PileAreaReference,
+  ): Promise<StoreResult<void>> {
+    // Snapshot before the first `await`, mirroring every other write
+    // method on this store (Phase 7 §29).
+    const pileSnapshot: Pile = structuredClone(pile)
+    const pileAreaSnapshot: PileAreaReference = structuredClone(pileArea)
+
+    try {
+      await this.db.transaction('rw', this.db.shiftWorkspaces, async () => {
+        const existing = await this.db.shiftWorkspaces.get(shiftId)
+        if (!existing) {
+          raiseExpectedError(
+            'SHIFT_WORKSPACE_NOT_FOUND',
+            `No shift workspace exists for ShiftId ${shiftId}`,
+          )
+        }
+
+        if (existing.piles.some((candidate) => candidate.id === pileSnapshot.id)) {
+          raiseExpectedError(
+            'DUPLICATE_PILE_ID_IN_SHIFT_WORKSPACE',
+            `Duplicate PileId in shift workspace: ${pileSnapshot.id}`,
+          )
+        }
+
+        const mergedMasterData = createMasterData({
+          ...existing.masterData,
+          pileAreas: [...existing.masterData.pileAreas, pileAreaSnapshot],
+        })
+        if (!mergedMasterData.ok) {
+          raiseExpectedError(mergedMasterData.error.code, mergedMasterData.error.message)
+        }
+
+        await this.db.shiftWorkspaces.put({
+          ...existing,
+          piles: [...existing.piles, pileSnapshot],
+          masterData: mergedMasterData.value,
+        })
+      })
+      return ok(undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Persists a Front continuation (active-shift Fleet management): an
+   * already fully-validated `fleetSetup` snapshot (built by
+   * `@/application/fleet-setup/append-front-continuation`, which already
+   * unions the existing Fronts/Fleets with the new continuation Front and
+   * re-validates the whole graph) replaces the stored one, and — only
+   * when the new Front's destination Pile is not yet part of this
+   * workspace's `piles` list — `activatePile` is appended to it in the
+   * same atomic write. Never touches `haulageTransactions`: existing
+   * transactions keep whatever `frontId`/`fleetId` they were recorded
+   * with, unaffected by a later continuation (historical transactions are
+   * never revalidated). No schema change: `fleetSetup`/`piles` are
+   * existing fields on the stored record.
+   */
+  async appendFrontContinuation(
+    shiftId: ShiftId,
+    params: { readonly fleetSetup: FleetSetup; readonly activatePile?: Pile },
+  ): Promise<StoreResult<void>> {
+    // Snapshot before the first `await`, mirroring every other write
+    // method on this store (Phase 7 §29).
+    const fleetSetupSnapshot: FleetSetup = structuredClone(params.fleetSetup)
+    const activatePileSnapshot: Pile | undefined = params.activatePile
+      ? structuredClone(params.activatePile)
+      : undefined
+
+    try {
+      await this.db.transaction('rw', this.db.shiftWorkspaces, async () => {
+        const existing = await this.db.shiftWorkspaces.get(shiftId)
+        if (!existing) {
+          raiseExpectedError(
+            'SHIFT_WORKSPACE_NOT_FOUND',
+            `No shift workspace exists for ShiftId ${shiftId}`,
+          )
+        }
+
+        const piles =
+          activatePileSnapshot && !existing.piles.some((candidate) => candidate.id === activatePileSnapshot.id)
+            ? [...existing.piles, activatePileSnapshot]
+            : existing.piles
+
+        await this.db.shiftWorkspaces.put({
+          ...existing,
+          fleetSetup: fleetSetupSnapshot,
+          piles,
+        })
+      })
+      return ok(undefined)
     } catch (caught) {
       return err(mapCaughtError(caught))
     }
@@ -791,6 +1021,21 @@ export class LocalOperationalStore {
       const records = await this.db.shiftSummarySync
         .filter((record) => record.status === 'PENDING' || record.status === 'FAILED')
         .toArray()
+      return ok(records)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Lists every outbox row regardless of status (Phase 18 §10/§11) — for
+   * UI-facing sync-state presentation (which must also recognize SYNCED/
+   * SYNCING), distinct from `listPendingShiftSummarySyncRecords`' PENDING/
+   * FAILED retry-eligible subset.
+   */
+  async listShiftSummarySyncRecords(): Promise<StoreResult<readonly ShiftSummarySyncRecord[]>> {
+    try {
+      const records = await this.db.shiftSummarySync.toArray()
       return ok(records)
     } catch (caught) {
       return err(mapCaughtError(caught))

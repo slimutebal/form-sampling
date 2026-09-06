@@ -2,18 +2,7 @@ import type { ShiftSummary } from '@/application/google/shift-summary'
 import type { ShiftId } from '@/domain/common/identifiers'
 import type { DomainError, Result } from '@/domain/common/result'
 import type { MasterData } from '@/domain/master/master-data'
-
-/**
- * Injectable Google access-token acquisition boundary (ROADMAP Phase 16
- * §2/§5). The exact authentication mechanism (OAuth flow, GIS token
- * client, a future backend) is deliberately NOT decided here — every use
- * case in this module only ever depends on this port, never on how a
- * token was obtained. `GOOGLE_AUTH_UNAVAILABLE` is the stable failure
- * code for "no usable token could be produced".
- */
-export interface GoogleAccessTokenProvider {
-  getAccessToken(): Promise<Result<string, DomainError>>
-}
+import type { PileAreaReference } from '@/domain/master/references'
 
 /** One Google Sheets values-range payload, as returned by the values API or supplied to it. */
 export interface GoogleSheetsValueRange {
@@ -77,6 +66,19 @@ export interface MasterDataCacheStore {
  */
 export interface ShiftSummaryRemoteWriter {
   upsertShiftSummary(summary: ShiftSummary): Promise<Result<void, DomainError>>
+}
+
+/**
+ * Writes one newly created Pile_Areas row to the shared Google master
+ * (Phase 18 §6). Implemented in `src/integrations/google/
+ * apps-script-pile-area-writer.ts` — the first concrete implementation of
+ * the POST write shape `docs/GOOGLE_APPS_SCRIPT_CONTRACT.md` reserves.
+ * Because this mutates the shared master, the caller (not this port) is
+ * responsible for the online-only gate — this method never checks
+ * connectivity itself.
+ */
+export interface PileAreaRemoteWriter {
+  addPileArea(pileArea: PileAreaReference): Promise<Result<void, DomainError>>
 }
 
 export type ShiftSummarySyncStatus = 'PENDING' | 'SYNCING' | 'SYNCED' | 'FAILED'

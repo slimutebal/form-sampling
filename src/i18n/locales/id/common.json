@@ -4,10 +4,10 @@
   },
   "navigation": {
     "home": "Beranda",
+    "fleet": "Fleet",
     "piles": "Pile",
-    "samples": "Sampel",
-    "report": "Laporan",
-    "more": "Lainnya"
+    "samples": "Penanganan Sampel",
+    "report": "Laporan"
   },
   "welcome": {
     "title": "Form Sampling",
@@ -20,10 +20,10 @@
   "screens": {
     "start": "Mulai Shift",
     "home": "Beranda",
+    "fleet": "Fleet Aktif",
     "piles": "Pile",
-    "samples": "Sampel",
-    "report": "Laporan",
-    "more": "Lainnya"
+    "samples": "Penanganan Sampel",
+    "report": "Laporan"
   },
   "settings": {
     "language": "Bahasa",
@@ -37,7 +37,14 @@
       "shiftCode": "Kode Shift",
       "sectorCode": "Sektor",
       "samplingHouseCode": "Sampling House",
-      "status": "Status"
+      "status": "Status",
+      "selectShiftCode": "Pilih Shift",
+      "selectSectorCode": "Pilih Sektor",
+      "selectSamplingHouseCode": "Pilih Sampling House"
+    },
+    "shiftCodeOptions": {
+      "DS": "DS — Shift Siang",
+      "NS": "NS — Shift Malam"
     },
     "status": {
       "NEW": "Baru",
@@ -61,7 +68,18 @@
     "review": {
       "title": "Registrasi Siap",
       "message": "Registrasi siap untuk tahap setup.",
-      "edit": "Ubah Registrasi"
+      "edit": "Ubah Registrasi",
+      "continue": "Lanjutkan"
+    },
+    "masterData": {
+      "loading": "Memuat master data…",
+      "unavailable": "Master data belum tersedia.",
+      "offlineFirstUse": "Internet diperlukan untuk mengunduh master data pada penggunaan pertama.",
+      "remoteFailed": "Master data belum tersedia. Periksa koneksi lalu coba lagi.",
+      "retryRemote": "COBA LAGI",
+      "errors": {
+        "loadFailed": "Gagal memuat master data lokal."
+      }
     },
     "errors": {
       "required": "Bagian ini wajib diisi.",
@@ -70,7 +88,127 @@
       "corruptedState": "Data shift lokal tidak konsisten.",
       "generic": "Terjadi kesalahan. Silakan coba lagi.",
       "registrationFailed": "Registrasi tidak dapat diselesaikan. Silakan coba lagi.",
+      "shiftCodeNotAllowed": "Pilih Shift yang valid.",
+      "sectorNotFound": "Pilih Sektor dari daftar.",
+      "samplingHouseNotFound": "Pilih Sampling House dari daftar.",
       "retry": "Coba Lagi"
+    }
+  },
+  "setup": {
+    "initializing": {
+      "title": "Memulai Shift",
+      "message": "Memulai workspace shift…"
+    },
+    "errors": {
+      "previousShiftUnavailable": "Tidak dapat menentukan shift sebelumnya yang diharapkan. Mulai tanpa file shift sebelumnya.",
+      "initializeFailed": "Gagal memulai workspace shift ini. Silakan coba lagi."
+    }
+  },
+  "manpower": {
+    "title": "Manpower Shift",
+    "search": "Cari NIK / Nama",
+    "searchPlaceholder": "Cari NIK / Nama…",
+    "noResults": "Tidak ada personel yang cocok.",
+    "add": "+ Tambah",
+    "selectedPersonnel": "Personel Terpilih",
+    "noPersonnel": "Belum ada personel yang ditambahkan.",
+    "jobDesk": "Job Desk",
+    "picLabel": "Penanggung Jawab",
+    "remove": "Hapus",
+    "removeNamed": "Hapus {{name}}",
+    "continue": "Lanjutkan",
+    "errors": {
+      "duplicatePerson": "Personel ini sudah ditambahkan.",
+      "jobDeskRequired": "Job Desk wajib diisi.",
+      "personNotFound": "Personel ini tidak ditemukan pada master Employee/Crew.",
+      "generic": "Terjadi kesalahan pada setup manpower."
+    }
+  },
+  "activeShell": {
+    "loading": "Memuat workspace…",
+    "errors": {
+      "loadFailed": "Gagal memuat workspace shift aktif."
+    }
+  },
+  "home": {
+    "manpowerCount": "Manpower",
+    "picCount": "PIC",
+    "activePiles": "Pile Aktif",
+    "haulageCount": "Haulage",
+    "pendingSamples": "Sampel Tertunda",
+    "wrongTruckCount": "Wrong Truck",
+    "quickActions": {
+      "inputDt": "Input DT / Buka Pile",
+      "sampleHandling": "Penanganan Sampel",
+      "report": "Laporan"
+    },
+    "errors": {
+      "loadFailed": "Gagal memuat aktivitas shift."
+    }
+  },
+  "piles": {
+    "noPiles": "Belum ada pile aktif pada shift ini.",
+    "addPile": "+ Tambah Pile",
+    "searchPileToAdd": "Cari Pile_ID / Stockpile_Code",
+    "searchPileToAddPlaceholder": "Cari Pile_ID / Stockpile_Code…",
+    "noPileCandidates": "Pile tidak ditemukan.",
+    "noActiveFront": "Tidak ada Front aktif untuk Pile ini.",
+    "backToPiles": "Kembali ke Daftar Pile",
+    "errors": {
+      "pileNotFound": "Pile ini bukan bagian dari workspace shift aktif.",
+      "duplicatePile": "Pile ini sudah aktif pada shift ini.",
+      "workspaceNotFound": "Workspace shift aktif tidak ditemukan.",
+      "addPileFailed": "Gagal menambahkan Pile ini. Silakan coba lagi.",
+      "frontContextInvalid": "Front untuk Pile ini sudah tidak valid. Pilih ulang Front dari daftar Pile."
+    }
+  },
+  "pileMaster": {
+    "addNewPile": "Tambah Pile Baru",
+    "addNewPileNamed": "+ Tambah Pile Baru \"{{pileId}}\"",
+    "pileId": "Pile ID",
+    "stockpile": "Stockpile",
+    "ore": "Ore",
+    "add": "Tambah",
+    "adding": "Menambahkan…",
+    "errors": {
+      "pileIdRequired": "Pile ID wajib diisi.",
+      "stockpileRequired": "Stockpile wajib diisi.",
+      "oreRequired": "Pilih Ore.",
+      "duplicatePileId": "Pile ID ini sudah terdaftar di master data.",
+      "unknownOre": "Ore ini tidak tersedia di master data.",
+      "requiresConnection": "Membuat Pile baru memerlukan koneksi internet.",
+      "patternNotSupported": "Pola penamaan Pile ID ini belum didukung untuk Pile baru. Anda tetap dapat memilih Pile master yang sudah ada dengan ID persis.",
+      "sectorMismatch": "Pile ID ini termasuk Sector yang berbeda dari shift saat ini.",
+      "writeUnverified": "Tidak dapat memastikan Pile baru tersimpan. Periksa koneksi Anda dan coba lagi.",
+      "generic": "Gagal membuat Pile baru. Silakan coba lagi."
+    }
+  },
+  "report": {
+    "loading": "Memuat laporan…",
+    "exportExcel": "Ekspor Excel",
+    "exporting": "Mengekspor…",
+    "sections": {
+      "total": "Total",
+      "noManpower": "Belum ada tenaga kerja yang ditugaskan.",
+      "noProduction": "Belum ada produksi yang tercatat.",
+      "noSampleHandling": "Belum ada sample yang ditangani.",
+      "noHaulageDetail": "Belum ada haulage yang tercatat."
+    },
+    "errors": {
+      "loadFailed": "Gagal memuat data shift untuk laporan ini.",
+      "buildFailed": "Gagal membuat laporan shift.",
+      "exportFailed": "Gagal mengekspor workbook shift. Silakan coba lagi."
+    }
+  },
+  "more": {
+    "applicationVersion": "Versi Aplikasi",
+    "masterData": {
+      "title": "Master Data",
+      "lastSynced": "Terakhir disinkron: {{timestamp}}",
+      "neverSynced": "Belum pernah disinkron",
+      "refresh": "Segarkan Master Data",
+      "refreshing": "Menyegarkan…",
+      "refreshFailed": "Gagal menyegarkan master data. Silakan coba lagi."
     }
   },
   "fleetSetup": {
@@ -80,13 +218,16 @@
     "editFront": "Ubah Front",
     "removeFront": "Hapus Front",
     "removeFrontNamed": "Hapus front {{frontId}}",
-    "frontId": "ID Front",
+    "frontNumber": "Front No",
+    "frontId": "Front ID",
     "sector": "Sektor",
     "hauler": "Hauler",
-    "fleetType": "Tipe Fleet",
-    "directFleet": "Fleet Langsung",
-    "referencedFleet": "Fleet Referensi",
-    "referenceFleet": "Fleet Acuan",
+    "destinationPile": "Destination/Pile",
+    "destinationPilePlaceholder": "Cari Pile_ID / Stockpile_Code…",
+    "destinationPileNotFound": "Pile tidak ditemukan.",
+    "change": "Ganti",
+    "referenceFleet": "Fleet Reference",
+    "noReference": "Tidak Ada",
     "frontReference": "Front {{frontId}}",
     "allowedTrucks": "Truck Diizinkan",
     "addTruck": "Tambah Truck",
@@ -112,11 +253,11 @@
     "noFronts": "Belum ada front yang dikonfigurasi.",
     "errors": {
       "empty": "Tambahkan minimal satu front sebelum meninjau setup fleet.",
-      "frontRequired": "ID Front wajib diisi.",
+      "frontRequired": "Pilih Front No (1–25).",
       "haulerRequired": "Pilih Hauler.",
       "truckRequired": "Pilih ID Truck yang valid.",
       "referenceRequired": "Pilih fleet acuan.",
-      "duplicateFront": "ID Front harus unik.",
+      "duplicateFront": "Front No harus unik.",
       "duplicateTruck": "Truck yang sama tidak boleh dicantumkan dua kali.",
       "contradictoryDelta": "Truck tidak boleh ditambahkan dan dikeluarkan sekaligus.",
       "sectorNotFound": "Sektor Shift tidak tersedia di Master Data.",
@@ -124,10 +265,32 @@
       "frontNotFound": "Fleet mengacu ke front yang sudah tidak ada.",
       "referenceNotFound": "Fleet acuan sudah tidak ada.",
       "referenceCycle": "Referensi fleet tidak boleh membentuk siklus.",
+      "referenceBranching": "Satu Front hanya boleh memiliki satu Front penerus langsung.",
       "truckNotFound": "Truck efektif tidak tersedia di Master Data.",
       "haulerMismatch": "Setiap truck efektif harus berasal dari Hauler yang dipilih.",
       "dependency": "Front ini tidak dapat dihapus karena masih menjadi acuan fleet lain.",
+      "destinationNotFound": "Pile tujuan ini tidak ditemukan di master data Sektor ini.",
       "generic": "Setup Fleet tidak dapat divalidasi. Periksa konfigurasi lalu coba lagi."
+    }
+  },
+  "fleetActive": {
+    "title": "Fleet Aktif",
+    "activeFronts": "Front Aktif",
+    "addFront": "+ Tambah Front",
+    "newFront": "Front Baru",
+    "history": "Riwayat Front",
+    "noHistory": "Belum ada front historis.",
+    "units": "Unit",
+    "detail": "Detail",
+    "hideDetail": "Sembunyikan Detail",
+    "continuedBy": "Dilanjutkan oleh {{frontId}}",
+    "errors": {
+      "frontNotFound": "Pilih Front acuan.",
+      "alreadySuperseded": "Front ini sudah memiliki penerus. Acu ke penerusnya.",
+      "numberLimitReached": "Batas maksimum 25 Front untuk Sektor ini sudah tercapai.",
+      "destinationRequired": "Pilih Destination/Pile untuk Front baru ini.",
+      "storeContextInvalid": "Workspace shift aktif tidak ditemukan.",
+      "generic": "Front tidak dapat disimpan. Silakan coba lagi."
     }
   },
   "pileHaulage": {
@@ -135,18 +298,20 @@
     "ore": "Ore",
     "batch": "Batch",
     "nextRit": "Rit Berikutnya",
+    "sampleCount": "Sampel",
     "rit": "Rit",
     "sampleRequired": "Perlu Sampel",
     "noSample": "Tidak Ada Sampel",
     "increment": "Increment",
     "front": "Front",
     "truck": "Truck",
-    "selectFront": "Pilih Front",
-    "selectTruck": "Pilih Truck",
+    "searchTruckPlaceholder": "Cari Truck…",
+    "noTruckFound": "Truck tidak ditemukan.",
     "recordHaulage": "Catat Haulage",
     "recordSampleHaulage": "Catat Haulage Sampel",
     "recording": "Menyimpan…",
     "recorded": "Tercatat",
+    "sampled": "Tersampel",
     "recordedFeedback": "Rit {{rit}} tercatat",
     "skipped": "Terlewat",
     "recordedPositions": "Posisi Tercatat",
@@ -154,15 +319,26 @@
     "planExhausted": "Tidak ada posisi haulage terencana yang tersisa.",
     "loading": "Memuat data haulage…",
     "retry": "Coba Lagi",
+    "initialPosition": {
+      "title": "Posisi Awal",
+      "batchAwal": "Batch Awal",
+      "ritAwal": "Rit Awal",
+      "confirm": "Konfirmasi",
+      "confirming": "Mengonfirmasi…",
+      "change": "Ubah Posisi Awal",
+      "cancel": "Batal"
+    },
     "errors": {
       "loadFailed": "Gagal memuat data haulage untuk Pile ini.",
-      "planEmpty": "Belum ada posisi haulage terencana untuk Pile ini.",
+      "planEmpty": "Batch awal untuk pile baru ini belum dikonfirmasi. Hubungi supervisor sebelum mencatat haulage.",
       "planInvalid": "Rencana haulage untuk Pile ini tidak valid.",
       "samplingConfigMissing": "Belum ada konfigurasi sampling untuk ore Pile ini.",
       "fleetContextInvalid": "Konfigurasi fleet/truck untuk Pile ini tidak valid.",
       "operationalContextInvalid": "Pilihan Truck sudah tidak valid untuk Front ini. Pilih ulang Front dan Truck lalu coba lagi.",
       "storeContextInvalid": "Pile ini bukan bagian dari workspace shift aktif.",
       "duplicateTransaction": "Entri haulage ini sudah pernah tercatat.",
+      "startPositionInvalid": "Masukkan Batch dan Rit yang valid (bilangan bulat, 1 atau lebih).",
+      "startPositionLocked": "Posisi awal terkunci karena haulage sudah tercatat untuk Pile ini.",
       "generic": "Terjadi kesalahan. Silakan coba lagi."
     }
   },
@@ -195,7 +371,7 @@
     "saveSamplePosition": "Simpan Sample Position",
     "saving": "Menyimpan…",
     "saved": "Sample position tersimpan",
-    "noPendingSamples": "Tidak Ada Sampel Tertunda",
+    "noPendingSamples": "Belum ada sample untuk ditangani. Sample akan muncul otomatis setelah rit sampling tercatat pada Pile.",
     "noHandledSamples": "Tidak Ada Sampel Selesai",
     "loading": "Memuat Sampel…",
     "retry": "Coba Lagi",
@@ -250,6 +426,27 @@
       "loadFailed": "Tidak dapat membaca file ini.",
       "generic": "Terjadi kesalahan. Silakan coba lagi."
     }
+  },
+  "pwa": {
+    "online": "Online",
+    "offline": "Offline",
+    "offlineSavedLocally": "Offline — pekerjaan tersimpan di perangkat ini.",
+    "updateAvailable": "Pembaruan tersedia",
+    "updateAvailableDetail": "Versi baru aplikasi sudah siap.",
+    "updateActiveShiftNotice": "Pekerjaan saat ini tersimpan di perangkat ini.",
+    "updateLater": "Perbarui Nanti",
+    "updateNow": "Perbarui Sekarang",
+    "updating": "Memperbarui…",
+    "offlineReady": "Aplikasi siap digunakan secara offline",
+    "dismiss": "Tutup"
+  },
+  "sync": {
+    "allSynced": "Semua tersinkron",
+    "pending": "Menunggu sinkron",
+    "pendingCount": "{{count}} menunggu",
+    "failed": "Sinkron gagal",
+    "failedCount": "{{count}} gagal",
+    "syncing": "Menyinkronkan…"
   },
   "whatsAppReport": {
     "title": "Laporan WhatsApp",

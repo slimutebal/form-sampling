@@ -6,6 +6,7 @@ import {
   nextNewBatchCandidate,
   planContinuations,
   remainingPositionsForSeed,
+  remainingPositionsFromStart,
   type BatchContinuationSeed,
 } from './batch-engine'
 import { parseBatchNumber } from './batch-number'
@@ -126,6 +127,44 @@ describe('remainingPositionsForSeed', () => {
 
   it('returns an explicit error when lastRit exceeds batch size', () => {
     const result = remainingPositionsForSeed(seed(24, 21), size)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.code).toBe('RIT_EXCEEDS_BATCH_SIZE')
+    }
+  })
+})
+
+describe('remainingPositionsFromStart', () => {
+  const size = batchSize(20)
+
+  it('start 1/1 -> 1/1..1/20 (default fresh-pile start position)', () => {
+    const result = remainingPositionsFromStart(position(1, 1), size)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(asPairs(result.value)[0]).toEqual([1, 1])
+    expect(result.value).toHaveLength(20)
+  })
+
+  it('start 25/11 -> 25/11..25/20 (supervisor override)', () => {
+    const result = remainingPositionsFromStart(position(25, 11), size)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(asPairs(result.value)).toEqual([
+      [25, 11],
+      [25, 12],
+      [25, 13],
+      [25, 14],
+      [25, 15],
+      [25, 16],
+      [25, 17],
+      [25, 18],
+      [25, 19],
+      [25, 20],
+    ])
+  })
+
+  it('returns an explicit error when the start rit exceeds batch size', () => {
+    const result = remainingPositionsFromStart(position(25, 21), size)
     expect(result.ok).toBe(false)
     if (!result.ok) {
       expect(result.error.code).toBe('RIT_EXCEEDS_BATCH_SIZE')

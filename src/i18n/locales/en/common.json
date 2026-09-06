@@ -4,10 +4,10 @@
   },
   "navigation": {
     "home": "Home",
-    "piles": "Piles",
-    "samples": "Samples",
-    "report": "Report",
-    "more": "More"
+    "fleet": "Fleet",
+    "piles": "Pile",
+    "samples": "Sample Handling",
+    "report": "Report"
   },
   "welcome": {
     "title": "Form Sampling",
@@ -20,10 +20,10 @@
   "screens": {
     "start": "Start Shift",
     "home": "Home",
-    "piles": "Piles",
-    "samples": "Samples",
-    "report": "Report",
-    "more": "More"
+    "fleet": "Active Fleet",
+    "piles": "Pile",
+    "samples": "Sample Handling",
+    "report": "Report"
   },
   "settings": {
     "language": "Language",
@@ -37,7 +37,14 @@
       "shiftCode": "Shift Code",
       "sectorCode": "Sector",
       "samplingHouseCode": "Sampling House",
-      "status": "Status"
+      "status": "Status",
+      "selectShiftCode": "Select Shift",
+      "selectSectorCode": "Select Sector",
+      "selectSamplingHouseCode": "Select Sampling House"
+    },
+    "shiftCodeOptions": {
+      "DS": "DS — Day Shift",
+      "NS": "NS — Night Shift"
     },
     "status": {
       "NEW": "New",
@@ -61,7 +68,18 @@
     "review": {
       "title": "Registration Ready",
       "message": "Registration is ready for setup.",
-      "edit": "Edit Registration"
+      "edit": "Edit Registration",
+      "continue": "Continue"
+    },
+    "masterData": {
+      "loading": "Loading master data…",
+      "unavailable": "Master data is not available.",
+      "offlineFirstUse": "Internet is required to download master data for first use.",
+      "remoteFailed": "Master data is not available. Check your connection and try again.",
+      "retryRemote": "TRY AGAIN",
+      "errors": {
+        "loadFailed": "Unable to load local master data."
+      }
     },
     "errors": {
       "required": "This field is required.",
@@ -70,7 +88,127 @@
       "corruptedState": "Local shift data is inconsistent.",
       "generic": "Something went wrong. Please try again.",
       "registrationFailed": "Unable to complete registration. Please try again.",
+      "shiftCodeNotAllowed": "Select a valid Shift.",
+      "sectorNotFound": "Select a Sector from the list.",
+      "samplingHouseNotFound": "Select a Sampling House from the list.",
       "retry": "Retry"
+    }
+  },
+  "setup": {
+    "initializing": {
+      "title": "Starting Shift",
+      "message": "Starting shift workspace…"
+    },
+    "errors": {
+      "previousShiftUnavailable": "Unable to determine the expected previous shift. Start without a previous shift file instead.",
+      "initializeFailed": "Unable to start this shift workspace. Please try again."
+    }
+  },
+  "manpower": {
+    "title": "Shift Manpower",
+    "search": "Search NIK / Name",
+    "searchPlaceholder": "Search NIK / Name…",
+    "noResults": "No matching personnel.",
+    "add": "+ Add",
+    "selectedPersonnel": "Selected Personnel",
+    "noPersonnel": "No personnel added yet.",
+    "jobDesk": "Job Desk",
+    "picLabel": "Penanggung Jawab",
+    "remove": "Remove",
+    "removeNamed": "Remove {{name}}",
+    "continue": "Continue",
+    "errors": {
+      "duplicatePerson": "This person has already been added.",
+      "jobDeskRequired": "Job Desk is required.",
+      "personNotFound": "This person was not found in the Employee/Crew master.",
+      "generic": "Something went wrong with Manpower setup."
+    }
+  },
+  "activeShell": {
+    "loading": "Loading workspace…",
+    "errors": {
+      "loadFailed": "Unable to load the active shift workspace."
+    }
+  },
+  "home": {
+    "manpowerCount": "Manpower",
+    "picCount": "PIC",
+    "activePiles": "Active Piles",
+    "haulageCount": "Haulage",
+    "pendingSamples": "Pending Samples",
+    "wrongTruckCount": "Wrong Truck",
+    "quickActions": {
+      "inputDt": "Input DT / Open Pile",
+      "sampleHandling": "Sample Handling",
+      "report": "Report"
+    },
+    "errors": {
+      "loadFailed": "Unable to load shift activity."
+    }
+  },
+  "piles": {
+    "noPiles": "No active piles for this shift yet.",
+    "addPile": "+ Add Pile",
+    "searchPileToAdd": "Search Pile_ID / Stockpile_Code",
+    "searchPileToAddPlaceholder": "Search Pile_ID / Stockpile_Code…",
+    "noPileCandidates": "No pile found.",
+    "noActiveFront": "No active Front for this Pile.",
+    "backToPiles": "Back to Pile List",
+    "errors": {
+      "pileNotFound": "This Pile is not part of the active shift workspace.",
+      "duplicatePile": "This Pile is already active in this shift.",
+      "workspaceNotFound": "The active shift workspace could not be found.",
+      "addPileFailed": "Unable to add this Pile. Please try again.",
+      "frontContextInvalid": "The Front for this Pile is no longer valid. Choose the Front again from the Pile list."
+    }
+  },
+  "pileMaster": {
+    "addNewPile": "Add New Pile",
+    "addNewPileNamed": "+ Add New Pile \"{{pileId}}\"",
+    "pileId": "Pile ID",
+    "stockpile": "Stockpile",
+    "ore": "Ore",
+    "add": "Add",
+    "adding": "Adding…",
+    "errors": {
+      "pileIdRequired": "Pile ID is required.",
+      "stockpileRequired": "Stockpile is required.",
+      "oreRequired": "Select an Ore.",
+      "duplicatePileId": "This Pile ID already exists in master data.",
+      "unknownOre": "This Ore is not available in master data.",
+      "requiresConnection": "Creating a new Pile requires an internet connection.",
+      "patternNotSupported": "This Pile ID naming pattern is not supported for new Piles yet. You can still select an existing Pile by its exact ID.",
+      "sectorMismatch": "This Pile ID belongs to a different Sector than the current shift.",
+      "writeUnverified": "Could not confirm the new Pile was saved. Please check your connection and try again.",
+      "generic": "Unable to create this new Pile. Please try again."
+    }
+  },
+  "report": {
+    "loading": "Loading report…",
+    "exportExcel": "Export Excel",
+    "exporting": "Exporting…",
+    "sections": {
+      "total": "Total",
+      "noManpower": "No manpower assigned yet.",
+      "noProduction": "No production recorded yet.",
+      "noSampleHandling": "No samples handled yet.",
+      "noHaulageDetail": "No haulage recorded yet."
+    },
+    "errors": {
+      "loadFailed": "Unable to load shift data for this report.",
+      "buildFailed": "Unable to build the shift report.",
+      "exportFailed": "Unable to export the shift workbook. Please try again."
+    }
+  },
+  "more": {
+    "applicationVersion": "Application Version",
+    "masterData": {
+      "title": "Master Data",
+      "lastSynced": "Last synced: {{timestamp}}",
+      "neverSynced": "Never synced",
+      "refresh": "Refresh Master Data",
+      "refreshing": "Refreshing…",
+      "refreshFailed": "Unable to refresh master data. Please try again."
     }
   },
   "fleetSetup": {
@@ -80,13 +218,16 @@
     "editFront": "Edit Front",
     "removeFront": "Remove Front",
     "removeFrontNamed": "Remove front {{frontId}}",
+    "frontNumber": "Front No",
     "frontId": "Front ID",
     "sector": "Sector",
     "hauler": "Hauler",
-    "fleetType": "Fleet Type",
-    "directFleet": "Direct Fleet",
-    "referencedFleet": "Referenced Fleet",
-    "referenceFleet": "Reference Fleet",
+    "destinationPile": "Destination/Pile",
+    "destinationPilePlaceholder": "Search Pile_ID / Stockpile_Code…",
+    "destinationPileNotFound": "No pile found.",
+    "change": "Change",
+    "referenceFleet": "Fleet Reference",
+    "noReference": "None",
     "frontReference": "Front {{frontId}}",
     "allowedTrucks": "Allowed Trucks",
     "addTruck": "Add Truck",
@@ -112,11 +253,11 @@
     "noFronts": "No fronts configured yet.",
     "errors": {
       "empty": "Add at least one front before reviewing the fleet setup.",
-      "frontRequired": "Front ID is required.",
+      "frontRequired": "Select a Front No (1–25).",
       "haulerRequired": "Select a Hauler.",
       "truckRequired": "Select a valid Truck ID.",
       "referenceRequired": "Select a reference fleet.",
-      "duplicateFront": "Front ID must be unique.",
+      "duplicateFront": "Front No must be unique.",
       "duplicateTruck": "The same truck cannot be listed twice.",
       "contradictoryDelta": "A truck cannot be both added and removed.",
       "sectorNotFound": "The Shift Sector is not available in Master Data.",
@@ -124,10 +265,32 @@
       "frontNotFound": "A fleet references a front that no longer exists.",
       "referenceNotFound": "The referenced fleet no longer exists.",
       "referenceCycle": "Fleet references cannot form a cycle.",
+      "referenceBranching": "A Front can have at most one direct successor Front.",
       "truckNotFound": "An effective truck is not available in Master Data.",
       "haulerMismatch": "Every effective truck must belong to the selected Hauler.",
       "dependency": "This front cannot be removed because another fleet references it.",
+      "destinationNotFound": "This destination Pile was not found in this Sector's master data.",
       "generic": "Fleet Setup could not be validated. Review the configuration and try again."
+    }
+  },
+  "fleetActive": {
+    "title": "Active Fleet",
+    "activeFronts": "Active Fronts",
+    "addFront": "+ Add Front",
+    "newFront": "New Front",
+    "history": "Front History",
+    "noHistory": "No historical fronts yet.",
+    "units": "Units",
+    "detail": "Detail",
+    "hideDetail": "Hide Detail",
+    "continuedBy": "Continued by {{frontId}}",
+    "errors": {
+      "frontNotFound": "Select a reference Front.",
+      "alreadySuperseded": "This Front already has a successor. Reference its successor instead.",
+      "numberLimitReached": "The maximum of 25 Fronts for this Sector has already been reached.",
+      "destinationRequired": "Select a Destination/Pile for this new Front.",
+      "storeContextInvalid": "The active shift workspace could not be found.",
+      "generic": "Unable to save this Front. Please try again."
     }
   },
   "pileHaulage": {
@@ -135,18 +298,20 @@
     "ore": "Ore",
     "batch": "Batch",
     "nextRit": "Next Rit",
+    "sampleCount": "Sample",
     "rit": "Rit",
     "sampleRequired": "Sample Required",
     "noSample": "No Sample",
     "increment": "Increment",
     "front": "Front",
     "truck": "Truck",
-    "selectFront": "Select Front",
-    "selectTruck": "Select Truck",
+    "searchTruckPlaceholder": "Search Truck…",
+    "noTruckFound": "No truck found.",
     "recordHaulage": "Record Haulage",
     "recordSampleHaulage": "Record Sample Haulage",
     "recording": "Recording…",
     "recorded": "Recorded",
+    "sampled": "Sampled",
     "recordedFeedback": "Rit {{rit}} recorded",
     "skipped": "Skipped",
     "recordedPositions": "Recorded Positions",
@@ -154,15 +319,26 @@
     "planExhausted": "No remaining planned haulage positions.",
     "loading": "Loading haulage…",
     "retry": "Retry",
+    "initialPosition": {
+      "title": "Initial Position",
+      "batchAwal": "Batch Awal",
+      "ritAwal": "Rit Awal",
+      "confirm": "Confirm",
+      "confirming": "Confirming…",
+      "change": "Change Starting Position",
+      "cancel": "Cancel"
+    },
     "errors": {
       "loadFailed": "Unable to load haulage data for this Pile.",
-      "planEmpty": "No planned haulage positions exist for this Pile yet.",
+      "planEmpty": "The starting batch for this new Pile has not been confirmed yet. Contact your supervisor before recording haulage.",
       "planInvalid": "The haulage plan for this Pile is invalid.",
       "samplingConfigMissing": "No sampling configuration exists for this Pile's ore.",
       "fleetContextInvalid": "The fleet/truck configuration for this Pile is invalid.",
       "operationalContextInvalid": "Truck selection is no longer valid for this Front. Reselect Front and Truck and try again.",
       "storeContextInvalid": "This Pile is not part of the active shift workspace.",
       "duplicateTransaction": "This haulage entry was already recorded.",
+      "startPositionInvalid": "Enter a valid Batch and Rit (whole numbers, 1 or higher).",
+      "startPositionLocked": "The starting position is locked because haulage has already been recorded for this Pile.",
       "generic": "Something went wrong. Please try again."
     }
   },
@@ -195,7 +371,7 @@
     "saveSamplePosition": "Save Sample Position",
     "saving": "Saving…",
     "saved": "Sample position saved",
-    "noPendingSamples": "No Pending Samples",
+    "noPendingSamples": "No samples to handle yet. Samples appear automatically once a sampling rit is recorded on a Pile.",
     "noHandledSamples": "No Handled Samples",
     "loading": "Loading Samples…",
     "retry": "Retry",
@@ -250,6 +426,27 @@
       "loadFailed": "Unable to read this file.",
       "generic": "Something went wrong. Please try again."
     }
+  },
+  "pwa": {
+    "online": "Online",
+    "offline": "Offline",
+    "offlineSavedLocally": "Offline — work is saved on this device.",
+    "updateAvailable": "Update available",
+    "updateAvailableDetail": "A new version of the app is ready.",
+    "updateActiveShiftNotice": "Current work is saved on this device.",
+    "updateLater": "Update Later",
+    "updateNow": "Update Now",
+    "updating": "Updating…",
+    "offlineReady": "App ready to work offline",
+    "dismiss": "Dismiss"
+  },
+  "sync": {
+    "allSynced": "All synced",
+    "pending": "Sync pending",
+    "pendingCount": "{{count}} pending",
+    "failed": "Sync failed",
+    "failedCount": "{{count}} failed",
+    "syncing": "Syncing…"
   },
   "whatsAppReport": {
     "title": "WhatsApp Report",

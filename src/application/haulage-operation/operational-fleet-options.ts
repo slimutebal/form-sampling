@@ -1,8 +1,9 @@
-import type { FleetId, FrontId, TruckId } from '@/domain/common/identifiers'
+import type { FleetId, FrontId, PileId, TruckId } from '@/domain/common/identifiers'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err, ok } from '@/domain/common/result'
 import { resolveEffectiveFleetAgainstMaster } from '@/domain/fleet/fleet-resolution'
 import type { FleetSetup } from '@/domain/fleet/fleet-setup'
+import { deriveFrontLineage } from '@/domain/fleet/front-lineage'
 import type { HaulerCode } from '@/domain/master/master-codes'
 import type { MasterData } from '@/domain/master/master-data'
 
@@ -57,32 +58,71 @@ export function operationalFleetOptions(
 }
 
 /**
- * Whether a raw UI-selected Fleet/Truck pair is still current against
- * `frontOptions` — the selected Fleet must still be present, and the
- * selected Truck must still be one of that Fleet's effective members.
- * `selectedFleetId`/`selectedTruckId` are plain strings (raw UI state,
- * not yet parsed into `FleetId`/`TruckId`), so this compares by value
- * rather than requiring an unsafe cast to the branded id types — `===`
- * between a branded string and `string` type-checks safely because the
- * branded type is structurally a `string`.
- *
- * Shared by `HaulageEntryForm` (gates the Record button) and
- * `PileHaulagePage.handleRecord` (a defensive re-check immediately
- * before generating a transaction id — never relies on the button's
- * `disabled` state alone). Both call sites must agree, so the check
- * lives here once rather than being duplicated.
+ * Builds the Pile Haulage entry Front/Fleet options scoped to one opened
+ * Pile (active-shift Fleet continuation rules): only fleets whose Front is
+ * ACTIVE (`deriveFrontLineage` — a Front superseded by a continuation is
+ * never offered again) AND whose configured `destinationPileId` matches
+ * `pileId` are included. A Front with no configured destination at all is
+ * treated as unscoped and still offered for every Pile, preserving the
+ * original behavior for Fronts that never set a Destination (Phase 18 §5
+ * left it optional). Reuses `operationalFleetOptions`/`deriveFrontLineage`
+ * — no fleet or lineage math is duplicated here.
  */
-export function isFrontTruckSelectionCurrent(
-  frontOptions: readonly OperationalFleetOption[],
-  selectedFleetId: string,
-  selectedTruckId: string,
-): boolean {
-  if (selectedFleetId.length === 0 || selectedTruckId.length === 0) {
-    return false
+export function operationalFleetOptionsForPile(
+  masterData: MasterData,
+  fleetSetup: FleetSetup,
+  pileId: PileId,
+): Result<readonly OperationalFleetOption[], DomainError> {
+  const allOptions = operationalFleetOptions(masterData, fleetSetup)
+  if (!allOptions.ok) {
+    return allOptions
   }
-  const selectedOption = frontOptions.find((option) => option.fleetId === selectedFleetId)
-  if (!selectedOption) {
-    return false
+
+  const lineage = deriveFrontLineage(fleetSetup)
+  const activeFrontIds = new Set(lineage.activeFrontIds)
+  const frontById = new Map(fleetSetup.fronts.map((front) => [front.frontId, front]))
+
+  return ok(
+    allOptions.value.filter((option) => {
+      if (!activeFrontIds.has(option.frontId)) {
+        return false
+      }
+      const front = frontById.get(option.frontId)
+      return !front?.destinationPileId || front.destinationPileId === pileId
+    }),
+  )
+}
+
+/**
+ * Resolves the single operational Front/Fleet option a route/query
+ * context names (Phase 18 §5 — the Pile Operation checker no longer
+ * offers a Front dropdown; the Front is chosen earlier on the Pile list
+ * and carried by the route instead). Reuses
+ * `operationalFleetOptionsForPile` verbatim, so the same rules apply:
+ * the named Front must exist, be ACTIVE (not superseded by a
+ * continuation), and either have no configured destination or have this
+ * exact Pile as its destination. A stale/invalid `frontId` (unknown,
+ * HISTORICAL, or destination-mismatched) fails with one stable
+ * `FRONT_NOT_AVAILABLE_FOR_PILE` code rather than three separate ones —
+ * the UI's response (return the operator to Pile selection) is the same
+ * regardless of which condition failed.
+ */
+export function operationalFleetOptionForFront(
+  masterData: MasterData,
+  fleetSetup: FleetSetup,
+  pileId: PileId,
+  frontId: string,
+): Result<OperationalFleetOption, DomainError> {
+  const optionsResult = operationalFleetOptionsForPile(masterData, fleetSetup, pileId)
+  if (!optionsResult.ok) {
+    return optionsResult
   }
-  return selectedOption.effectiveTruckIds.some((truckId) => truckId === selectedTruckId)
+  const option = optionsResult.value.find((candidate) => (candidate.frontId as string) === frontId)
+  if (!option) {
+    return err({
+      code: 'FRONT_NOT_AVAILABLE_FOR_PILE',
+      message: `Front ${frontId} is not an active Front for Pile ${pileId}`,
+    })
+  }
+  return ok(option)
 }

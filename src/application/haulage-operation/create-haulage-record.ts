@@ -1,7 +1,6 @@
 import type { BatchPosition } from '@/domain/batch/batch-position'
 import { parseFleetId, parseHaulageTransactionId, parseTruckId } from '@/domain/common/identifiers'
 import type { DomainError, Result } from '@/domain/common/result'
-import { err } from '@/domain/common/result'
 import type { FleetSetup } from '@/domain/fleet/fleet-setup'
 import { createHaulageTransaction, type HaulageTransaction } from '@/domain/haulage/haulage-transaction'
 import type { MasterData } from '@/domain/master/master-data'
@@ -26,14 +25,16 @@ export interface RecordHaulageParams {
  * (Phase 6) — this function never constructs a raw HaulageTransaction
  * object itself.
  *
- * Defensive Wrong Truck guard (§18, §Q): the normal Truck selector only
- * ever offers a Fleet's effective Truck members, so `createHaulageTransaction`
- * should always classify the result VALID here. If stale/inconsistent
- * UI state somehow produces a WRONG_TRUCK classification, this function
- * refuses to hand back the transaction — it returns a stable, generic
- * operational-context error instead. This is *not* the future Wrong
- * Truck exception flow: no Continue Anyway, approval, or blocking policy
- * is implemented — the operator must simply reselect Front/Truck.
+ * Wrong Truck is a recordable operational exception, not a blocked
+ * submission (Phase 18 §6, BR-TRUCK-003 "Wrong Truck Does Not
+ * Disappear" — docs/BUSINESS_RULES.md §29): the Truck checker lets the
+ * operator search and select any known master Truck, not only the
+ * Fleet's effective members, so a WRONG_TRUCK classification from
+ * `createHaulageTransaction` is an expected, valid outcome here and is
+ * handed back unchanged for the caller to persist — it is never
+ * rejected or silently upgraded to VALID. Only a structurally invalid
+ * id/Fleet/Truck string, or a `createHaulageTransaction` domain error
+ * (e.g. an unknown Truck), still fails this function.
  */
 export function recordHaulage(params: RecordHaulageParams): Result<HaulageTransaction, DomainError> {
   const id = parseHaulageTransactionId(params.generatedTransactionId)
@@ -49,7 +50,7 @@ export function recordHaulage(params: RecordHaulageParams): Result<HaulageTransa
     return truckId
   }
 
-  const created = createHaulageTransaction({
+  return createHaulageTransaction({
     id: id.value,
     shiftId: params.shift.id,
     pile: params.pile,
@@ -59,16 +60,4 @@ export function recordHaulage(params: RecordHaulageParams): Result<HaulageTransa
     masterData: params.masterData,
     fleetSetup: params.fleetSetup,
   })
-  if (!created.ok) {
-    return created
-  }
-
-  if (created.value.truckValidation.status !== 'VALID') {
-    return err({
-      code: 'HAULAGE_OPERATIONAL_CONTEXT_INVALID',
-      message: 'Normal haulage entry produced a non-VALID truck classification; reselect Front/Truck and try again',
-    })
-  }
-
-  return created
 }

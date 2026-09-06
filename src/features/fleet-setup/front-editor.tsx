@@ -8,14 +8,21 @@ import {
 import { createFleetSetupFromDraft } from '@/application/fleet-setup/create-fleet-setup-from-draft'
 import {
   cloneFleetSetupDraftEntry,
+  formatFrontId,
   type FleetSetupDraftEntry,
 } from '@/application/fleet-setup/fleet-setup-draft'
+import type { NewPileDraft } from '@/application/pile-master/create-pile-area-from-draft'
+import type { CreatedSetupPileArea } from '@/application/pile-master/create-pile-area-for-setup'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { SearchableCombobox, type SearchableComboboxOption } from '@/components/shared/SearchableCombobox'
+import type { DomainError, Result } from '@/domain/common/result'
 import type { MasterData } from '@/domain/master/master-data'
 import type { Shift } from '@/domain/shift/shift'
 import { EffectiveFleetPreview } from '@/features/fleet-setup/effective-fleet-preview'
 import { fleetErrorTranslationKey } from '@/features/fleet-setup/error-messages'
+import { SelectedTrucks, TruckAction } from '@/features/fleet-setup/truck-action-controls'
+import { NewPileForm } from '@/features/pile-master/new-pile-form'
 
 interface FrontEditorProps {
   initialEntry: FleetSetupDraftEntry
@@ -24,18 +31,39 @@ interface FrontEditorProps {
   masterData: MasterData
   onSave: (entry: FleetSetupDraftEntry) => void
   onCancel: () => void
+  /**
+   * New Pile Master creation from Fleet Setup (post-inspection correction
+   * §2) — production callers pass `createAppsScriptPileAreaForSetup`;
+   * tests pass a fake. Omit to hide the "+ Tambah Pile Baru" action
+   * entirely, mirroring `PilesListPageProps.createNewPile`.
+   */
+  createNewPile?: (draft: NewPileDraft) => Promise<Result<CreatedSetupPileArea, DomainError>>
+  /**
+   * Called immediately once a new Pile Master is created, with the
+   * merged/re-validated MasterData, so the caller (FleetSetupPage →
+   * StartPage) keeps this Front Editor's own `masterData` prop and the
+   * eventual `initializeShiftWorkspace` snapshot in sync with the new pile
+   * — never only a local copy inside this component.
+   */
+  onMasterDataUpdated?: (masterData: MasterData) => void
 }
 
-type ErrorTarget = 'frontId' | 'hauler' | 'reference' | 'global'
+type ErrorTarget = 'frontNumber' | 'hauler' | 'reference' | 'destination' | 'global'
 
 const ERROR_TARGETS: Readonly<Record<string, ErrorTarget>> = {
-  BLANK_FRONT_ID: 'frontId',
-  DUPLICATE_FRONT_ID: 'frontId',
+  FRONT_NUMBER_OUT_OF_RANGE: 'frontNumber',
+  DUPLICATE_FRONT_ID: 'frontNumber',
   BLANK_HAULER_CODE: 'hauler',
   FRONT_HAULER_NOT_FOUND: 'hauler',
   FLEET_REFERENCE_REQUIRED: 'reference',
   FLEET_REFERENCE_NOT_FOUND: 'reference',
+  FLEET_DESTINATION_PILE_NOT_FOUND: 'destination',
 }
+
+/** Front No is a closed selector, 1–25 (Phase 18 §5) — never free text. */
+const FRONT_NUMBER_OPTIONS: readonly string[] = Array.from({ length: 25 }, (_, index) =>
+  String(index + 1).padStart(2, '0'),
+)
 
 function errorTarget(code: string | undefined): ErrorTarget | undefined {
   return code ? (ERROR_TARGETS[code] ?? 'global') : undefined
@@ -50,91 +78,6 @@ function FieldError({ id, errorCode }: { id: string; errorCode?: string }) {
   ) : null
 }
 
-function TruckAction({
-  id,
-  label,
-  actionLabel,
-  options,
-  value,
-  onValueChange,
-  onAction,
-}: {
-  id: string
-  label: string
-  actionLabel: string
-  options: readonly string[]
-  value: string
-  onValueChange: (value: string) => void
-  onAction: (value: string) => void
-}) {
-  const actionEnabled = value.length > 0 && options.includes(value)
-
-  function handleAction() {
-    if (!actionEnabled) return
-    onAction(value)
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <label htmlFor={id} className="text-sm font-medium">
-        {label}
-      </label>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-        <select
-          id={id}
-          value={value}
-          onChange={(event) => onValueChange(event.target.value)}
-          className="h-11 min-w-0 rounded-md border border-border bg-background px-3 text-base"
-        >
-          <option value="">—</option>
-          {options.map((truckId) => (
-            <option key={truckId} value={truckId}>
-              {truckId}
-            </option>
-          ))}
-        </select>
-        <Button type="button" onClick={handleAction} disabled={!actionEnabled}>
-          {actionLabel}
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-function SelectedTrucks({
-  truckIds,
-  actionLabel,
-  onRemove,
-}: {
-  truckIds: readonly string[]
-  actionLabel: (truckId: string) => string
-  onRemove: (truckId: string) => void
-}) {
-  const { t } = useTranslation()
-  if (truckIds.length === 0)
-    return <p className="text-sm text-muted-foreground">{t('fleetSetup.noTrucks')}</p>
-  return (
-    <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto">
-      {truckIds.map((truckId) => (
-        <li
-          key={truckId}
-          className="flex min-w-0 items-center justify-between gap-2 rounded-md bg-background px-3 py-2"
-        >
-          <span className="min-w-0 break-all font-medium">{truckId}</span>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => onRemove(truckId)}
-            aria-label={actionLabel(truckId)}
-          >
-            {t('fleetSetup.remove')}
-          </Button>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
 export function FrontEditor({
   initialEntry,
   entries,
@@ -142,16 +85,19 @@ export function FrontEditor({
   masterData,
   onSave,
   onCancel,
+  createNewPile,
+  onMasterDataUpdated,
 }: FrontEditorProps) {
   const { t } = useTranslation()
   const [draft, setDraft] = useState(() => cloneFleetSetupDraftEntry(initialEntry))
   const [selectedBaseTruck, setSelectedBaseTruck] = useState('')
   const [selectedAddTruck, setSelectedAddTruck] = useState('')
   const [selectedRemoveTruck, setSelectedRemoveTruck] = useState('')
+  const [destinationQuery, setDestinationQuery] = useState('')
+  const [creatingDestination, setCreatingDestination] = useState(false)
   const [errorCode, setErrorCode] = useState<string>()
-  const frontIdInputId = useId()
+  const frontNumberSelectId = useId()
   const haulerSelectId = useId()
-  const fleetTypeSelectId = useId()
   const referenceSelectId = useId()
   const baseTruckSelectId = useId()
   const addTruckSelectId = useId()
@@ -159,10 +105,36 @@ export function FrontEditor({
   const frontErrorId = useId()
   const haulerErrorId = useId()
   const referenceErrorId = useId()
+  const destinationErrorId = useId()
   const globalErrorId = useId()
 
-  const existingIndex = entries.findIndex((entry) => entry.fleetId === initialEntry.fleetId)
+  const existingIndex = useMemo(
+    () => entries.findIndex((entry) => entry.fleetId === initialEntry.fleetId),
+    [entries, initialEntry.fleetId],
+  )
   const referenceOptions = existingIndex < 0 ? entries : entries.slice(0, existingIndex)
+
+  /**
+   * Front numbers already used by another draft entry are hidden from the
+   * selector (Phase 18 §1) — the operator can never pick a number that
+   * would only fail later at DUPLICATE_FRONT_ID submit-time validation
+   * (`fleet-setup.ts`, kept as defense-in-depth). The entry currently
+   * being edited keeps its own number visible so re-saving without
+   * changing it still works.
+   */
+  const usedFrontNumbers = useMemo(
+    () =>
+      new Set(
+        entries
+          .filter((entry) => entry.fleetId !== draft.fleetId && entry.frontNumber)
+          .map((entry) => entry.frontNumber),
+      ),
+    [entries, draft.fleetId],
+  )
+  const availableFrontNumberOptions = FRONT_NUMBER_OPTIONS.filter(
+    (frontNumber) => frontNumber === draft.frontNumber || !usedFrontNumbers.has(frontNumber),
+  )
+
   const candidateEntries = useMemo(
     () =>
       existingIndex < 0
@@ -195,6 +167,27 @@ export function FrontEditor({
     (id) => !draft.addedTruckIds.includes(id) && !draft.removedTruckIds.includes(id),
   )
 
+  const destinationCandidates: readonly SearchableComboboxOption[] = useMemo(() => {
+    const normalized = destinationQuery.trim().toLowerCase()
+    if (!normalized) return []
+    return masterData.pileAreas
+      .filter(
+        (pileArea) =>
+          pileArea.sectorCode === shift.sectorCode &&
+          ((pileArea.pileId as string).toLowerCase().includes(normalized) ||
+            (pileArea.stockpileCode as string).toLowerCase().includes(normalized)),
+      )
+      .map((pileArea) => ({
+        value: pileArea.pileId as string,
+        label: pileArea.pileId as string,
+        description: `${pileArea.oreCode} · ${pileArea.stockpileCode}`,
+      }))
+  }, [destinationQuery, masterData.pileAreas, shift.sectorCode])
+
+  const selectedDestination = draft.destinationPileId
+    ? masterData.pileAreas.find((pileArea) => pileArea.pileId === draft.destinationPileId)
+    : undefined
+
   function update(patch: Partial<FleetSetupDraftEntry>) {
     setDraft((current) => ({ ...current, ...patch }))
     setErrorCode(undefined)
@@ -222,26 +215,39 @@ export function FrontEditor({
       <CardContent>
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor={frontIdInputId} className="text-sm font-medium">
-              {t('fleetSetup.frontId')}
+            <label htmlFor={frontNumberSelectId} className="text-sm font-medium">
+              {t('fleetSetup.frontNumber')}
             </label>
-            <input
-              id={frontIdInputId}
-              value={draft.frontId}
-              onChange={(event) => update({ frontId: event.target.value })}
-              aria-invalid={currentErrorTarget === 'frontId' ? true : undefined}
-              aria-describedby={currentErrorTarget === 'frontId' ? frontErrorId : undefined}
+            <select
+              id={frontNumberSelectId}
+              value={draft.frontNumber}
+              onChange={(event) => update({ frontNumber: event.target.value })}
+              aria-invalid={currentErrorTarget === 'frontNumber' ? true : undefined}
+              aria-describedby={currentErrorTarget === 'frontNumber' ? frontErrorId : undefined}
               className="h-11 rounded-md border border-border bg-background px-3 text-base"
-            />
+            >
+              <option value="">—</option>
+              {availableFrontNumberOptions.map((frontNumber) => (
+                <option key={frontNumber} value={frontNumber}>
+                  {frontNumber}
+                </option>
+              ))}
+            </select>
             <FieldError
               id={frontErrorId}
-              errorCode={currentErrorTarget === 'frontId' ? errorCode : undefined}
+              errorCode={currentErrorTarget === 'frontNumber' ? errorCode : undefined}
             />
           </div>
           <div className="flex flex-col gap-1.5">
             <span className="text-sm font-medium">{t('fleetSetup.sector')}</span>
             <output className="min-h-11 break-all rounded-md border border-border bg-muted px-3 py-2.5">
               {shift.sectorCode}
+            </output>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium">{t('fleetSetup.frontId')}</span>
+            <output className="min-h-11 break-all rounded-md border border-border bg-muted px-3 py-2.5">
+              {draft.frontNumber ? formatFrontId(shift.sectorCode, draft.frontNumber) : '—'}
             </output>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -278,30 +284,111 @@ export function FrontEditor({
               errorCode={currentErrorTarget === 'hauler' ? errorCode : undefined}
             />
           </div>
+
+          {creatingDestination ? (
+            <NewPileForm
+              initialPileId={destinationQuery.trim()}
+              sectorCode={shift.sectorCode}
+              masterData={masterData}
+              onSubmit={(newPileDraft) => {
+                if (!createNewPile) {
+                  return Promise.resolve({
+                    ok: false as const,
+                    error: {
+                      code: 'PILE_MASTER_CREATION_UNAVAILABLE',
+                      message: 'New Pile Master creation is not available here',
+                    },
+                  })
+                }
+                return createNewPile(newPileDraft)
+              }}
+              onCreated={(created) => {
+                onMasterDataUpdated?.(created.masterData)
+                update({ destinationPileId: created.pileArea.pileId })
+                setCreatingDestination(false)
+                setDestinationQuery('')
+              }}
+              onCancel={() => setCreatingDestination(false)}
+            />
+          ) : (
+            <>
+              <SearchableCombobox
+                label={t('fleetSetup.destinationPile')}
+                query={destinationQuery}
+                onQueryChange={setDestinationQuery}
+                options={destinationCandidates}
+                onSelect={(option) => {
+                  update({ destinationPileId: option.value })
+                  setDestinationQuery('')
+                }}
+                selectedLabel={
+                  draft.destinationPileId
+                    ? `${draft.destinationPileId}${selectedDestination ? ` (${selectedDestination.oreCode} · ${selectedDestination.stockpileCode})` : ''}`
+                    : undefined
+                }
+                clearLabel={t('fleetSetup.change')}
+                onClearSelection={() => update({ destinationPileId: '' })}
+                placeholder={t('fleetSetup.destinationPilePlaceholder')}
+                noResultsContent={
+                  createNewPile && destinationQuery.trim() ? (
+                    <Button type="button" variant="secondary" onClick={() => setCreatingDestination(true)}>
+                      {t('pileMaster.addNewPileNamed', { pileId: destinationQuery.trim() })}
+                    </Button>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{t('fleetSetup.destinationPileNotFound')}</p>
+                  )
+                }
+              />
+              <FieldError
+                id={destinationErrorId}
+                errorCode={currentErrorTarget === 'destination' ? errorCode : undefined}
+              />
+            </>
+          )}
+
           <div className="flex flex-col gap-1.5">
-            <label htmlFor={fleetTypeSelectId} className="text-sm font-medium">
-              {t('fleetSetup.fleetType')}
+            <label htmlFor={referenceSelectId} className="text-sm font-medium">
+              {t('fleetSetup.referenceFleet')}
             </label>
             <select
-              id={fleetTypeSelectId}
-              value={draft.kind}
+              id={referenceSelectId}
+              value={draft.kind === 'DERIVED' ? draft.referenceFleetId : ''}
               onChange={(event) => {
+                const value = event.target.value
                 setSelectedBaseTruck('')
                 setSelectedAddTruck('')
                 setSelectedRemoveTruck('')
-                update({
-                  kind: event.target.value as 'BASE' | 'DERIVED',
-                  referenceFleetId: '',
-                  truckIds: [],
-                  addedTruckIds: [],
-                  removedTruckIds: [],
-                })
+                update(
+                  value === ''
+                    ? { kind: 'BASE', referenceFleetId: '', truckIds: [], addedTruckIds: [], removedTruckIds: [] }
+                    : {
+                        kind: 'DERIVED',
+                        referenceFleetId: value,
+                        truckIds: [],
+                        addedTruckIds: [],
+                        removedTruckIds: [],
+                      },
+                )
               }}
+              aria-invalid={currentErrorTarget === 'reference' ? true : undefined}
+              aria-describedby={currentErrorTarget === 'reference' ? referenceErrorId : undefined}
               className="h-11 rounded-md border border-border bg-background px-3 text-base"
             >
-              <option value="BASE">{t('fleetSetup.directFleet')}</option>
-              <option value="DERIVED">{t('fleetSetup.referencedFleet')}</option>
+              <option value="">{t('fleetSetup.noReference')}</option>
+              {referenceOptions
+                .filter((entry) => entry.frontNumber)
+                .map((entry) => (
+                  <option key={entry.fleetId} value={entry.fleetId}>
+                    {t('fleetSetup.frontReference', {
+                      frontId: formatFrontId(shift.sectorCode, entry.frontNumber),
+                    })}
+                  </option>
+                ))}
             </select>
+            <FieldError
+              id={referenceErrorId}
+              errorCode={currentErrorTarget === 'reference' ? errorCode : undefined}
+            />
           </div>
 
           {draft.kind === 'BASE' ? (
@@ -330,40 +417,6 @@ export function FrontEditor({
             </section>
           ) : (
             <>
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor={referenceSelectId} className="text-sm font-medium">
-                  {t('fleetSetup.referenceFleet')}
-                </label>
-                <select
-                  id={referenceSelectId}
-                  value={draft.referenceFleetId}
-                  onChange={(event) => {
-                    setSelectedAddTruck('')
-                    setSelectedRemoveTruck('')
-                    update({
-                      referenceFleetId: event.target.value,
-                      addedTruckIds: [],
-                      removedTruckIds: [],
-                    })
-                  }}
-                  aria-invalid={currentErrorTarget === 'reference' ? true : undefined}
-                  aria-describedby={
-                    currentErrorTarget === 'reference' ? referenceErrorId : undefined
-                  }
-                  className="h-11 rounded-md border border-border bg-background px-3 text-base"
-                >
-                  <option value="">—</option>
-                  {referenceOptions.map((entry) => (
-                    <option key={entry.fleetId} value={entry.fleetId}>
-                      {t('fleetSetup.frontReference', { frontId: entry.frontId })}
-                    </option>
-                  ))}
-                </select>
-                <FieldError
-                  id={referenceErrorId}
-                  errorCode={currentErrorTarget === 'reference' ? errorCode : undefined}
-                />
-              </div>
               <EffectiveFleetPreview
                 truckIds={inheritedTruckIds}
                 titleKey="fleetSetup.inheritedTrucks"

@@ -1,12 +1,15 @@
 import { parseShiftId } from '@/domain/common/identifiers'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err, ok } from '@/domain/common/result'
+import type { MasterData } from '@/domain/master/master-data'
 import { createShift, type Shift } from '@/domain/shift/shift'
 import type { ShiftRegistrationFormValues } from '@/application/shift-registration/shift-registration-form-values'
 import { validateShiftRegistrationForm } from '@/application/shift-registration/validate-shift-registration-form'
 
 export interface ShiftRegistrationInput extends ShiftRegistrationFormValues {
   readonly shiftId: string
+  /** Phase 18 wiring correction: the validated MasterData snapshot Sector/Sampling House are checked against — never free text. */
+  readonly masterData: MasterData
 }
 
 const FALLBACK_INVALID_REGISTRATION_CODE = 'INVALID_SHIFT_REGISTRATION'
@@ -25,7 +28,7 @@ export function createShiftRegistration(input: ShiftRegistrationInput): Result<S
     return idResult
   }
 
-  const validation = validateShiftRegistrationForm(input)
+  const validation = validateShiftRegistrationForm(input, input.masterData)
   if (!validation.valid) {
     const code =
       validation.fieldErrors.shiftDate ??

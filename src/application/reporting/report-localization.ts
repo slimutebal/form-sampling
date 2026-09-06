@@ -1,4 +1,46 @@
+import type { ShiftCode } from '@/domain/common/codes'
 import type { ReportLabelSet, ReportLanguage } from './report-types'
+
+/**
+ * Report display of `shiftCode` (Phase 18 §1: `DS`→`D`, `NS`→`N`). Not
+ * part of `ReportLabelSet` since it is language-neutral, not localized —
+ * both languages show the same short code. `ShiftCode` is an open,
+ * unbranded-enum domain type (BR-SHIFT-002 permits other values, e.g. the
+ * legacy `D`/`N` shorthand some fixtures still use directly), so any
+ * value outside `DS`/`NS` passes through unchanged rather than being
+ * rejected.
+ */
+export function shiftCodeDisplayLabel(shiftCode: ShiftCode): string {
+  const value = shiftCode as string
+  if (value === 'DS') return 'D'
+  if (value === 'NS') return 'N'
+  return value
+}
+
+/**
+ * Combined Batch/Rit report display, e.g. `024/011` (Phase 18 §11,
+ * BUSINESS_RULES.md §17: the domain model keeps `batchNumber`/`ritNumber`
+ * fully separate — this combined form is presentation-only, for Haulage
+ * Detail's Batch column specifically, and must never be parsed back or
+ * stored as a single value.
+ */
+export function formatBatchRit(batchNumber: number, ritNumber: number): string {
+  return `${String(batchNumber).padStart(3, '0')}/${String(ritNumber).padStart(3, '0')}`
+}
+
+const MONTH_ABBREVIATIONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * `YYYY-MM-DD` → `DD-MMM-YY` (Phase 18 §1, e.g. `08-Jul-26`) — the fixed
+ * report's date format. Language-neutral like the rest of this literal
+ * contract (month abbreviations stay in English regardless of report
+ * language, matching the fixed contract's own example).
+ */
+export function formatReportDate(shiftDate: string): string {
+  const [year, month, day] = shiftDate.split('-').map(Number)
+  const twoDigitYear = String(year % 100).padStart(2, '0')
+  return `${String(day).padStart(2, '0')}-${MONTH_ABBREVIATIONS[month - 1]}-${twoDigitYear}`
+}
 
 /**
  * Report-language label sets (ROADMAP Phase 14 §10). Deliberately
@@ -36,6 +78,7 @@ const LABELS: Record<ReportLanguage, ReportLabelSet> = {
       employeeName: 'Nama',
       pileId: 'Pile_ID',
       ore: 'Ore',
+      stockpile: 'Stockpile',
       rit: 'Rit',
       batch: 'Batch',
       increment: 'Increment',
@@ -96,6 +139,7 @@ const LABELS: Record<ReportLanguage, ReportLabelSet> = {
       employeeName: 'Name',
       pileId: 'Pile_ID',
       ore: 'Ore',
+      stockpile: 'Stockpile',
       rit: 'Rit',
       batch: 'Batch',
       increment: 'Increment',

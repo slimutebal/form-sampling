@@ -76,6 +76,36 @@ export function remainingPositionsForSeed(
   return ok(positions)
 }
 
+/**
+ * The remaining configured Rit positions starting at an explicit
+ * BatchPosition (inclusive) through the configured BatchSize —
+ * post-inspection correction §6 uses this for a confirmed fresh-pile
+ * starting position, where the caller specifies the exact first position
+ * to record (e.g. Batch 25 / Rit 11) rather than a "last recorded rit" to
+ * continue from (`BatchContinuationSeed`/`remainingPositionsForSeed`,
+ * which cannot express "start at Rit 1" since `RitNumber` excludes 0).
+ */
+export function remainingPositionsFromStart(
+  start: BatchPosition,
+  batchSize: BatchSize,
+): Result<BatchPosition[], DomainError> {
+  const startRit = Number(start.ritNumber)
+  const size = Number(batchSize)
+
+  if (startRit > size) {
+    return err({
+      code: 'RIT_EXCEEDS_BATCH_SIZE',
+      message: `Start rit ${startRit} exceeds configured batch size ${size}`,
+    })
+  }
+
+  const positions: BatchPosition[] = []
+  for (let rit = startRit; rit <= size; rit++) {
+    positions.push(createBatchPosition(start.batchNumber, rit as RitNumber))
+  }
+  return ok(positions)
+}
+
 function findDuplicateBatchNumber(seeds: readonly BatchContinuationSeed[]): BatchNumber | undefined {
   const seen = new Set<number>()
   for (const seed of seeds) {

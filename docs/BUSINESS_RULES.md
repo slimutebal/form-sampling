@@ -159,6 +159,53 @@ CONFIRMED_BUSINESS_RULE
 
 ---
 
+## BR-MASTER-004 — Canonical New Pile_ID Derives Sector/Stockpile/Ore (post-inspection correction §3)
+
+Untuk **Pile_ID baru** (belum ada di master), Sector/Stockpile/Ore tidak
+ditanyakan ke operator ketika grammar Pile_ID deterministik. Sector tetap
+berasal dari Shift aktif dan divalidasi terhadap Shift (lihat detail per
+keluarga di bawah).
+
+Confirmed canonical families (`deriveCanonicalPileArea`,
+`src/domain/master/canonical-pile-id.ts`):
+
+```text
+FAMILY A — LIM stockpile
+L<n>_<nn>   → Stockpile LS_<n>   / Ore LIM
+L<n>_S<nn>  → Stockpile LS_<n>   / Ore SAP
+
+FAMILY B — SAP stockpile
+S<n>_<nn>   → Stockpile SS_<n>   / Ore SAP
+S<n>_L<nn>  → Stockpile SS_<n>   / Ore LIM
+
+FAMILY C — DS-C stockpile
+DS-C<n>_L<nn> → Sector DS, Stockpile DS-C_<n> / Ore LIM
+DS-C<n>_S<nn> → Sector DS, Stockpile DS-C_<n> / Ore SAP
+```
+
+Aturan kanonik: `_L` selalu berarti LIM, `_S` selalu berarti SAP —
+**termasuk untuk keluarga DS-C**. Ini adalah koreksi resmi dari
+process owner terhadap baris master `Pile_Areas` existing yang salah:
+baris `DS-C<n>_L<nn>` yang saat ini tersimpan dengan Ore = SAP adalah
+**wrong master data**. Aplikasi **tidak** boleh secara otomatis menulis
+ulang baris live Google Sheet yang salah tersebut selama refactor ini —
+inkonsistensi tersebut dilaporkan untuk dikoreksi terpisah oleh pemilik
+data (lihat laporan akhir setiap kali koreksi ini dijalankan).
+
+Untuk Pile_ID lama/legacy yang tidak sesuai satu pun grammar di atas:
+aplikasi tidak menebak grammar baru dan tidak jatuh kembali ke selector
+Stockpile/Ore manual. Tampilkan pesan bisnis stabil
+`PILE_ID_PATTERN_NOT_SUPPORTED`. Operator tetap dapat memilih Pile
+existing yang persis melalui master lookup biasa.
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
+```
+
+---
+
 # 4. Shift Rules
 
 ## BR-SHIFT-001 — Every Transaction Belongs to a Shift
@@ -211,6 +258,46 @@ Internal code tidak berubah.
 
 ---
 
+## BR-SHIFT-003 — Previous Shift Relationship
+
+Aplikasi menggunakan siklus dua shift per hari (`DS` / `NS`, BR-SHIFT-002)
+untuk menentukan shift sebelumnya (previous shift) pada Handover Import
+(lihat § 6 Previous Shift / Pending Rules).
+
+Current shift `NS` tanggal `D`:
+
+```text
+previous = DS tanggal D (hari yang sama)
+```
+
+Current shift `DS` tanggal `D`:
+
+```text
+previous = NS tanggal D-1 (hari sebelumnya)
+```
+
+Contoh:
+
+```text
+Current: 2026-09-05 / NS
+Previous: 2026-09-05 / DS
+
+Current: 2026-09-05 / DS
+Previous: 2026-09-04 / NS
+```
+
+Perhitungan tanggal D-1 menggunakan aritmatika kalender murni pada string
+`YYYY-MM-DD` (termasuk lintas akhir bulan dan akhir tahun) — tidak boleh
+menggunakan parsing tanggal berbasis locale device.
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
+```
+
+---
+
 # 5. Manpower Rules
 
 ## BR-MAN-001 — Staff Selected From Master
@@ -240,6 +327,59 @@ Dispatcher
 ```
 
 Role disimpan sebagai stable code dan diterjemahkan pada UI.
+
+**Post-inspection correction (§1) — Job Desk prefill:** `CrewReference.jobCode`
+(`Emply_Crew` / `Crews` master) prefills Job Desk when it is non-empty.
+When the master's Job column is blank — confirmed to be the case for most
+Crew rows in the legacy workbook — the operator must select/type Job Desk
+during shift setup; the app never invents one. The Staff/Employee master
+has no exact Job field at all, so a Staff/Employee entry's Job Desk stays
+optional and may remain blank — the app must never invent whether a Staff
+member is e.g. SPV or Foreman.
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
+```
+
+---
+
+## BR-MAN-003 — PIC Determined by Master Table Membership (post-inspection correction §1)
+
+Penanggung Jawab / PIC bukan checkbox yang dipilih manual operator.
+PIC ditentukan murni oleh master table tempat personel tersebut resolve:
+
+```text
+Personel resolve dari Employees / Emply_Staff (Staff)
+→ isPic = true, SELALU
+
+Personel resolve dari Crews / Emply_Crew (Crew)
+→ isPic = false, SELALU
+```
+
+Penentuan ini berbasis **keanggotaan master table**, bukan string-prefix
+parsing (mis. prefix ID "SCM") — ID Staff kebetulan saat ini ber-prefix
+SCM, tapi itu bukan sumber kebenaran; keanggotaan pada master Employees
+adalah sumber kebenaran satu-satunya
+(`createManpowerFromDraft`, `src/application/manpower/create-manpower-from-draft.ts`).
+
+Sebuah shift boleh mempunyai lebih dari satu Staff/PIC sekaligus.
+Aplikasi tidak boleh membatasi ke satu PIC saja, dan operator tidak
+pernah men-toggle PIC secara manual — tidak ada checkbox PIC pada UI
+Manpower Setup (`src/features/manpower/manpower-setup-page.tsx`). Setiap
+baris Staff yang ditambahkan otomatis ditampilkan sebagai Penanggung
+Jawab.
+
+PIC adalah metadata internal shift (`ManpowerAssignment.isPic`,
+`src/domain/manpower/manpower-assignment.ts`) dan **tidak** menjadi
+kolom pada fixed report — lihat BR-REPORT-007.
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
+```
 
 ---
 
@@ -581,6 +721,18 @@ Front 1
 
 Front sebaiknya mempunyai internal ID sendiri, sementara `BR1/01` menjadi business/display code.
 
+**Phase 18 confirmation:** Front Number adalah selector tertutup, nilai 1
+sampai 25 — bukan free text. Operator tidak pernah mengetik kode
+gabungan `BR1/01` secara manual; FrontId selalu diturunkan dari Sector
+Shift aktif + Front Number yang dipilih (`createFrontId`,
+`src/domain/fleet/front.ts`).
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
+```
+
 ---
 
 ## BR-FLEET-002 — Fleet Belongs to Front
@@ -754,6 +906,18 @@ history
 ```
 
 Jangan hanya menampilkan warning lalu membuang transaksi.
+
+**Phase 18 final correction (§6):** Truck checker pada layar Pile
+Operation menampilkan truck efektif Front (effective fleet) lebih
+dahulu, tetapi tetap membolehkan pencarian ke seluruh master truck di
+luar effective fleet tersebut — operator dapat memilihnya, dan transaksi
+tetap tersimpan dengan `truckValidation.status = WRONG_TRUCK`
+(`src/domain/fleet/truck-validation.ts`). `recordHaulage`
+(`src/application/haulage-operation/create-haulage-record.ts`) yang
+sebelumnya menolak setiap klasifikasi non-`VALID` sebagai defensive
+guard sudah dihapus — guard tersebut sebelumnya justru melanggar aturan
+ini karena mem-block penyimpanan Wrong Truck sama sekali dari alur
+checker normal.
 
 ---
 
@@ -1211,6 +1375,82 @@ Batch/Rit
 Sample
 Status
 Remark
+```
+
+---
+
+## BR-REPORT-007 — Fixed Report Is the Acceptance Contract (Phase 18 confirmation)
+
+Struktur report pada §16 (Header, Manpower, Production Summary/Pile
+Summary, Sample Handling, Haulage Detail) adalah business acceptance
+contract yang tidak boleh berubah bentuk tanpa konfirmasi ulang.
+
+Aturan tambahan yang dikonfirmasi pada Phase 18:
+
+```text
+Kolom Manpower TIDAK menyertakan PIC (BR-MAN-003).
+
+Location pada Manpower = Sector/Sampling_House_Code
+contoh: BR1/SH_01
+
+Internal shift code tetap DS/NS.
+Report display:
+DS → D
+NS → N
+
+WhatsApp report menyertakan Haulage Detail — bukan lagi
+supplementary yang dihilangkan.
+```
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
+```
+
+---
+
+## BR-REPORT-008 — Pile Page Is the Dynamic Checker Equivalent (Phase 18 confirmation)
+
+Setiap Pile aktif pada shift menjadi halaman operasional checker yang
+setara dengan sheet Excel `Pile_01` .. `Pile_06` — bukan fitur terpisah
+per pile, dan tanpa batas jumlah pile (lihat §25, `src/domain/pile/pile.ts`).
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
+```
+
+---
+
+## BR-REPORT-009 — New Pile Written to Shared Master (Phase 18 confirmation)
+
+Pile_ID baru yang dibuat melalui New Pile Master (§6 spesifikasi UX)
+harus ditulis ke Google Sheet `Pile_Areas` yang dipakai bersama, bukan
+hanya disimpan lokal pada shift yang membuatnya — supaya shift
+berikutnya juga dapat menggunakannya. Karena ini mengubah master
+bersama, operasi ini hanya diperbolehkan saat online.
+
+**Post-inspection correction (§4/§5) — write-then-verify transport:**
+Apps Script Web App tidak reliably bisa dibaca response body-nya untuk
+sebuah POST (redirect `script.google.com` → `script.googleusercontent.com`
+yang sama yang membuat GET master-data harus JSONP), dan
+`Content-Type: application/json` memicu CORS preflight yang gagal
+terhadap Web App yang di-deploy. Karena itu penulisan Pile baru
+menggunakan POST CORS-simple (`mode: "no-cors"`,
+`Content-Type: text/plain;charset=utf-8`) yang fire-and-forget, lalu
+**diverifikasi** dengan membaca ulang master data lewat JSONP reader
+yang sudah ada dan mencocokkan baris baru persis
+(Sector_Code/Stockpile_Code/Pile_ID/Ore). Pile baru **tidak pernah**
+diaktifkan/dipilih secara lokal sebelum verifikasi ini berhasil — lihat
+`docs/GOOGLE_APPS_SCRIPT_CONTRACT.md` untuk detail transport dan kontrak
+server yang dikonfirmasi.
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
 ```
 
 ---
@@ -1989,6 +2229,12 @@ Production summary
 Excel archive handover
 
 Bilingual presentation with language-neutral data
+
+Staff (Employee) source → always PIC; Crew source → never PIC (§1)
+
+Canonical new Pile_ID → Sector/Stockpile/Ore derivation (§3, BR-MASTER-004)
+
+Fresh pile initial Batch/Rit default 001/001 with pre-first-DT override (§37)
 ```
 
 Items still requiring explicit operational confirmation:
@@ -2003,4 +2249,300 @@ Wrong Truck blocking behavior
 Correction / delete policy
 
 Authorization for Start Without Previous Shift
+```
+
+---
+
+# 37. Fresh Pile Initial Batch (post-inspection correction — CONFIRMED)
+
+Ketika sebuah Pile aktif pada shift ini sama sekali tidak mempunyai
+riwayat pending batch dari handover (bukan carry-over, dan belum pernah
+ada haulage sebelumnya pada Pile tersebut), rule ini sebelumnya
+`NEEDS_CONFIRMATION` — process owner sekarang mengonfirmasi:
+
+```text
+Batch Awal default = 001
+Rit Awal default   = 001
+```
+
+tetapi operator/supervisor tetap mempunyai fleksibilitas untuk mengubah
+posisi awal tersebut **sebelum haulage pertama disimpan**. Contoh:
+
+```text
+default:            001 / 001
+supervisor override: 025 / 001
+                      025 / 011
+```
+
+Setelah haulage pertama pada Pile tersebut disimpan, posisi awal
+**terkunci** — tidak boleh di-reseed sembarangan. Progres selanjutnya
+sepenuhnya mengikuti batch/haulage engine yang sudah ada (rollover,
+sampling interval, dst — tidak ada rule baru).
+
+Domain concept: `FreshPileStartPosition`
+(`src/domain/pile/fresh-pile-start-position.ts`), factory default
+`createDefaultFreshPileStartPosition()`, validasi memakai ulang
+`BatchNumber`/`RitNumber` (tidak ada range rule baru). Persisted sebagai
+field opsional pada `Pile.freshPileStartPosition`
+(`src/domain/pile/pile.ts`) — field tambahan pada shape yang sudah ada,
+bukan tabel/index Dexie baru, sehingga workspace lama tanpa field ini
+tetap terbaca. Lock-setelah-haulage-pertama ditegakkan oleh
+`confirmFreshPileStartPosition`
+(`src/application/pile-workspace/confirm-fresh-pile-start-position.ts`),
+bukan hanya disembunyikan di UI.
+
+`derivePileHaulagePlan` (`src/application/haulage-operation/derive-pile-haulage-plan.ts`)
+memakai `freshPileStartPosition` — jika tersedia dan Pile tidak punya
+CONTINUE carry-over aktif — untuk membangun plan lewat
+`remainingPositionsFromStart` (`src/domain/batch/batch-engine.ts`), bukan
+`planContinuations([], ...)` yang tetap menghasilkan rencana kosong
+untuk Pile yang benar-benar belum dikonfirmasi. `HAULAGE_PLAN_EMPTY`
+karenanya tidak lagi menjadi blocking permanen untuk Pile baru yang
+genuinely fresh — begitu default tersedia, layar checker Pile
+menampilkan form "Initial Position" (Batch Awal/Rit Awal) alih-alih
+pesan "hubungi supervisor" permanen.
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
+```
+
+---
+
+# 38. Active-Shift Fleet Continuation (CONFIRMED)
+
+Fleet Setup tidak lagi write-once. Selama shift ACTIVE, checker/supervisor
+dapat membuka loading point baru kapan pun titik muat berpindah, tanpa
+mengulang shift.
+
+## Front lineage
+
+```text
+BR1/01 -> BR1/04 -> BR1/07
+```
+
+Setiap Front memiliki paling banyak satu direct successor. Rantai selalu
+linear — tidak pernah bercabang:
+
+```text
+BR1/01 -> BR1/04
+        -> BR1/05   (INVALID — dua successor untuk satu predecessor)
+```
+
+Fleet Reference (`FleetDefinition.kind === 'DERIVED'`, lihat §9) pada
+konteks ini ADALAH mekanisme continuation: Front baru mewarisi Hauler dan
+effective truck membership Front sebelumnya lewat referensi Fleet, lalu
+operator boleh Add/Remove truck di atasnya (§9 note BR-FLEET-004/005 tidak
+berubah — tidak ada mekanisme fleet math baru).
+
+ACTIVE vs HISTORICAL **tidak disimpan sebagai field terpisah** — keduanya
+diturunkan murni dari graph Fleet Reference:
+
+```text
+Front yang direferensikan oleh satu successor -> HISTORICAL
+Front yang tidak direferensikan siapa pun      -> ACTIVE
+```
+
+Domain: `deriveFrontLineage` (`src/domain/fleet/front-lineage.ts`).
+Branching (>1 successor untuk satu predecessor) ditolak oleh
+`createFleetSetup` sendiri dengan `FLEET_REFERENCE_BRANCHING`
+(`src/domain/fleet/fleet-setup.ts`) — invariant ini berlaku untuk seluruh
+FleetSetup, bukan hanya saat membuat continuation baru.
+
+Historical transactions **tidak pernah** direvalidasi ulang. Haulage lama
+tetap menunjuk `Front_ID`/`Fleet_ID` yang sama persis seperti saat
+disimpan (lihat §16/§23 — HaulageTransaction adalah snapshot immutable).
+
+## Nomor Front baru
+
+Front No berikutnya = MAX nomor Front existing pada Sector shift ini + 1,
+**bukan** gap pertama yang tersedia — Front No merepresentasikan urutan
+kronologis operasional. Maksimum tetap 25; begitu 25 sudah dipakai,
+`FRONT_NUMBER_LIMIT_REACHED`. Domain: `nextFrontNumber`
+(`src/domain/fleet/front.ts`).
+
+## Destination boleh berubah saat continuation
+
+Front baru boleh mengganti Destination/Pile dari Front acuannya (dumping
+area penuh, dsb). Saat Destination berubah:
+
+```text
+Pile lama    -> riwayat/pending state TIDAK dipindahkan, tetap seperti semula
+Pile baru    -> jadi operational untuk Front successor
+```
+
+Jika Pile tujuan sudah ada di master tapi belum aktif di workspace shift
+ini, Pile tersebut diaktifkan (bukan dibuat baru). Jika benar-benar
+Pile_ID baru, alur New Pile Master yang sudah ada (Apps Script write +
+JSONP verification) tetap dipakai — tidak ada mekanisme baru.
+
+## Single-successor enforcement pada continuation
+
+Sebelum menyimpan continuation, jika Front acuan sudah punya successor:
+
+```text
+FRONT_ALREADY_SUPERSEDED
+```
+
+Application layer: `appendFrontContinuation`
+(`src/application/fleet-setup/append-front-continuation.ts`) — melakukan
+seluruh validasi lewat `createFleetSetup`/`resolveEffectiveFleetAgainstMaster`
+yang sudah ada (§9), tidak menduplikasi fleet math di layer manapun.
+
+## Persistence
+
+Write atomik baru: `LocalOperationalStore.appendFrontContinuation`
+(`src/infrastructure/local-db/local-operational-store.ts`) — mengganti
+`fleetSetup` yang tersimpan dan, bila perlu, mengaktifkan satu Pile baru
+ke `piles`, dalam satu transaksi Dexie. Tidak ada Dexie schema version
+bump — `fleetSetup`/`piles` adalah field yang sudah ada pada
+`ShiftWorkspaceRecord`. `haulageTransactions` tidak pernah disentuh oleh
+write ini.
+
+## Pile checker Front options
+
+Untuk Pile yang sedang dibuka, opsi Front pada layar haulage checker
+adalah Front ACTIVE **dan** `destinationPileId`-nya cocok dengan Pile
+tersebut (Front tanpa Destination terkonfigurasi tetap tersedia untuk
+semua Pile — kompatibilitas mundur). Historical Front tidak pernah
+muncul. Domain/application: `operationalFleetOptionsForPile`
+(`src/application/haulage-operation/operational-fleet-options.ts`).
+
+**Phase 18 final correction (§5):** Front tidak lagi dipilih di layar
+checker itu sendiri — operator memilih Front di layar Pile List (lihat
+§39 di bawah), dan checker hanya menerima satu Front yang sudah
+divalidasi lewat `operationalFleetOptionForFront` (fungsi baru di file
+yang sama, membungkus `operationalFleetOptionsForPile`). Aturan
+kelayakan Front (ACTIVE + Destination cocok) tidak berubah — hanya titik
+di mana validasi itu dijalankan yang berpindah dari dropdown checker ke
+resolusi route `/piles/:pileId?front=...`.
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
+```
+
+---
+
+# 39. Final MVP UX/Operational Correction (Phase 18 closing, CONFIRMED)
+
+Kumpulan koreksi terakhir sebelum Phase 18 ditutup, semuanya UX/wiring —
+tidak ada business rule baru yang bertentangan dengan §9/§29/§36-§38 di
+atas; setiap koreksi di bawah hanya membuat implementasi lebih konsisten
+dengan rule yang sudah dikonfirmasi.
+
+## Front Number disembunyikan begitu terpakai (initial Fleet Setup)
+
+Selama initial Fleet Setup (satu sesi entri sebelum shift ACTIVE),
+selector Front No (§9/BR-FLEET-001, 1–25) tidak lagi menampilkan nomor
+yang sudah dipakai oleh Front lain pada draft yang sama — mencegah
+operator memilih nomor yang pasti akan gagal validasi
+`DUPLICATE_FRONT_ID` (§9, `fleet-setup.ts`) setelah disimpan. Validasi
+domain itu sendiri **tetap ada** sebagai defense-in-depth, bukan
+dihapus. Implementasi: `src/features/fleet-setup/front-editor.tsx`.
+
+## Fleet Reference "Tidak Ada" saat shift ACTIVE = Front BASE independen baru
+
+§38 (Active-Shift Fleet Continuation) hanya mencakup mode continuation
+(Fleet Reference = Front ACTIVE, mewarisi Hauler/Destination/effective
+truck). Selama shift ACTIVE, "+ Tambah Front" sekarang juga mendukung
+mode kedua: Fleet Reference = **Tidak Ada**, yang membangun Front BASE
+independen baru — versi ringkas dari initial Fleet Setup, bukan model
+fleet kedua:
+
+```text
+operator memilih Hauler sendiri
+operator memilih Destination/Pile sendiri (wajib — tidak ada acuan untuk mewarisi)
+operator menambah truck dari Hauler yang dipilih (bukan truck warisan)
+tidak ada Front acuan yang menjadi HISTORICAL
+```
+
+Application layer: `appendNewBaseFront`
+(`src/application/fleet-setup/append-new-base-front.ts`) — reuse
+`createBaseFleetDefinition`/`createFleetSetup`/
+`resolveEffectiveFleetAgainstMaster` yang sama seperti
+`appendFrontContinuation` dan initial Fleet Setup's BASE branch, dengan
+nomor Front baru diturunkan lewat rule yang sama
+(`nextFrontNumber`/`frontNumberFromFrontId`, §38). UI:
+`src/features/fleet/front-continuation-editor.tsx` (satu editor, dua
+mode, diturunkan dari pilihan Fleet Reference — bukan dua layar
+terpisah). "+ Tambah Front" tidak lagi disabled saat belum ada Front
+ACTIVE sama sekali (mode BASE tidak membutuhkan satu pun).
+
+## Pile List menampilkan Front ACTIVE per Destination, dan memilih Front di sana
+
+Pile List (`src/features/piles/piles-list-page.tsx`) menampilkan, untuk
+setiap Pile aktif pada workspace, seluruh Front ACTIVE
+(`deriveFrontLineage`, §38) yang `destinationPileId`-nya adalah Pile
+tersebut, sebagai chip yang dapat ditekan. Front HISTORICAL tidak pernah
+muncul. Operator memilih Front di layar ini — bukan di dalam checker
+(lihat §29/BR-TRUCK-003 di atas dan bagian "Pile checker Front options"
+pada §38) — dan navigasi membawa **kedua** id secara eksplisit lewat
+route query:
+
+```text
+/piles/:pileId?front=<FrontId>
+```
+
+Bukan mutable global UI state. Satu Front aktif untuk satu Pile berarti
+satu chip — tetap satu tekan untuk masuk checker; lebih dari satu Front
+berarti operator memilih salah satu chip terlebih dahulu. Pile tanpa
+Front ACTIVE menampilkan catatan kosong, bukan chip kosong yang bisa
+ditekan.
+
+`PileDetailPage` (`src/features/piles/PileDetailPage.tsx`) memvalidasi
+`front` dari query lewat `operationalFleetOptionForFront` (ada/ACTIVE/
+Destination cocok — lihat "Pile checker Front options" di atas). Route
+context yang hilang atau basi menampilkan pesan error yang stabil dan
+sudah diterjemahkan, dengan aksi kembali ke Pile List — tidak pernah
+menebak Front lain secara diam-diam.
+
+## Checker tidak lagi bertanya Front — hanya Truck
+
+Begitu Pile + Front diketahui dari route, `PileHaulagePage`
+(`src/features/piles/pile-haulage-page.tsx`) menampilkan keduanya
+sebagai konteks read-only (lihat `PileOperationalHeader`) dan input
+operasional hanya tersisa Truck. Tidak ada logika validasi di React —
+`operationalFleetOptionForFront` (application layer) tetap satu-satunya
+tempat aturan kelayakan Front dijalankan.
+
+## Riwayat posisi: TERSAMPEL vs TERCATAT
+
+Riwayat posisi haulage yang tersimpan (`RecordedHaulageList`) menampilkan
+label **TERSAMPEL** untuk posisi yang transaksinya punya
+`samplingEvaluation.sampleRequired = true`, dan tetap **TERCATAT** untuk
+posisi non-sample. Ini murni presentasi — sumbernya adalah hasil
+transaksi/sample yang sudah ada (§4/Phase 4 sampling engine), bukan
+status baru yang bisa diedit manual.
+
+## Compact sample count pada ringkasan atas layar Pile Operation
+
+Ringkasan atas (sebelumnya hanya Batch + Rit Berikutnya) bertambah satu
+kolom compact "SAMPEL" berisi jumlah increment sample yang sudah tercatat
+pada batch aktif saat ini dibanding maksimum increment sample batch itu
+(`floor(BatchSize / SamplingInterval)`, mis. SAP 20/2 = 10). Domain:
+`maxSampleIncrementsForBatch` (`src/domain/sampling/sampling-engine.ts`).
+Application: `deriveCurrentBatchSampleCount`
+(`src/application/haulage-operation/current-batch-sample-count.ts`) —
+menghitung posisi distinct (bukan transaksi) sehingga transaksi
+wrong-truck yang dicatat ulang pada Rit yang sama tidak terhitung dua
+kali. Tidak ada card baru — terintegrasi ke `PileOperationalHeader` yang
+sudah ada.
+
+## Report page: satu preview operasional, bukan dua
+
+Layar Report (`src/features/report/ReportPage.tsx`) hanya menampilkan
+satu preview laporan operasional — `WhatsAppReportPreview` (format tetap
+sesuai §19/§20, dengan aksi Copy/Share yang tidak berubah). Tampilan
+`ReportSections` (tabel terstruktur duplikat dari laporan yang sama)
+sudah dihapus sepenuhnya, bukan disembunyikan — file
+`src/features/report/report-sections.tsx` dan test-nya tidak lagi ada.
+Excel export (§21) tidak berubah.
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
 ```

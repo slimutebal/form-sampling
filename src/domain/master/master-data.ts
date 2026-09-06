@@ -2,7 +2,8 @@ import type { Brand } from '../common/brand'
 import type { OreCode } from '../common/codes'
 import type { DomainError, Result } from '../common/result'
 import { err, ok } from '../common/result'
-import type { EmployeeId, TruckId } from '../common/identifiers'
+import type { EmployeeId, PileId, TruckId } from '../common/identifiers'
+import type { CrewCode } from './master-codes'
 import type {
   CrewReference,
   EmployeeReference,
@@ -255,4 +256,23 @@ export function findTruck(masterData: MasterData, truckId: TruckId): TruckRefere
  */
 export function findEmployee(masterData: MasterData, employeeId: EmployeeId): EmployeeReference | undefined {
   return masterData.employees.find((employee) => employee.id === employeeId)
+}
+
+/**
+ * Looks up a crew by CrewCode (BR-MAN-002: crew/job assignment comes
+ * from the crew master). Returns `undefined` explicitly on a miss —
+ * callers must not assume any fallback/default crew.
+ */
+export function findCrew(masterData: MasterData, code: CrewCode): CrewReference | undefined {
+  return masterData.crews.find((crew) => crew.code === code)
+}
+
+/**
+ * Looks up a pile area by PileId (Phase 18 §5/§6: Fleet Setup's
+ * Destination/Pile field and New Pile Master duplicate detection both
+ * need a single-row lookup rather than re-filtering `pileAreas` inline).
+ * Returns `undefined` explicitly on a miss.
+ */
+export function findPileArea(masterData: MasterData, pileId: PileId): PileAreaReference | undefined {
+  return masterData.pileAreas.find((pileArea) => pileArea.pileId === pileId)
 }

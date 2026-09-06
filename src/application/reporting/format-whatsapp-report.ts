@@ -1,4 +1,6 @@
+import { formatBatchRit, formatReportDate } from './report-localization'
 import type {
+  HaulageDetailRow,
   PendingSampleRow,
   ProductionSummaryRow,
   ReportLanguage,
@@ -9,21 +11,40 @@ import type {
 } from './report-types'
 
 /**
- * Formats the Phase 14 `ShiftReport` DTO into a compact, WhatsApp-friendly
- * plain-text message (ROADMAP Phase 15 §2-9). Pure formatting only — every
- * value here was already computed by
- * `@/application/reporting/build-shift-report`; this module never
- * aggregates, counts, re-derives, or independently translates anything. It
- * reads `report.labels` for every field/section label, exactly like
- * `@/integrations/excel/report-sheet-writer`. Haulage Detail is
- * deliberately omitted (§3) — it stays archive/report detail, not part of
- * the WhatsApp communication summary.
+ * Formats the Phase 14 `ShiftReport` DTO into the fixed WhatsApp-friendly
+ * business report contract (Phase 18 §1) used identically by Preview,
+ * Copy and Share. Pure formatting only — every value here was already
+ * computed by `@/application/reporting/build-shift-report`; this module
+ * never aggregates, counts, re-derives, or independently translates
+ * anything. It reads `report.labels` for every field/section label,
+ * exactly like `@/integrations/excel/report-sheet-writer`.
  *
- * The three empty-state strings below (no manpower / no wrong truck / no
- * pending samples) are Phase-15-only presentation text with no domain
- * counterpart in `ReportLabelSet`, so they stay local to this module
- * rather than being added to `report-localization.ts`.
+ * Section order matches the fixed contract exactly: HEADER, MANPOWER,
+ * PILE SUMMARY, SAMPLE HANDLING, HAULAGE DETAIL. Wrong Truck and Pending
+ * Samples remain as trailing supplementary sections (pre-existing, not
+ * part of the fixed 5-section contract, but not something to remove —
+ * "do not invent a new summary format" cuts both ways).
+ *
+ * The literal greeting/subtitle/Date-Shift/Week header strings and the
+ * three empty-state strings below have no domain counterpart in
+ * `ReportLabelSet`, so they stay local to this module rather than being
+ * added there — same rationale as the rest of this file.
  */
+const HEADER_TEXT: Record<ReportLanguage, { greeting: string; subtitle: string; dateShift: string; week: string }> = {
+  en: {
+    greeting: 'Dear All,',
+    subtitle: '-- Ore & Sample Production --',
+    dateShift: 'Date/Shift',
+    week: 'Week',
+  },
+  id: {
+    greeting: 'Kepada Semua,',
+    subtitle: '-- Produksi Ore & Sampel --',
+    dateShift: 'Tanggal/Shift',
+    week: 'Minggu',
+  },
+}
+
 const EMPTY_STATE_TEXT: Record<ReportLanguage, { manpower: string; wrongTruck: string; pendingSamples: string }> = {
   en: {
     manpower: 'No manpower assigned.',
@@ -45,17 +66,15 @@ function field(label: string, value: string | number): string {
   return `${label}: ${value}`
 }
 
-function isoWeekLabel(isoYear: number, isoWeekNumber: number): string {
-  return `${isoYear}-W${String(isoWeekNumber).padStart(2, '0')}`
-}
-
 function headerBlock(report: ShiftReport): string[] {
-  const { labels, header } = report
+  const { header, language } = report
+  const text = HEADER_TEXT[language]
   return [
+    text.greeting,
     bold(header.title),
-    field(labels.columns.date, String(header.date)),
-    field(labels.columns.shift, String(header.shiftCode)),
-    field(labels.columns.isoWeek, isoWeekLabel(header.isoWeek.isoYear, header.isoWeek.isoWeekNumber)),
+    text.subtitle,
+    field(text.dateShift, `${formatReportDate(String(header.date))} / ${header.shiftCodeLabel}`),
+    field(text.week, header.isoWeek.isoWeekNumber),
   ]
 }
 
@@ -117,6 +136,25 @@ function sampleHandlingBlock(report: ShiftReport): string[] {
   return lines
 }
 
+/**
+ * Haulage Detail (Phase 18 §1/§11) — every recorded transaction, wrong
+ * truck rows included (never filtered out). "Remark" reuses the same
+ * `wrongTruckReasonLabels` already computed by `buildShiftReport`
+ * (BR-TRUCK-003's business mapping) rather than inventing a new label;
+ * blank for a VALID row.
+ */
+function haulageDetailBlock(report: ShiftReport): string[] {
+  const { labels, haulageDetail } = report
+  const lines = [bold(labels.sections.haulageDetail)]
+  for (const row of haulageDetail as readonly HaulageDetailRow[]) {
+    const remark = row.wrongTruckReasonLabels.length > 0 ? row.wrongTruckReasonLabels.join(', ') : '-'
+    lines.push(
+      `- ${field(labels.columns.transactionId, String(row.transactionId))} | ${field(labels.columns.truckId, String(row.truckId))} | ${field(labels.columns.ore, String(row.oreCode))} | ${field(labels.columns.stockpile, row.stockpileCode ? String(row.stockpileCode) : '-')} | ${field(labels.columns.pileId, String(row.pileId))} | ${field(labels.columns.batch, formatBatchRit(Number(row.batchNumber), Number(row.ritNumber)))} | ${field(labels.columns.sampleStatus, row.sampleStatusLabel)} | ${field(labels.columns.truckStatus, row.truckStatusLabel)} | ${field(labels.columns.reasons, remark)}`,
+    )
+  }
+  return lines
+}
+
 function wrongTruckBlock(report: ShiftReport): string[] {
   const { labels, wrongTruck, language } = report
   const lines = [bold(labels.sections.wrongTruck)]
@@ -163,6 +201,7 @@ export function formatWhatsAppReport(report: ShiftReport): string {
     manpowerBlock(report),
     productionSummaryBlock(report),
     sampleHandlingBlock(report),
+    haulageDetailBlock(report),
     wrongTruckBlock(report),
     pendingSamplesBlock(report),
   ]

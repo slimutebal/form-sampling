@@ -291,7 +291,7 @@ describe('buildShiftExportSnapshot', () => {
     const result = buildShiftExportSnapshot(
       baseInput({
         reportLanguage: 'en',
-        manpowerAssignments: [{ employeeId: fixtureEmployeeId('12345'), jobDeskCode: 'FOREMAN' }],
+        manpowerAssignments: [{ personId: fixtureEmployeeId('12345'), name: 'John Doe', jobDeskCode: 'FOREMAN' }],
       }),
     )
     expect(result.ok).toBe(true)
@@ -299,17 +299,6 @@ describe('buildShiftExportSnapshot', () => {
     expect(result.value.report.language).toBe('en')
     expect(result.value.report.manpower).toHaveLength(1)
     expect(result.value.report.manpower[0]?.employeeName).toBe('John Doe')
-  })
-
-  it('propagates a Phase 14 report validation error (unknown manpower EmployeeId)', () => {
-    const result = buildShiftExportSnapshot(
-      baseInput({
-        manpowerAssignments: [{ employeeId: fixtureEmployeeId('99999'), jobDeskCode: 'FOREMAN' }],
-      }),
-    )
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.error.code).toBe('REPORT_MANPOWER_EMPLOYEE_NOT_FOUND')
   })
 
   it('does not mutate any input array or object', () => {

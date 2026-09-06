@@ -6,6 +6,7 @@ import type { PendingBatchCarryOver } from '../../domain/handover/carry-over-pen
 import type { HandoverPendingSample } from '../../domain/handover/carry-over-pending-sample'
 import type { HandoverSchemaVersion } from '../../domain/handover/handover-schema'
 import type { HaulageTransaction } from '../../domain/haulage/haulage-transaction'
+import type { ManpowerAssignment } from '../../domain/manpower/manpower-assignment'
 import type { MasterData } from '../../domain/master/master-data'
 import type { Pile } from '../../domain/pile/pile'
 import type { SamplePosition } from '../../domain/sample-handling/sample-position'
@@ -26,6 +27,11 @@ import type { Shift } from '../../domain/shift/shift'
  * back (`LocalShiftWorkspace` always exposes concrete arrays). An empty
  * array (old or new row) means no previous-shift handover was imported
  * ("Start Without Previous Shift").
+ *
+ * `manpower` (Phase 18 §4) is likewise optional rather than defaulted
+ * here, for the same reason: an existing pre-Phase-18 row genuinely has
+ * no such field on disk. `LocalOperationalStore` defaults it to `[]`
+ * when reading a record back.
  */
 export interface ShiftWorkspaceRecord {
   readonly shiftId: ShiftId
@@ -35,6 +41,7 @@ export interface ShiftWorkspaceRecord {
   readonly fleetSetup: FleetSetup
   readonly pendingBatches?: readonly PendingBatchCarryOver[]
   readonly pendingSamples?: readonly HandoverPendingSample[]
+  readonly manpower?: readonly ManpowerAssignment[]
 }
 
 /**

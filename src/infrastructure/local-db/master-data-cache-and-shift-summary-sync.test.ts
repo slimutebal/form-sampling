@@ -189,4 +189,27 @@ describe('LocalOperationalStore — shift summary sync outbox (Phase 16 §10/§1
     expect(pending.value.map((record) => record.status).sort()).toEqual(['FAILED', 'PENDING'])
     store.close()
   })
+
+  it('listShiftSummarySyncRecords returns every row regardless of status (Phase 18 §10/§11)', async () => {
+    const store = newStore()
+    const emptyResult = await store.listShiftSummarySyncRecords()
+    expect(emptyResult).toEqual({ ok: true, value: [] })
+
+    const statuses: ShiftSummarySyncRecord['status'][] = ['PENDING', 'SYNCING', 'SYNCED', 'FAILED']
+    for (const [index, status] of statuses.entries()) {
+      await store.upsertShiftSummarySyncRecord({
+        shiftId: fixtureShiftId(`SHIFT-${index}`),
+        summary: fixtureSummary(`SHIFT-${index}`),
+        status,
+        attemptCount: 0,
+        updatedAt: new Date('2026-09-04T00:00:00.000Z'),
+      })
+    }
+
+    const allResult = await store.listShiftSummarySyncRecords()
+    expect(allResult.ok).toBe(true)
+    if (!allResult.ok) return
+    expect(allResult.value.map((record) => record.status).sort()).toEqual(['FAILED', 'PENDING', 'SYNCED', 'SYNCING'])
+    store.close()
+  })
 })

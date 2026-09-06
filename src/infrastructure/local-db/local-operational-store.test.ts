@@ -1,5 +1,12 @@
 import Dexie from 'dexie'
 import { afterEach, describe, expect, it } from 'vitest'
+import { parseOreCode, parseSectorCode } from '../../domain/common/codes'
+import { parsePileId } from '../../domain/common/identifiers'
+import { parseBatchNumber } from '../../domain/batch/batch-number'
+import { parseRitNumber } from '../../domain/batch/rit-number'
+import { createManpowerAssignment } from '../../domain/manpower/manpower-assignment'
+import { parsePileAreaCode } from '../../domain/master/master-codes'
+import { createPileAreaReference } from '../../domain/master/references'
 import { parseDeliveryDestinationCode } from '../../domain/sample-handling/delivery-destination'
 import { createDeliveredDelivery, createNotPickedUpDelivery } from '../../domain/sample-handling/delivery-status'
 import type { Pile } from '../../domain/pile/pile'
@@ -10,6 +17,7 @@ import {
   buildFixtureHaulageTransaction,
   buildFixtureMasterData,
   buildFixtureSamplePosition,
+  buildFixtureLimPile,
   buildFixtureSapPile,
   buildFixtureShift,
   fixtureEmployeeId,
@@ -20,6 +28,11 @@ import {
 } from './local-db-test-fixtures'
 import { CURRENT_SHIFT_METADATA_KEY } from './records'
 import { LocalOperationalStore } from './local-operational-store'
+
+function must<T>(result: { ok: boolean; value?: T }): T {
+  if (!result.ok) throw new Error('invalid test fixture')
+  return result.value as T
+}
 
 let dbNameCounter = 0
 const createdDatabaseNames: string[] = []
@@ -66,6 +79,53 @@ describe('LocalOperationalStore — shift workspace', () => {
     expect(loaded.value?.shiftId).toBe('SHIFT-1')
     expect(loaded.value?.piles.map((pile) => pile.id)).toEqual(['PILE-1', 'PILE-2'])
     store.close()
+  })
+
+  it('B2. an initialized workspace with no manpower argument defaults to an empty array, never undefined', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+
+    const initResult = await store.initializeShiftWorkspace({ shift, piles: [], masterData, fleetSetup })
+    expect(initResult.ok).toBe(true)
+
+    const loaded = await store.loadCurrentShiftWorkspace()
+    expect(loaded.ok).toBe(true)
+    if (!loaded.ok) return
+    expect(loaded.value?.manpower).toEqual([])
+    store.close()
+  })
+
+  it('B3. manpower round-trips through initialization and reload unchanged (Phase 18 §4)', async () => {
+    const databaseName = uniqueDatabaseName()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    const manpower = [
+      createManpowerAssignment(FIXTURE_EMPLOYEE_ID, 'John Doe', 'Checker', true),
+      createManpowerAssignment('CREW-1', 'Jane Roe', 'Sampler', true),
+    ]
+
+    const firstStore = new LocalOperationalStore(databaseName)
+    const initResult = await firstStore.initializeShiftWorkspace({
+      shift,
+      piles: [],
+      masterData,
+      fleetSetup,
+      manpower,
+    })
+    expect(initResult.ok).toBe(true)
+    firstStore.close()
+
+    const reopenedStore = new LocalOperationalStore(databaseName)
+    const loaded = await reopenedStore.loadCurrentShiftWorkspace()
+    expect(loaded.ok).toBe(true)
+    if (!loaded.ok) return
+    // Multiple PIC assignments must round-trip intact — no one-PIC-only
+    // constraint anywhere in this persistence path.
+    expect(loaded.value?.manpower).toEqual(manpower)
+    reopenedStore.close()
   })
 
   it('C. workspace and current-shift pointer survive close/reopen of the same database', async () => {
@@ -269,6 +329,288 @@ describe('LocalOperationalStore — shift workspace', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.error.code).toBe('CURRENT_SHIFT_WORKSPACE_NOT_FOUND')
+    store.close()
+  })
+})
+
+describe('LocalOperationalStore — addPileToWorkspace (Phase 18 "Add Pile" correction)', () => {
+  it('A. adds a Pile to an existing workspace, preserving every other stored field', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+
+    const initResult = await store.initializeShiftWorkspace({ shift, piles: [], masterData, fleetSetup })
+    expect(initResult.ok).toBe(true)
+
+    const addResult = await store.addPileToWorkspace(fixtureShiftId('SHIFT-1'), buildFixtureSapPile('PILE-1'))
+    expect(addResult.ok).toBe(true)
+
+    const loaded = await store.loadCurrentShiftWorkspace()
+    expect(loaded.ok).toBe(true)
+    if (!loaded.ok) return
+    expect(loaded.value?.piles.map((pile) => pile.id)).toEqual(['PILE-1'])
+    expect(loaded.value?.shift.id).toBe('SHIFT-1')
+    expect(loaded.value?.masterData).toEqual(masterData)
+    store.close()
+  })
+
+  it('B. can add more than one Pile over separate calls', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    await store.initializeShiftWorkspace({ shift, piles: [buildFixtureSapPile('PILE-1')], masterData, fleetSetup })
+
+    const addResult = await store.addPileToWorkspace(fixtureShiftId('SHIFT-1'), buildFixtureLimPile('PILE-2'))
+    expect(addResult.ok).toBe(true)
+
+    const loaded = await store.loadCurrentShiftWorkspace()
+    if (!loaded.ok) return
+    expect(loaded.value?.piles.map((pile) => pile.id).sort()).toEqual(['PILE-1', 'PILE-2'])
+    store.close()
+  })
+
+  it('C. a duplicate PileId already active in the workspace is rejected, leaving existing piles unchanged', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    await store.initializeShiftWorkspace({ shift, piles: [buildFixtureSapPile('PILE-1')], masterData, fleetSetup })
+
+    const addResult = await store.addPileToWorkspace(fixtureShiftId('SHIFT-1'), buildFixtureSapPile('PILE-1'))
+    expect(addResult.ok).toBe(false)
+    if (addResult.ok) return
+    expect(addResult.error.code).toBe('DUPLICATE_PILE_ID_IN_SHIFT_WORKSPACE')
+
+    const loaded = await store.loadCurrentShiftWorkspace()
+    if (!loaded.ok) return
+    expect(loaded.value?.piles.map((pile) => pile.id)).toEqual(['PILE-1'])
+    store.close()
+  })
+
+  it('D. no workspace exists for the given ShiftId fails with SHIFT_WORKSPACE_NOT_FOUND', async () => {
+    const store = newStore()
+
+    const addResult = await store.addPileToWorkspace(fixtureShiftId('NEVER-INITIALIZED'), buildFixtureSapPile('PILE-1'))
+    expect(addResult.ok).toBe(false)
+    if (addResult.ok) return
+    expect(addResult.error.code).toBe('SHIFT_WORKSPACE_NOT_FOUND')
+    store.close()
+  })
+
+  it('E. an added Pile persists across close/reopen of the same database', async () => {
+    const databaseName = uniqueDatabaseName()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+
+    const firstStore = new LocalOperationalStore(databaseName)
+    await firstStore.initializeShiftWorkspace({ shift, piles: [], masterData, fleetSetup })
+    await firstStore.addPileToWorkspace(fixtureShiftId('SHIFT-1'), buildFixtureSapPile('PILE-1'))
+    firstStore.close()
+
+    const reopenedStore = new LocalOperationalStore(databaseName)
+    const loaded = await reopenedStore.loadCurrentShiftWorkspace()
+    if (!loaded.ok) return
+    expect(loaded.value?.piles.map((pile) => pile.id)).toEqual(['PILE-1'])
+    reopenedStore.close()
+  })
+})
+
+describe('LocalOperationalStore — confirmFreshPileStartPosition (post-inspection correction §6)', () => {
+  it('A. sets freshPileStartPosition on the matching Pile, preserving every other stored field', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    await store.initializeShiftWorkspace({
+      shift,
+      piles: [buildFixtureSapPile('PILE-1'), buildFixtureLimPile('PILE-2')],
+      masterData,
+      fleetSetup,
+    })
+
+    const startPosition = { batchNumber: must(parseBatchNumber(25)), ritNumber: must(parseRitNumber(11)) }
+    const result = await store.confirmFreshPileStartPosition(fixtureShiftId('SHIFT-1'), must(parsePileId('PILE-1')), startPosition)
+    expect(result.ok).toBe(true)
+
+    const loaded = await store.loadCurrentShiftWorkspace()
+    expect(loaded.ok).toBe(true)
+    if (!loaded.ok) return
+    const pile1 = loaded.value?.piles.find((pile) => pile.id === 'PILE-1')
+    const pile2 = loaded.value?.piles.find((pile) => pile.id === 'PILE-2')
+    expect(pile1?.freshPileStartPosition).toEqual(startPosition)
+    expect(pile2?.freshPileStartPosition).toBeUndefined()
+    store.close()
+  })
+
+  it('B. replaces a previously confirmed start position (still editable before first haulage)', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    await store.initializeShiftWorkspace({ shift, piles: [buildFixtureSapPile('PILE-1')], masterData, fleetSetup })
+
+    await store.confirmFreshPileStartPosition(fixtureShiftId('SHIFT-1'), must(parsePileId('PILE-1')), {
+      batchNumber: must(parseBatchNumber(1)),
+      ritNumber: must(parseRitNumber(1)),
+    })
+    const overridden = { batchNumber: must(parseBatchNumber(25)), ritNumber: must(parseRitNumber(11)) }
+    await store.confirmFreshPileStartPosition(fixtureShiftId('SHIFT-1'), must(parsePileId('PILE-1')), overridden)
+
+    const loaded = await store.loadCurrentShiftWorkspace()
+    if (!loaded.ok) return
+    expect(loaded.value?.piles.find((pile) => pile.id === 'PILE-1')?.freshPileStartPosition).toEqual(overridden)
+    store.close()
+  })
+
+  it('C. no matching Pile in the workspace fails with PILE_NOT_FOUND_IN_SHIFT_WORKSPACE', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    await store.initializeShiftWorkspace({ shift, piles: [], masterData, fleetSetup })
+
+    const result = await store.confirmFreshPileStartPosition(fixtureShiftId('SHIFT-1'), must(parsePileId('PILE-1')), {
+      batchNumber: must(parseBatchNumber(1)),
+      ritNumber: must(parseRitNumber(1)),
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('PILE_NOT_FOUND_IN_SHIFT_WORKSPACE')
+    store.close()
+  })
+
+  it('D. no workspace exists for the given ShiftId fails with SHIFT_WORKSPACE_NOT_FOUND', async () => {
+    const store = newStore()
+
+    const result = await store.confirmFreshPileStartPosition(fixtureShiftId('NEVER-INITIALIZED'), must(parsePileId('PILE-1')), {
+      batchNumber: must(parseBatchNumber(1)),
+      ritNumber: must(parseRitNumber(1)),
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('SHIFT_WORKSPACE_NOT_FOUND')
+    store.close()
+  })
+
+  it('E. a confirmed start position persists across close/reopen of the same database', async () => {
+    const databaseName = uniqueDatabaseName()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    const startPosition = { batchNumber: must(parseBatchNumber(1)), ritNumber: must(parseRitNumber(1)) }
+
+    const firstStore = new LocalOperationalStore(databaseName)
+    await firstStore.initializeShiftWorkspace({ shift, piles: [buildFixtureSapPile('PILE-1')], masterData, fleetSetup })
+    await firstStore.confirmFreshPileStartPosition(fixtureShiftId('SHIFT-1'), must(parsePileId('PILE-1')), startPosition)
+    firstStore.close()
+
+    const reopenedStore = new LocalOperationalStore(databaseName)
+    const loaded = await reopenedStore.loadCurrentShiftWorkspace()
+    if (!loaded.ok) return
+    expect(loaded.value?.piles.find((pile) => pile.id === 'PILE-1')?.freshPileStartPosition).toEqual(startPosition)
+    reopenedStore.close()
+  })
+})
+
+describe('LocalOperationalStore — activateNewMasterPile (Phase 18 §6)', () => {
+  function newPileArea() {
+    return createPileAreaReference(
+      must(parseSectorCode('S1')),
+      must(parsePileAreaCode('STOCK-NEW')),
+      must(parsePileId('PILE-NEW')),
+      must(parseOreCode('SAP')),
+    )
+  }
+
+  it('A. appends the Pile to workspace.piles and the PileArea to workspace.masterData.pileAreas atomically', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    await store.initializeShiftWorkspace({ shift, piles: [], masterData, fleetSetup })
+
+    const pileArea = newPileArea()
+    const result = await store.activateNewMasterPile(
+      fixtureShiftId('SHIFT-1'),
+      buildFixtureSapPile('PILE-NEW'),
+      pileArea,
+    )
+    expect(result.ok).toBe(true)
+
+    const loaded = await store.loadCurrentShiftWorkspace()
+    if (!loaded.ok) return
+    expect(loaded.value?.piles.map((pile) => pile.id)).toEqual(['PILE-NEW'])
+    expect(loaded.value?.masterData.pileAreas).toEqual([pileArea])
+    store.close()
+  })
+
+  it('B. a duplicate PileId already active in the workspace is rejected, leaving piles and masterData unchanged', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    await store.initializeShiftWorkspace({ shift, piles: [buildFixtureSapPile('PILE-NEW')], masterData, fleetSetup })
+
+    const result = await store.activateNewMasterPile(
+      fixtureShiftId('SHIFT-1'),
+      buildFixtureSapPile('PILE-NEW'),
+      newPileArea(),
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('DUPLICATE_PILE_ID_IN_SHIFT_WORKSPACE')
+
+    const loaded = await store.loadCurrentShiftWorkspace()
+    if (!loaded.ok) return
+    expect(loaded.value?.piles.map((pile) => pile.id)).toEqual(['PILE-NEW'])
+    expect(loaded.value?.masterData.pileAreas).toEqual([])
+    store.close()
+  })
+
+  it('C. no workspace exists for the given ShiftId fails with SHIFT_WORKSPACE_NOT_FOUND', async () => {
+    const store = newStore()
+
+    const result = await store.activateNewMasterPile(
+      fixtureShiftId('NEVER-INITIALIZED'),
+      buildFixtureSapPile('PILE-NEW'),
+      newPileArea(),
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('SHIFT_WORKSPACE_NOT_FOUND')
+    store.close()
+  })
+
+  it('D. does not affect any pre-existing HaulageTransaction/SamplePosition reads for other piles', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    const pile1 = buildFixtureSapPile('PILE-1')
+    await store.initializeShiftWorkspace({ shift, piles: [pile1], masterData, fleetSetup })
+    await store.addHaulageTransaction(
+      buildFixtureHaulageTransaction({
+        id: 'TXN-1',
+        shiftId: 'SHIFT-1',
+        pile: pile1,
+        batch: 1,
+        rit: 1,
+        masterData,
+        fleetSetup,
+      }),
+    )
+
+    await store.activateNewMasterPile(fixtureShiftId('SHIFT-1'), buildFixtureSapPile('PILE-NEW'), newPileArea())
+
+    const transactions = await store.listHaulageTransactionsForShiftPile(
+      fixtureShiftId('SHIFT-1'),
+      fixturePileId('PILE-1'),
+    )
+    if (!transactions.ok) return
+    expect(transactions.value.map((transaction) => transaction.id)).toEqual(['TXN-1'])
     store.close()
   })
 })

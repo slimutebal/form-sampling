@@ -1,5 +1,5 @@
 import type { FleetSetupDraftEntry } from '@/application/fleet-setup/fleet-setup-draft'
-import { parseFleetId, parseFrontId, parseTruckId, type TruckId } from '@/domain/common/identifiers'
+import { parseFleetId, parsePileId, parseTruckId, type TruckId } from '@/domain/common/identifiers'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err, ok } from '@/domain/common/result'
 import {
@@ -12,8 +12,8 @@ import {
   type EffectiveFleet,
 } from '@/domain/fleet/fleet-resolution'
 import { createFleetSetup, type FleetSetup } from '@/domain/fleet/fleet-setup'
-import { createFrontDefinition, type FrontDefinition } from '@/domain/fleet/front'
-import type { MasterData } from '@/domain/master/master-data'
+import { createFrontDefinition, createFrontId, type FrontDefinition } from '@/domain/fleet/front'
+import { findPileArea, type MasterData } from '@/domain/master/master-data'
 import { parseHaulerCode } from '@/domain/master/master-codes'
 import type { Shift } from '@/domain/shift/shift'
 
@@ -22,7 +22,7 @@ export interface ValidatedFleetSetupDraft {
   readonly effectiveFleets: readonly EffectiveFleet[]
 }
 
-function parseTruckIds(values: readonly string[]): Result<readonly TruckId[]> {
+export function parseTruckIds(values: readonly string[]): Result<readonly TruckId[]> {
   const parsed: TruckId[] = []
   for (const value of values) {
     const result = parseTruckId(value)
@@ -35,18 +35,33 @@ function parseTruckIds(values: readonly string[]): Result<readonly TruckId[]> {
 function buildEntry(
   entry: FleetSetupDraftEntry,
   shift: Shift,
+  masterData: MasterData,
 ): Result<{
   readonly front: FrontDefinition
   readonly fleet: FleetDefinition
 }> {
   const fleetId = parseFleetId(entry.fleetId)
   if (!fleetId.ok) return fleetId
-  const frontId = parseFrontId(entry.frontId)
+  const frontId = createFrontId(shift.sectorCode, Number(entry.frontNumber))
   if (!frontId.ok) return frontId
   const haulerCode = parseHaulerCode(entry.haulerCode)
   if (!haulerCode.ok) return haulerCode
 
-  const front = createFrontDefinition(frontId.value, shift.sectorCode, haulerCode.value)
+  let destinationPileId: FrontDefinition['destinationPileId']
+  if (entry.destinationPileId.trim()) {
+    const parsedPileId = parsePileId(entry.destinationPileId)
+    if (!parsedPileId.ok) return parsedPileId
+    const pileArea = findPileArea(masterData, parsedPileId.value)
+    if (!pileArea) {
+      return err<DomainError>({
+        code: 'FLEET_DESTINATION_PILE_NOT_FOUND',
+        message: `Destination Pile_ID ${entry.destinationPileId} was not found in this Sector's master`,
+      })
+    }
+    destinationPileId = pileArea.pileId
+  }
+
+  const front = createFrontDefinition(frontId.value, shift.sectorCode, haulerCode.value, destinationPileId)
   if (entry.kind === 'BASE') {
     const truckIds = parseTruckIds(entry.truckIds)
     if (!truckIds.ok) return truckIds
@@ -101,7 +116,7 @@ export function createFleetSetupFromDraft(
   const fronts: FrontDefinition[] = []
   const fleets: FleetDefinition[] = []
   for (const entry of entries) {
-    const built = buildEntry(entry, shift)
+    const built = buildEntry(entry, shift, masterData)
     if (!built.ok) return built
     fronts.push(built.value.front)
     fleets.push(built.value.fleet)

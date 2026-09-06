@@ -1,6 +1,6 @@
 import type { Brand } from '../common/brand'
 import type { RitNumber } from '../batch/rit-number'
-import type { SamplingInterval } from '../master/sampling-config'
+import type { BatchSize, SamplingInterval } from '../master/sampling-config'
 
 /**
  * Ordinal position of a sampled Rit within its sampling sequence
@@ -39,4 +39,16 @@ export function evaluateSampling(rit: RitNumber, interval: SamplingInterval): Sa
   }
   const incrementNumber = (Number(rit) / Number(interval)) as SampleIncrementNumber
   return { sampleRequired: true, incrementNumber }
+}
+
+/**
+ * The total number of sample increments a full batch produces (Phase 18
+ * §8): every Rit from 1..BatchSize where `isSampleRequired` holds is
+ * exactly every SamplingInterval'th Rit, so the count is
+ * `floor(BatchSize / SamplingInterval)` — e.g. SAP's BatchSize 20 /
+ * SamplingInterval 2 = 10. Works for any ore's configured
+ * BatchSize/SamplingInterval, never a hardcoded SAP/LIM branch.
+ */
+export function maxSampleIncrementsForBatch(batchSize: BatchSize, interval: SamplingInterval): number {
+  return Math.floor(Number(batchSize) / Number(interval))
 }

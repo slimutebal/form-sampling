@@ -72,7 +72,7 @@ describe('recordHaulage', () => {
     expect(result.error.code).toBe('BLANK_HAULAGE_TRANSACTION_ID')
   })
 
-  it('Q. the normal workflow refuses to hand back a WRONG_TRUCK classification (defensive guard, not an approval flow)', () => {
+  it('Q. records a WRONG_TRUCK classification instead of blocking it (Phase 18 §6, BR-TRUCK-003 — Wrong Truck is a recordable exception, not a rejected submission)', () => {
     const result = recordHaulage({
       generatedTransactionId: 'TX-STALE',
       shift,
@@ -80,14 +80,14 @@ describe('recordHaulage', () => {
       nextPosition: fixturePosition(24, 1),
       selectedFleetId: FIXTURE_FLEET_ID,
       // A truck that exists in master data but is outside this fleet's
-      // effective membership — simulates a stale UI selection bypassing
-      // the normal Truck selector's filtering.
+      // effective membership — the Truck checker allows selecting it, and
+      // the resulting transaction must still be recordable.
       selectedTruckId: FIXTURE_WRONG_TRUCK_TRUCK_ID,
       masterData,
       fleetSetup,
     })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.error.code).toBe('HAULAGE_OPERATIONAL_CONTEXT_INVALID')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.truckValidation.status).toBe('WRONG_TRUCK')
   })
 })

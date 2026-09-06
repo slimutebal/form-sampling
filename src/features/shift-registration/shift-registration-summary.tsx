@@ -8,9 +8,11 @@ import { formatShiftDateForDisplay } from '@/features/shift-registration/format-
 interface ShiftRegistrationSummaryProps {
   shift: Shift
   onEdit: () => void
+  /** Phase 18 wiring correction §6: registration review must have an explicit Continue action into setup (Handover → Fleet Setup) — it must never dead-end here. */
+  onContinue: () => void
 }
 
-export function ShiftRegistrationSummary({ shift, onEdit }: ShiftRegistrationSummaryProps) {
+export function ShiftRegistrationSummary({ shift, onEdit, onContinue }: ShiftRegistrationSummaryProps) {
   const { t, i18n } = useTranslation()
   const language = i18n.language as SupportedLanguage
 
@@ -35,9 +37,14 @@ export function ShiftRegistrationSummary({ shift, onEdit }: ShiftRegistrationSum
           <dd className="text-right font-medium">{shift.samplingHouseCode}</dd>
         </dl>
 
-        <Button type="button" variant="secondary" className="mt-4 w-full" onClick={onEdit}>
-          {t('shiftStart.review.edit')}
-        </Button>
+        <div className="mt-4 flex flex-col gap-2">
+          <Button type="button" size="lg" className="w-full" onClick={onContinue}>
+            {t('shiftStart.review.continue')}
+          </Button>
+          <Button type="button" variant="secondary" className="w-full" onClick={onEdit}>
+            {t('shiftStart.review.edit')}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )

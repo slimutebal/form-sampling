@@ -1,14 +1,14 @@
-import { FileText, FlaskConical, Home, Menu, Package } from 'lucide-react'
+import { FileText, FlaskConical, Home, Package, Truck } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { NavLink } from 'react-router'
 import { cn } from '@/components/ui/cn'
 
 const navItems = [
   { to: '/home', labelKey: 'navigation.home', Icon: Home },
+  { to: '/fleet', labelKey: 'navigation.fleet', Icon: Truck },
   { to: '/piles', labelKey: 'navigation.piles', Icon: Package },
   { to: '/samples', labelKey: 'navigation.samples', Icon: FlaskConical },
   { to: '/report', labelKey: 'navigation.report', Icon: FileText },
-  { to: '/more', labelKey: 'navigation.more', Icon: Menu },
 ] as const
 
 export function BottomNav() {

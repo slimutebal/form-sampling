@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { parseSectorCode } from '@/domain/common/codes'
+import { createMasterData } from '@/domain/master/master-data'
+import { parsePileAreaCode } from '@/domain/master/master-codes'
+import { createPileAreaReference } from '@/domain/master/references'
 import { parseDeliveryDestinationCode } from '@/domain/sample-handling/delivery-destination'
 import { createDeliveredDelivery, createNotPickedUpDelivery } from '@/domain/sample-handling/delivery-status'
 import {
@@ -20,6 +24,10 @@ const masterData = buildFixtureMasterData()
 const fleetSetup = buildFixtureFleetSetup(masterData)
 const destination = parseDeliveryDestinationCode('LAB-1')
 if (!destination.ok) throw new Error('bad fixture')
+const fixtureSectorCode = parseSectorCode('S1')
+if (!fixtureSectorCode.ok) throw new Error('bad fixture')
+const fixtureStockpileCode = parsePileAreaCode('STOCK-1')
+if (!fixtureStockpileCode.ok) throw new Error('bad fixture')
 
 function baseInput(overrides: Partial<BuildShiftReportInput> = {}): BuildShiftReportInput {
   const pile = buildFixtureSapPile('PILE-1')
@@ -43,6 +51,58 @@ describe('buildShiftReport — header', () => {
     expect(result.value.header.date).toBe('2026-09-04')
     expect(result.value.header.shiftCode).toBe('D')
     expect(result.value.header.isoWeek).toEqual({ isoYear: 2026, isoWeekNumber: 36 })
+  })
+
+  it.each([
+    ['DS', 'D'],
+    ['NS', 'N'],
+    ['D', 'D'],
+  ] as const)('shiftCodeLabel maps %s to %s (Phase 18 §1) without changing the stored shiftCode', (shiftCode, expectedLabel) => {
+    const shift = { ...buildFixtureShift('SHIFT-1'), shiftCode } as BuildShiftReportInput['shift']
+    const result = buildShiftReport(baseInput({ shift }))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.header.shiftCode).toBe(shiftCode)
+    expect(result.value.header.shiftCodeLabel).toBe(expectedLabel)
+  })
+})
+
+describe('buildShiftReport — Haulage Detail Stockpile (Phase 18 §11)', () => {
+  it('resolves Stockpile from Pile_Areas master when available', () => {
+    const pile = buildFixtureSapPile('PILE-STOCK')
+    const stockpileMasterDataResult = createMasterData({
+      ...masterData,
+      pileAreas: [createPileAreaReference(fixtureSectorCode.value, fixtureStockpileCode.value, pile.id, pile.oreCode)],
+    })
+    if (!stockpileMasterDataResult.ok) throw new Error('invalid test fixture')
+    const stockpileMasterData = stockpileMasterDataResult.value
+    const result = buildShiftReport(
+      baseInput({
+        piles: [pile],
+        masterData: stockpileMasterData,
+        haulageTransactions: [
+          buildFixtureHaulageTransaction({ id: 'T-1', shiftId: 'SHIFT-1', pile, batch: 1, rit: 1, masterData: stockpileMasterData, fleetSetup }),
+        ],
+      }),
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.haulageDetail[0]?.stockpileCode).toBe('STOCK-1')
+  })
+
+  it('leaves Stockpile undefined (never blocking the rest of the report) when the Pile has no master row', () => {
+    const pile = buildFixtureSapPile('PILE-1')
+    const result = buildShiftReport(
+      baseInput({
+        piles: [pile],
+        haulageTransactions: [
+          buildFixtureHaulageTransaction({ id: 'T-1', shiftId: 'SHIFT-1', pile, batch: 1, rit: 1, masterData, fleetSetup }),
+        ],
+      }),
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.haulageDetail[0]?.stockpileCode).toBeUndefined()
   })
 })
 
@@ -333,10 +393,12 @@ describe('buildShiftReport — sample handling', () => {
 })
 
 describe('buildShiftReport — manpower', () => {
-  it('resolves the employee and copies the Name from MasterData', () => {
+  it('carries personId/name/jobDeskCode through exactly as given (Phase 18 §4 — never re-resolved from master here)', () => {
     const result = buildShiftReport(
       baseInput({
-        manpowerAssignments: [{ employeeId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), jobDeskCode: 'FOREMAN' }],
+        manpowerAssignments: [
+          { personId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), name: FIXTURE_EMPLOYEE_NAME, jobDeskCode: 'FOREMAN' },
+        ],
       }),
     )
     expect(result.ok).toBe(true)
@@ -345,7 +407,7 @@ describe('buildShiftReport — manpower', () => {
       {
         date: '2026-09-04',
         shiftCode: 'D',
-        location: 'HOUSE-1',
+        location: 'S1/HOUSE-1',
         jobDeskCode: 'FOREMAN',
         employeeId: FIXTURE_EMPLOYEE_ID,
         employeeName: FIXTURE_EMPLOYEE_NAME,
@@ -353,15 +415,15 @@ describe('buildShiftReport — manpower', () => {
     ])
   })
 
-  it('rejects an unknown EmployeeId', () => {
+  it('accepts a Crew-sourced personId just as readily as an Employee one (Phase 18 §4)', () => {
     const result = buildShiftReport(
       baseInput({
-        manpowerAssignments: [{ employeeId: fixtureEmployeeId('99999'), jobDeskCode: 'FOREMAN' }],
+        manpowerAssignments: [{ personId: 'CREW-1', name: 'Andri Tani Kusuma', jobDeskCode: 'Sampler' }],
       }),
     )
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.error.code).toBe('REPORT_MANPOWER_EMPLOYEE_NOT_FOUND')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.manpower[0]).toMatchObject({ employeeId: 'CREW-1', employeeName: 'Andri Tani Kusuma' })
   })
 
   it('empty manpower is allowed', () => {
@@ -695,7 +757,9 @@ describe('buildShiftReport — immutability', () => {
       masterData,
       delivery: createNotPickedUpDelivery(),
     })
-    const manpowerAssignments = [{ employeeId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), jobDeskCode: 'FOREMAN' }]
+    const manpowerAssignments = [
+      { personId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), name: FIXTURE_EMPLOYEE_NAME, jobDeskCode: 'FOREMAN' },
+    ]
 
     const input = baseInput({
       piles: [pile],

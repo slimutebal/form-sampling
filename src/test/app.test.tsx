@@ -1,5 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { I18nextProvider } from 'react-i18next'
 import { MemoryRouter } from 'react-router'
@@ -26,31 +25,14 @@ describe('application shell', () => {
     expect(screen.getByRole('heading', { name: 'Form Sampling' })).toBeInTheDocument()
   })
 
-  it('renders the bottom navigation shell with all primary destinations', () => {
-    renderApp(['/home'])
-    const nav = screen.getByRole('navigation')
-    expect(within(nav).getByRole('link', { name: /Beranda/i })).toBeInTheDocument()
-    expect(within(nav).getAllByRole('link')).toHaveLength(5)
-  })
-
-  it('renders a placeholder screen for each primary route', () => {
-    renderApp(['/piles'])
-    expect(screen.getByRole('heading', { name: 'Pile' })).toBeInTheDocument()
-  })
-
   it('does not render bottom navigation on the pre-operational start route', () => {
     renderApp(['/start'])
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
 
-  it('switches translated shell text without reloading', async () => {
-    const user = userEvent.setup()
-    renderApp(['/more'])
-
-    expect(screen.getByRole('heading', { name: 'Lainnya' })).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'EN' }))
-
-    expect(await screen.findByRole('heading', { name: 'More' })).toBeInTheDocument()
+  it('an active route without a workspace redirects to /start rather than rendering a broken active screen', async () => {
+    renderApp(['/piles'])
+    expect(await screen.findByRole('heading', { name: 'Registrasi Shift' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
 })

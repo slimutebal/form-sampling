@@ -5,6 +5,7 @@ import type { FleetId, FrontId } from '../common/identifiers'
 import type { MasterData } from '../master/master-data'
 import type { FrontDefinition } from './front'
 import { cloneFleetDefinition, validateFleetDefinitionTruckLists, type FleetDefinition } from './fleet-definition'
+import { findFrontReferenceBranching } from './front-lineage'
 
 /**
  * Raw shape of a Front/Fleet catalog. Any caller can construct this
@@ -32,6 +33,9 @@ export interface FleetSetupInput {
  *  - every FleetDefinition references an existing FrontDefinition (§6)
  *  - every DERIVED fleet's referenceFleetId exists in the setup (§5)
  *  - the fleet reference graph is acyclic (§4)
+ *  - no Front has more than one direct successor Front (Fleet Reference
+ *    is continuation semantics — a lineage is always linear, never
+ *    branching)
  * Effective fleet resolution (fleet-resolution.ts) relies on these
  * guarantees and therefore only accepts a validated FleetSetup.
  */
@@ -150,6 +154,14 @@ export function createFleetSetup(input: FleetSetupInput, masterData: MasterData)
     return err<DomainError>({
       code: 'FLEET_REFERENCE_CYCLE',
       message: `Fleet ${cyclicFleetId} is part of a fleet reference cycle`,
+    })
+  }
+
+  const branchingFrontId = findFrontReferenceBranching(input)
+  if (branchingFrontId !== undefined) {
+    return err<DomainError>({
+      code: 'FLEET_REFERENCE_BRANCHING',
+      message: `Front ${branchingFrontId} has more than one direct successor Front`,
     })
   }
 

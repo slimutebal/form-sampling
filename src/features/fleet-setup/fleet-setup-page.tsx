@@ -13,9 +13,12 @@ import {
   createEmptyFleetSetupDraftEntry,
   type FleetSetupDraftEntry,
 } from '@/application/fleet-setup/fleet-setup-draft'
+import type { CreatedSetupPileArea } from '@/application/pile-master/create-pile-area-for-setup'
+import type { NewPileDraft } from '@/application/pile-master/create-pile-area-from-draft'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import type { DomainError, Result } from '@/domain/common/result'
 import type { FleetSetup } from '@/domain/fleet/fleet-setup'
 import type { MasterData } from '@/domain/master/master-data'
 import type { Shift } from '@/domain/shift/shift'
@@ -30,6 +33,10 @@ export interface FleetSetupPageProps {
   onFleetSetupReady: (fleetSetup: FleetSetup) => void
   onBack?: () => void
   generateFleetId?: FleetIdGenerator
+  /** New Pile Master creation from Fleet Setup (post-inspection correction §2) — see `FrontEditorProps.createNewPile`. */
+  createNewPile?: (draft: NewPileDraft) => Promise<Result<CreatedSetupPileArea, DomainError>>
+  /** Bubbles the merged MasterData up to the Start Shift orchestrator immediately after a new pile is created — see `FrontEditorProps.onMasterDataUpdated`. */
+  onMasterDataUpdated?: (masterData: MasterData) => void
 }
 
 export function FleetSetupPage({
@@ -38,6 +45,8 @@ export function FleetSetupPage({
   onFleetSetupReady,
   onBack,
   generateFleetId = defaultGenerateFleetId,
+  createNewPile,
+  onMasterDataUpdated,
 }: FleetSetupPageProps) {
   const { t } = useTranslation()
   const [entries, setEntries] = useState<readonly FleetSetupDraftEntry[]>([])
@@ -99,6 +108,7 @@ export function FleetSetupPage({
         <PageHeader title={t('fleetSetup.title')} />
         <div className="px-4 py-4">
           <FleetSetupSummary
+            sectorCode={shift.sectorCode}
             entries={entries}
             effectiveFleets={review.effectiveFleets}
             onEdit={() => setReview(undefined)}
@@ -143,6 +153,8 @@ export function FleetSetupPage({
             masterData={masterData}
             onSave={handleSave}
             onCancel={() => setEditing(undefined)}
+            createNewPile={createNewPile}
+            onMasterDataUpdated={onMasterDataUpdated}
           />
         ) : (
           <>
@@ -166,6 +178,9 @@ export function FleetSetupPage({
                 const reference = entries.find(
                   (candidate) => candidate.fleetId === entry.referenceFleetId,
                 )
+                const destinationPileArea = entry.destinationPileId
+                  ? masterData.pileAreas.find((pileArea) => pileArea.pileId === entry.destinationPileId)
+                  : undefined
                 return (
                   <FrontCard
                     key={entry.fleetId}
@@ -177,7 +192,9 @@ export function FleetSetupPage({
                         ? fleetErrorTranslationKey(preview.error.code)
                         : undefined
                     }
-                    referenceFrontId={reference?.frontId}
+                    referenceFrontNumber={reference?.frontNumber}
+                    destinationOreCode={destinationPileArea?.oreCode}
+                    destinationStockpileCode={destinationPileArea?.stockpileCode}
                     onEdit={() => setEditing(entry)}
                     onRemove={() => handleRemove(entry)}
                   />

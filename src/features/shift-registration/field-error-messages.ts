@@ -1,4 +1,9 @@
-import { REQUIRED_SHIFT_DATE_CODE } from '@/application/shift-registration/validate-shift-registration-form'
+import {
+  REQUIRED_SHIFT_DATE_CODE,
+  SAMPLING_HOUSE_NOT_FOUND_CODE,
+  SECTOR_NOT_FOUND_CODE,
+  SHIFT_CODE_NOT_ALLOWED_CODE,
+} from '@/application/shift-registration/validate-shift-registration-form'
 
 /**
  * Maps stable error codes produced by `validateShiftRegistrationForm`
@@ -14,6 +19,9 @@ const FIELD_ERROR_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   BLANK_SHIFT_CODE: 'shiftStart.errors.required',
   BLANK_SECTOR_CODE: 'shiftStart.errors.required',
   BLANK_SAMPLING_HOUSE_CODE: 'shiftStart.errors.required',
+  [SHIFT_CODE_NOT_ALLOWED_CODE]: 'shiftStart.errors.shiftCodeNotAllowed',
+  [SECTOR_NOT_FOUND_CODE]: 'shiftStart.errors.sectorNotFound',
+  [SAMPLING_HOUSE_NOT_FOUND_CODE]: 'shiftStart.errors.samplingHouseNotFound',
 }
 
 export function fieldErrorTranslationKey(code: string): string {

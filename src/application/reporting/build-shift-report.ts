@@ -3,12 +3,12 @@ import type { PileId } from '@/domain/common/identifiers'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err, ok } from '@/domain/common/result'
 import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
-import { findEmployee, type MasterData } from '@/domain/master/master-data'
+import { findEmployee, findPileArea, type MasterData } from '@/domain/master/master-data'
 import type { Pile } from '@/domain/pile/pile'
 import type { SamplePosition } from '@/domain/sample-handling/sample-position'
 import type { Shift } from '@/domain/shift/shift'
 import { isoWeekOf } from './iso-week'
-import { getReportLabels } from './report-localization'
+import { getReportLabels, shiftCodeDisplayLabel } from './report-localization'
 import type {
   HaulageDetailRow,
   ManpowerAssignment,
@@ -108,24 +108,18 @@ export function buildShiftReport(input: BuildShiftReportInput): Result<ShiftRepo
     }
   }
 
-  const manpower: ReportManpowerRow[] = []
-  for (const assignment of manpowerAssignments) {
-    const employee = findEmployee(masterData, assignment.employeeId)
-    if (!employee) {
-      return buildError(
-        'REPORT_MANPOWER_EMPLOYEE_NOT_FOUND',
-        `No employee exists for EmployeeId ${assignment.employeeId}`,
-      )
-    }
-    manpower.push({
-      date: shift.date,
-      shiftCode: shift.shiftCode,
-      location: shift.samplingHouseCode,
-      jobDeskCode: assignment.jobDeskCode,
-      employeeId: assignment.employeeId,
-      employeeName: employee.name,
-    })
-  }
+  // `assignment.name` was already resolved once, against the Employee or
+  // Crew master, at Manpower Setup time
+  // (`@/application/manpower/create-manpower-from-draft`) — never
+  // re-resolved here, and never assumed to be Employee-only (Phase 18 §4).
+  const manpower: ReportManpowerRow[] = manpowerAssignments.map((assignment) => ({
+    date: shift.date,
+    shiftCode: shift.shiftCode,
+    location: `${shift.sectorCode}/${shift.samplingHouseCode}`,
+    jobDeskCode: assignment.jobDeskCode,
+    employeeId: assignment.personId,
+    employeeName: assignment.name,
+  }))
 
   // Rit = transaction count; Batch = distinct BatchNumber count — both
   // pile-local (ROADMAP Phase 14 §4/§5). Only Piles with production
@@ -216,16 +210,23 @@ export function buildShiftReport(input: BuildShiftReportInput): Result<ShiftRepo
     })),
   )
 
-  const haulageDetail: HaulageDetailRow[] = haulageTransactions.map((transaction) => {
+  const haulageDetail: HaulageDetailRow[] = []
+  for (const transaction of haulageTransactions) {
     // Non-null: every transaction.pileId was validated against pileById above.
     const pile = pileById.get(transaction.pileId)!
+    // A Pile with no resolvable Pile_Areas master row (e.g. a stale local
+    // master snapshot) never blocks the rest of the report — Stockpile is
+    // simply left undefined for that row (§11), mirroring how
+    // `dispatcherName` is already optional elsewhere in this module.
+    const stockpileCode = findPileArea(masterData, pile.id)?.stockpileCode
     const sampleStatus = transaction.samplingEvaluation.sampleRequired ? 'REQUIRED' : 'NOT_REQUIRED'
     const truckStatus = transaction.truckValidation.status
     const wrongTruckReasons = transaction.truckValidation.status === 'WRONG_TRUCK' ? transaction.truckValidation.reasons : []
-    return {
+    haulageDetail.push({
       transactionId: transaction.id,
       truckId: transaction.truckId,
       oreCode: pile.oreCode,
+      stockpileCode,
       pileId: transaction.pileId,
       batchNumber: transaction.batchPosition.batchNumber,
       ritNumber: transaction.batchPosition.ritNumber,
@@ -237,8 +238,8 @@ export function buildShiftReport(input: BuildShiftReportInput): Result<ShiftRepo
       fleetId: transaction.fleetId,
       wrongTruckReasons,
       wrongTruckReasonLabels: wrongTruckReasons.map((reason) => labels.wrongTruckReason[reason]),
-    }
-  })
+    })
+  }
 
   return ok({
     language,
@@ -247,6 +248,7 @@ export function buildShiftReport(input: BuildShiftReportInput): Result<ShiftRepo
       title: labels.title,
       date: shift.date,
       shiftCode: shift.shiftCode,
+      shiftCodeLabel: shiftCodeDisplayLabel(shift.shiftCode),
       isoWeek: isoWeekOf(shift.date),
     },
     manpower,
