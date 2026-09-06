@@ -132,7 +132,7 @@ export function PilesListPage({ workspace, store, onPileAdded, createNewPile }: 
   return (
     <div>
       <PageHeader title={t('screens.piles')} />
-      <div className="flex flex-col gap-3 px-4 py-4">
+      <div className="flex flex-col gap-3 px-5 py-4">
         {workspace.piles.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
             {t('piles.noPiles')}

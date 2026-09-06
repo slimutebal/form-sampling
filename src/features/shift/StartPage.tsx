@@ -190,7 +190,7 @@ export function StartPage() {
     return (
       <div>
         <PageHeader title={t('handover.title')} />
-        <div className="px-4 py-4">
+        <div className="px-5 py-4">
           <Card>
             <CardContent role="alert" className="flex flex-col gap-3">
               <p>{t('setup.errors.previousShiftUnavailable')}</p>
@@ -271,7 +271,7 @@ export function StartPage() {
     return (
       <div>
         <PageHeader title={t('setup.initializing.title')} />
-        <div className="px-4 py-4" aria-live="polite">
+        <div className="px-5 py-4" aria-live="polite">
           <p className="text-sm text-muted-foreground">{t('setup.initializing.message')}</p>
         </div>
       </div>
@@ -281,7 +281,7 @@ export function StartPage() {
   return (
     <div>
       <PageHeader title={t('setup.initializing.title')} />
-      <div className="px-4 py-4">
+      <div className="px-5 py-4">
         <Card>
           <CardContent role="alert" className="flex flex-col gap-3">
             <p>{t('setup.errors.initializeFailed')}</p>

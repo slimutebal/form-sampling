@@ -30,6 +30,11 @@ describe('application shell', () => {
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
 
+  it('wraps the pre-operational start route in the PreShiftShell (safe-area flow spacer + opaque top cap)', () => {
+    renderApp(['/start'])
+    expect(screen.getByTestId('safe-area-top-cap')).toBeInTheDocument()
+  })
+
   it('an active route without a workspace redirects to /start rather than rendering a broken active screen', async () => {
     renderApp(['/piles'])
     expect(await screen.findByRole('heading', { name: 'Registrasi Shift' })).toBeInTheDocument()

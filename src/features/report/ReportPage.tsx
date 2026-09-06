@@ -98,7 +98,7 @@ export function ReportPage() {
     return (
       <div>
         <PageHeader title={t('screens.report')} />
-        <div className="px-4 py-4" aria-live="polite">
+        <div className="px-5 py-4" aria-live="polite">
           <p className="text-sm text-muted-foreground">{t('report.loading')}</p>
         </div>
       </div>
@@ -109,7 +109,7 @@ export function ReportPage() {
     return (
       <div>
         <PageHeader title={t('screens.report')} />
-        <div className="px-4 py-4">
+        <div className="px-5 py-4">
           <Card>
             <CardContent role="alert">
               <p>{t('report.errors.loadFailed')}</p>
@@ -144,7 +144,7 @@ export function ReportPage() {
     return (
       <div>
         <PageHeader title={t('screens.report')} />
-        <div className="px-4 py-4">
+        <div className="px-5 py-4">
           <Card>
             <CardContent role="alert">
               <p>{t('report.errors.buildFailed')}</p>
@@ -162,7 +162,7 @@ export function ReportPage() {
   return (
     <div>
       <WhatsAppReportPreview reports={reports} />
-      <div className="flex flex-col gap-2 px-4 pb-4">
+      <div className="flex flex-col gap-2 px-5 pb-4">
         {exportErrorCode ? (
           <p role="alert" className="text-sm text-red-600">
             {t('report.errors.exportFailed')}

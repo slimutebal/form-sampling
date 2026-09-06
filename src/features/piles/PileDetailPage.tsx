@@ -16,7 +16,7 @@ function InvalidFrontContext() {
   return (
     <div>
       <PageHeader title={t('pileHaulage.title')} />
-      <div className="px-4 py-4">
+      <div className="px-5 py-4">
         <Card>
           <CardContent role="alert" className="flex flex-col gap-3">
             <p>{t('piles.errors.frontContextInvalid')}</p>
@@ -58,7 +58,7 @@ export function PileDetailPage() {
     return (
       <div>
         <PageHeader title={t('pileHaulage.title')} />
-        <div className="px-4 py-4">
+        <div className="px-5 py-4">
           <Card>
             <CardContent role="alert">
               <p>{t('piles.errors.pileNotFound')}</p>
@@ -88,7 +88,7 @@ export function PileDetailPage() {
     return (
       <div>
         <PageHeader title={t('pileHaulage.title')} />
-        <div className="px-4 py-4">
+        <div className="px-5 py-4">
           <Card>
             <CardContent role="alert">
               <p>{t(pileHaulageErrorTranslationKey(planResult.error.code))}</p>

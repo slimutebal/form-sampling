@@ -116,7 +116,7 @@ export function WhatsAppReportPreview({
   return (
     <div>
       <PageHeader title={t('whatsAppReport.title')} />
-      <div className="flex flex-col gap-4 px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div className="flex flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <Card>
           <CardContent className="flex flex-col gap-2">
             <p className="text-sm font-medium">{t('whatsAppReport.reportLanguage')}</p>

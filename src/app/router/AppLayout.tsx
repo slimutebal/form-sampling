@@ -4,6 +4,7 @@ import { localOperationalStore } from '@/app/local-operational-store'
 import { useCurrentWorkspace } from '@/app/hooks/useCurrentWorkspace'
 import { BottomNav } from '@/components/shared/BottomNav'
 import { GlobalStatusBar } from '@/components/shared/GlobalStatusBar'
+import { SafeAreaTopCap } from '@/components/shared/SafeAreaTopCap'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { LocalShiftWorkspace } from '@/infrastructure/local-db/local-operational-store'
@@ -32,16 +33,17 @@ export function AppLayout() {
 
   return (
     <div className="safe-x mx-auto flex min-h-dvh w-full max-w-md flex-col">
+      <SafeAreaTopCap />
       <GlobalStatusBar syncReader={localOperationalStore} activeShiftReader={localOperationalStore} />
       <main className="flex-1 pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
         {phase.kind === 'loading' ? (
-          <div className="px-4 py-4" aria-live="polite">
+          <div className="px-5 py-4" aria-live="polite">
             <p className="text-sm text-muted-foreground">{t('activeShell.loading')}</p>
           </div>
         ) : null}
 
         {phase.kind === 'error' ? (
-          <div className="px-4 py-4">
+          <div className="px-5 py-4">
             <Card>
               <CardContent role="alert" className="flex flex-col gap-3">
                 <p>{t('activeShell.errors.loadFailed')}</p>

@@ -92,7 +92,7 @@ export function ManpowerSetupPage({ shift, masterData, onManpowerReady, onBack }
   return (
     <div>
       <PageHeader title={t('manpower.title')} />
-      <div className="flex flex-col gap-4 px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div className="flex flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <Card>
           <CardContent>
             <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
@@ -147,7 +147,7 @@ export function ManpowerSetupPage({ shift, masterData, onManpowerReady, onBack }
         ) : null}
 
         <div className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold">{t('manpower.selectedPersonnel')}</h2>
+          <h2 className="text-base font-semibold">{t('manpower.selectedPersonnel')}</h2>
           {selected.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
               {t('manpower.noPersonnel')}

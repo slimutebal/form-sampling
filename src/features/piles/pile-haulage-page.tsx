@@ -254,7 +254,7 @@ export function PileHaulagePage({
     return (
       <div>
         <PageHeader title={t('pileHaulage.title')} />
-        <div className="px-4 py-4" aria-live="polite">
+        <div className="px-5 py-4" aria-live="polite">
           <p className="text-sm text-muted-foreground">{t('pileHaulage.loading')}</p>
         </div>
       </div>
@@ -265,7 +265,7 @@ export function PileHaulagePage({
     return (
       <div>
         <PageHeader title={t('pileHaulage.title')} />
-        <div className="px-4 py-4">
+        <div className="px-5 py-4">
           <Card>
             <CardContent role="alert" className="flex flex-col gap-3">
               <p>{t(loadErrorTranslationKey(phase.code))}</p>
@@ -291,7 +291,7 @@ export function PileHaulagePage({
   return (
     <div>
       <PageHeader title={t('pileHaulage.title')} />
-      <div className="flex flex-col gap-4 px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div className="flex flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         {startPositionFormVisible ? (
           <FreshPileStartPositionForm
             initialBatchNumber={pile.freshPileStartPosition ? Number(pile.freshPileStartPosition.batchNumber) : 1}

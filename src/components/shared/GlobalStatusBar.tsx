@@ -70,7 +70,7 @@ export function GlobalStatusBar({ syncReader, activeShiftReader }: GlobalStatusB
 
   return (
     <div className={cn('safe-top safe-x border-b border-border bg-muted/60 text-xs', isNormal && 'bg-background')}>
-      <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 px-4', isNormal ? 'py-1' : 'py-1.5')}>
+      <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 px-5', isNormal ? 'py-1' : 'py-1.5')}>
         <span
           className={cn('flex items-center gap-1 font-medium', online ? 'text-muted-foreground' : 'text-amber-700')}
         >
@@ -103,10 +103,10 @@ export function GlobalStatusBar({ syncReader, activeShiftReader }: GlobalStatusB
         )}
       </div>
 
-      {!online && <p className="px-4 pb-1.5 text-muted-foreground">{t('pwa.offlineSavedLocally')}</p>}
+      {!online && <p className="px-5 pb-1.5 text-muted-foreground">{t('pwa.offlineSavedLocally')}</p>}
 
       {pwaState.offlineReady && !offlineReadyDismissed && (
-        <p className="flex items-center justify-between gap-2 px-4 pb-1.5 text-muted-foreground">
+        <p className="flex items-center justify-between gap-2 px-5 pb-1.5 text-muted-foreground">
           <span>{t('pwa.offlineReady')}</span>
           <button
             type="button"

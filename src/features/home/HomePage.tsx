@@ -25,7 +25,7 @@ function StatTile({ label, value }: { label: string; value: number }) {
     <Card>
       <CardContent className="flex flex-col gap-1">
         <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="text-[28px] font-semibold leading-tight">{value}</p>
+        <p className="text-[26px] font-semibold leading-tight">{value}</p>
       </CardContent>
     </Card>
   )
@@ -104,7 +104,7 @@ export function HomePage() {
   return (
     <div>
       <PageHeader title={t('screens.home')} />
-      <div className="flex flex-col gap-4 px-4 py-4">
+      <div className="flex flex-col gap-4 px-5 py-4">
         <Card>
           <CardContent className="flex flex-col gap-1">
             <p className="text-sm text-muted-foreground">

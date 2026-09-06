@@ -171,7 +171,7 @@ export function HandoverPage({
     return (
       <div>
         <PageHeader title={t('handover.title')} />
-        <div className="flex flex-col gap-4 px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <div className="flex flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <p className="text-sm text-muted-foreground">{t('handover.description')}</p>
           {hiddenFileInput}
           <Button type="button" size="lg" className="w-full" onClick={() => fileInputRef.current?.click()}>
@@ -191,7 +191,7 @@ export function HandoverPage({
     return (
       <div>
         <PageHeader title={t('handover.title')} />
-        <div className="px-4 py-4" aria-live="polite">
+        <div className="px-5 py-4" aria-live="polite">
           {/* Kept mounted (not just present in 'idle'/'error'/'mismatch'/'preview')
               so a still-hanging check can never strand the operator without a
               file input to act on — `requestIdRef` in `handleFileSelected`
@@ -208,7 +208,7 @@ export function HandoverPage({
     return (
       <div>
         <PageHeader title={t('handover.title')} />
-        <div className="flex flex-col gap-4 px-4 py-4">
+        <div className="flex flex-col gap-4 px-5 py-4">
           {hiddenFileInput}
           <Card>
             <CardContent role="alert" className="flex flex-col gap-3">
@@ -233,7 +233,7 @@ export function HandoverPage({
     return (
       <div>
         <PageHeader title={t('handover.mismatchTitle')} />
-        <div className="flex flex-col gap-4 px-4 py-4">
+        <div className="flex flex-col gap-4 px-5 py-4">
           {hiddenFileInput}
           <Card>
             <CardContent role="alert" className="flex flex-col gap-3">
@@ -273,7 +273,7 @@ export function HandoverPage({
   return (
     <div>
       <PageHeader title={t('handover.previewTitle')} />
-      <div className="flex flex-col gap-4 px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div className="flex flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         {hiddenFileInput}
 
         <Card>

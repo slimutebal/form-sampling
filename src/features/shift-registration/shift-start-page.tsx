@@ -238,7 +238,7 @@ export function ShiftStartPage({
     return (
       <div>
         <PageHeader title={t('shiftStart.form.pageTitle')} />
-        <div className="px-4 py-4" aria-live="polite">
+        <div className="px-5 py-4" aria-live="polite">
           <p className="text-sm text-muted-foreground">{t('shiftStart.loading')}</p>
         </div>
       </div>
@@ -249,7 +249,7 @@ export function ShiftStartPage({
     return (
       <div>
         <PageHeader title={t('shiftStart.form.pageTitle')} />
-        <div className="px-4 py-4">
+        <div className="px-5 py-4">
           <Card>
             <CardContent role="alert" className="flex flex-col gap-3">
               <p>{t(workspaceErrorTranslationKey(phase.error.code))}</p>
@@ -268,7 +268,7 @@ export function ShiftStartPage({
   return (
     <div>
       <PageHeader title={pageTitle} />
-      <div className="flex flex-col gap-4 px-4 py-4">
+      <div className="flex flex-col gap-4 px-5 py-4">
         {mode === 'resume' && phase.currentWorkspace ? (
           <ResumeShiftCard shift={phase.currentWorkspace.shift} onResume={handleResume} onStartNew={handleStartNew} />
         ) : null}

@@ -106,7 +106,7 @@ export function FleetSetupPage({
     return (
       <div>
         <PageHeader title={t('fleetSetup.title')} />
-        <div className="px-4 py-4">
+        <div className="px-5 py-4">
           <FleetSetupSummary
             sectorCode={shift.sectorCode}
             entries={entries}
@@ -122,7 +122,7 @@ export function FleetSetupPage({
   return (
     <div>
       <PageHeader title={t('fleetSetup.title')} />
-      <div className="flex flex-col gap-4 px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div className="flex flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <Card>
           <CardContent>
             <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
@@ -159,7 +159,7 @@ export function FleetSetupPage({
         ) : (
           <>
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold">{t('fleetSetup.fronts')}</h2>
+              <h2 className="text-base font-semibold">{t('fleetSetup.fronts')}</h2>
               <Button
                 type="button"
                 onClick={() => setEditing(createEmptyFleetSetupDraftEntry(generateFleetId()))}

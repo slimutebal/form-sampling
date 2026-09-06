@@ -115,7 +115,7 @@ export function FleetActivePage({
   return (
     <div>
       <PageHeader title={t('fleetActive.title')} />
-      <div className="flex flex-col gap-4 px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div className="flex flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         {errorCode ? (
           <p
             role="alert"
@@ -140,7 +140,7 @@ export function FleetActivePage({
         ) : (
           <>
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold">{t('fleetActive.activeFronts')}</h2>
+              <h2 className="text-base font-semibold">{t('fleetActive.activeFronts')}</h2>
               {/* Phase 18 §2: a brand-new independent BASE Front never
                   needs a reference, so "+ Tambah Front" stays enabled
                   even with zero active Fronts. */}
@@ -196,7 +196,7 @@ export function FleetActivePage({
               </div>
             )}
 
-            <h2 className="text-lg font-semibold">{t('fleetActive.history')}</h2>
+            <h2 className="text-base font-semibold">{t('fleetActive.history')}</h2>
             {historicalFronts.length === 0 ? (
               <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                 {t('fleetActive.noHistory')}

@@ -2922,7 +2922,10 @@ PageHeader        owns the top inset everywhere else it is the topmost
                   element resting at the screen edge, so its own normal
                   in-flow position (already below GlobalStatusBar) never
                   gets a second, wasted top inset stacked underneath the
-                  first.
+                  first. **Corrected by §108:** this assumption ("already
+                  below GlobalStatusBar") does not hold on pre-shift
+                  routes, where PageHeader has no GlobalStatusBar above
+                  it — see §108 for the fix (`PreShiftShell`).
 
 AppLayout /       own left/right insets (`safe-x`) and, respectively,
 WelcomePage       top+bottom insets, for their own root shells.
@@ -3000,3 +3003,89 @@ Contrast:     translucent `bg-background` + backdrop blur, a top
               (primary vs. muted-foreground) plus a soft rounded
               highlight behind its icon.
 ```
+
+---
+
+# 108. Real-Device Follow-Up Hardening (Pre-v1.0.0, Part 2)
+
+A second real-iPhone pass on top of §107 found two remaining
+presentation bugs and confirmed the typography still read oversized.
+Presentation/UX only — no business rule, schema, or workflow changed.
+
+**Bug 1 — pre-shift content rendering under PageHeader:** §107 assumed
+PageHeader's `sticky top-[env(safe-area-inset-top)]` offset was always
+"free" because the element's own in-flow position was already past the
+inset (true on AppLayout routes, where GlobalStatusBar's `safe-top`
+padding runs first). On `/start` (Shift Start/Resume, Handover,
+Manpower, Fleet Setup — and their loading/error phases), PageHeader is
+the *first* element with nothing above it reserving that space. A
+sticky offset shifts an element's *painted* position without reserving
+extra room for it in the document flow — flow space is still based on
+the element's un-shifted static position — so the header visually
+slides down into the safe area while the content after it starts
+exactly where the header's un-shifted top would have been, one inset's
+worth too high, landing underneath the header.
+
+Fix — `PreShiftShell` (`src/components/shared/PreShiftShell.tsx`)
+wraps the entire `/start` route (in `AppRouter`, around `StartPage`)
+with `safe-top` padding, mirroring what `GlobalStatusBar` already does
+on AppLayout routes: it reserves the inset in flow *before* PageHeader,
+so PageHeader's natural position already clears the threshold and its
+sticky offset never has to move it. One shell, mounted once at the
+route level — no per-page change inside `ShiftStartPage` /
+`HandoverPage` / `ManpowerSetupPage` / `FleetSetupPage`.
+
+**Bug 2 — transparent top safe-area while scrolling:** on both
+AppLayout and pre-shift routes, whatever reserves the top inset in flow
+(`GlobalStatusBar`, `PreShiftShell`'s `safe-top` padding) is itself
+ordinary scrolling content — once it scrolls out of view, nothing
+painted the status-bar/Dynamic-Island strip, so scrolled page content
+became visible behind the physical status bar.
+
+Fix — `SafeAreaTopCap` (`src/components/shared/SafeAreaTopCap.tsx`): a
+`fixed`, `aria-hidden` `bg-background` layer pinned to the top of the
+viewport, exactly `env(safe-area-inset-top)` tall, above PageHeader in
+stacking order. Being `fixed` (not in flow), it adds no extra inset of
+its own — no double safe-area spacing. Mounted once per shell
+(`AppLayout` and `PreShiftShell`), not per page, and works identically
+for an Android status-bar/cutout since it reads the same `env()` value.
+
+**Header composition (PageHeader):** real-device testing also showed
+the title sitting flush against the screen edge — traced to `PageHeader`
+previously combining `safe-x` (`env(safe-area-inset-left/right)`, `0`
+on most portrait phones) and a fixed `px-4` on the *same* `<header>`
+element; both set `padding-left`/`padding-right`, and `safe-x`'s `0`
+was winning the cascade. Fixed by splitting the element in two: the
+outer `<header>` carries `safe-x` (+ `sticky`/border/background) alone,
+and an inner `div` carries the visual `px-5 py-3` content padding —
+composing the same way `GlobalStatusBar`/`AppLayout` already do
+(safe-area clearance outside, visual padding inside). `px-5` (20px)
+matches the page-content wrapper padding below it (also raised from
+`px-4` to `px-5` app-wide, see below) so the title lines up with
+cards/forms rather than sitting off from them.
+
+**Typography — tightened further (targeted, per shared primitive):**
+
+```text
+PageHeader title        22px -> 19px, vertical padding 10px -> 12px
+CardTitle               17px -> 16px
+Button (lg size)        16px -> 15px (default size was already 15px)
+Home dashboard KPI      28px -> 26px
+Section heading (h2)    18px -> 16px (Manpower/Fleet Setup/Fleet Active)
+Page-content horizontal
+padding (app-wide)      px-4 (16px) -> px-5 (20px), matching PageHeader
+```
+
+Inputs/selects were deliberately **left at 16px**, not tightened to the
+newer 15px target — 16px is the documented iOS Safari no-auto-zoom
+threshold (§107), and dropping below it would reintroduce the exact
+zoom-on-focus behavior that pass avoided. Field labels and general body
+text (`text-sm`, 14px) were also left unchanged: they are inline
+Tailwind utility classes repeated across ~20 files for several
+different purposes (labels, helper text, body copy), not a single
+shared primitive, and the 1px gap to the new 13px target did not
+warrant a wide, unverifiable-without-a-device sweep. Critical
+operational status text (e.g. the Pile Haulage "SAMPLE REQUIRED"/"NO
+SAMPLE" banner, §31/§32) was left untouched — those are deliberately
+larger per §12's "critical values may use a larger size," not a plain
+section heading.

@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router'
 import { AppLayout } from '@/app/router/AppLayout'
 import { WelcomePage } from '@/app/router/WelcomePage'
+import { PreShiftShell } from '@/components/shared/PreShiftShell'
 import { FleetPage } from '@/features/fleet/FleetPage'
 import { HomePage } from '@/features/home/HomePage'
 import { PileDetailPage } from '@/features/piles/PileDetailPage'
@@ -13,7 +14,14 @@ export function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<WelcomePage />} />
-      <Route path="/start" element={<StartPage />} />
+      <Route
+        path="/start"
+        element={
+          <PreShiftShell>
+            <StartPage />
+          </PreShiftShell>
+        }
+      />
       <Route element={<AppLayout />}>
         <Route path="/home" element={<HomePage />} />
         <Route path="/fleet" element={<FleetPage />} />

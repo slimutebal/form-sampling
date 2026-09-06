@@ -56,6 +56,18 @@ describe('AppLayout route guard', () => {
     expect(spy).toHaveBeenCalled()
   })
 
+  it('D. renders the opaque safe-area top cap regardless of workspace load phase', () => {
+    vi.spyOn(localOperationalStore, 'loadCurrentShiftWorkspace').mockResolvedValue({ ok: true, value: undefined })
+
+    renderLayout()
+
+    // Present immediately (before the async workspace load even resolves) —
+    // it must cover the status-bar/Dynamic-Island strip no matter which of
+    // AppLayout's phase branches (loading/error/none/loaded) is rendering
+    // below it.
+    expect(screen.getByTestId('safe-area-top-cap')).toBeInTheDocument()
+  })
+
   it('C. Retry re-runs the workspace load after a failure', async () => {
     const user = userEvent.setup()
     const spy = vi
