@@ -19,6 +19,7 @@
     "noFront": "Tidak ada Front aktif untuk Pile_ID ini."
   },
   "detail": {
+    "title": "DETAIL {{pileId}}",
     "choosePile": "Pilih Pile_ID",
     "batchTotal": "Batch Total",
     "ritAccept": "Rit Accept",
