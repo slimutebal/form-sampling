@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { FileText, FlaskConical, Home, Package, Truck } from 'lucide-react'
+import { ClipboardList, FileText, FlaskConical, Home, Layers3 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, useLocation } from 'react-router'
 import { cn } from '@/components/ui/cn'
 
 const navItems = [
-  { to: '/home', labelKey: 'navigation.home', Icon: Home },
-  { to: '/fleet', labelKey: 'navigation.fleet', Icon: Truck },
-  { to: '/piles', labelKey: 'navigation.piles', Icon: Package },
-  { to: '/samples', labelKey: 'navigation.samples', Icon: FlaskConical },
-  { to: '/report', labelKey: 'navigation.report', Icon: FileText },
+  { to: '/home', labelKey: 'common:navigation.home', Icon: Home },
+  { to: '/regist', labelKey: 'registration:navigation.registration', Icon: ClipboardList },
+  { to: '/production', labelKey: 'production:navigation.production', Icon: Layers3 },
+  { to: '/samples', labelKey: 'common:navigation.samples', Icon: FlaskConical },
+  { to: '/report', labelKey: 'common:navigation.report', Icon: FileText },
 ] as const
 
 /** Ignore scroll noise below this size — prevents a tiny bounce/rubber-band from flipping visibility. */
@@ -33,11 +33,6 @@ function useBottomNavVisible() {
   const lastScrollY = useRef(0)
   const accumulated = useRef(0)
 
-  // Adjusting state during render (React's documented pattern for
-  // resetting on a prop/derived-value change) rather than in a
-  // useEffect — this reset must apply before this render commits, not
-  // one render later. Refs are never touched here (only allowed in
-  // effects/handlers, not during render) — the effect below handles them.
   if (pathname !== trackedPathname) {
     setTrackedPathname(pathname)
     setVisible(true)
@@ -63,8 +58,6 @@ function useBottomNavVisible() {
       const delta = currentScrollY - lastScrollY.current
       lastScrollY.current = currentScrollY
 
-      // A reversal resets the run so a brief wobble at a direction change
-      // doesn't carry over stale momentum from the opposite direction.
       if (delta !== 0 && Math.sign(delta) !== Math.sign(accumulated.current)) {
         accumulated.current = 0
       }
@@ -87,12 +80,12 @@ function useBottomNavVisible() {
 }
 
 export function BottomNav() {
-  const { t } = useTranslation()
+  const { t } = useTranslation(['common', 'registration', 'production'])
   const visible = useBottomNavVisible()
 
   return (
     <nav
-      aria-label={t('navigation.home')}
+      aria-label={t('common:navigation.home')}
       className={cn(
         'fixed inset-x-0 bottom-0 z-10 safe-bottom safe-x border-t border-border bg-background/95 shadow-[0_-2px_10px_rgba(15,23,42,0.06)] backdrop-blur transition-transform duration-200 ease-out supports-[backdrop-filter]:bg-background/80',
         visible ? 'translate-y-0' : 'translate-y-full',
