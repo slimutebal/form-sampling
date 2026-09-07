@@ -32,7 +32,6 @@ export function ProductionPage() {
 
   useEffect(() => {
     let cancelled = false
-    setPhase({ kind: 'loading' })
     void localOperationalStore.listHaulageTransactionsForShift(workspace.shift.id).then((result) => {
       if (cancelled) return
       setPhase(result.ok ? { kind: 'loaded', transactions: result.value } : { kind: 'error' })
