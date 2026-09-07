@@ -61,7 +61,7 @@ export function ProductionPileDetailPage() {
 
   return (
     <div>
-      <PageHeader title={`DETAIL ${pile.id}`} />
+      <PageHeader title={t('detail.title', { pileId: pile.id })} />
       <div className="flex flex-col gap-3 px-5 py-4">
         <div className="flex items-center justify-between">
           <span className="font-semibold">{pile.id}</span>
