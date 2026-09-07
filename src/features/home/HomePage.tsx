@@ -31,14 +31,6 @@ function StatTile({ label, value }: { label: string; value: number }) {
   )
 }
 
-/**
- * The active-shift dashboard (Phase 18 wiring correction §10). Reads
- * only already-persisted state — no new reporting calculation is
- * introduced here; pending sample count reuses
- * `derivePendingSamples` (§8/§12 rule), and wrong-truck count reads the
- * already-computed `truckValidation` snapshot on each stored
- * HaulageTransaction rather than recomputing it.
- */
 export function HomePage() {
   const { t, i18n } = useTranslation()
   const { workspace } = useOutletContext<ActiveWorkspaceContext>()
@@ -47,9 +39,7 @@ export function HomePage() {
   const [refreshPhase, setRefreshPhase] = useState<'idle' | 'refreshing' | 'error'>('idle')
 
   const handleRefreshMasterData = useCallback(async () => {
-    if (refreshPhase === 'refreshing') {
-      return
-    }
+    if (refreshPhase === 'refreshing') return
     setRefreshPhase('refreshing')
     const result = await refreshAppsScriptMasterData()
     if (!result.ok) {
@@ -62,7 +52,6 @@ export function HomePage() {
 
   useEffect(() => {
     let cancelled = false
-
     void Promise.all([
       localOperationalStore.listHaulageTransactionsForShift(workspace.shift.id),
       localOperationalStore.listSamplePositionsForShift(workspace.shift.id),
@@ -74,14 +63,12 @@ export function HomePage() {
       }
       setPhase({ kind: 'loaded', haulageTransactions: haulageResult.value, samplePositions: sampleResult.value })
     })
-
     return () => {
       cancelled = true
     }
   }, [workspace.shift.id])
 
   const language = i18n.language as SupportedLanguage
-
   const pendingCount =
     phase.kind === 'loaded'
       ? derivePendingSamples({
@@ -95,7 +82,6 @@ export function HomePage() {
           0,
         )
       : undefined
-
   const wrongTruckCount =
     phase.kind === 'loaded'
       ? phase.haulageTransactions.filter((transaction) => transaction.truckValidation.status === 'WRONG_TRUCK').length
@@ -147,7 +133,7 @@ export function HomePage() {
 
         <div className="flex flex-col gap-2">
           <Button asChild type="button" size="lg">
-            <Link to="/piles">{t('home.quickActions.inputDt')}</Link>
+            <Link to="/production?tab=record">{t('home.quickActions.inputDt')}</Link>
           </Button>
           <Button asChild type="button" size="lg" variant="secondary">
             <Link to="/samples">{t('home.quickActions.sampleHandling')}</Link>
