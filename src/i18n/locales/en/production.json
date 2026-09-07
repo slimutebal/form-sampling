@@ -1,0 +1,40 @@
+{
+  "navigation": {
+    "production": "Production"
+  },
+  "title": "Production",
+  "tabs": {
+    "detail": "Detail",
+    "record": "Record"
+  },
+  "search": {
+    "label": "Search Pile_ID",
+    "placeholder": "Search Pile_ID…"
+  },
+  "record": {
+    "choosePile": "Choose Pile_ID (Active)",
+    "empty": "No active Pile_ID is available for this shift.",
+    "title": "RECORD {{pileId}}",
+    "selectFront": "Front No",
+    "noFront": "No active Front is available for this Pile_ID."
+  },
+  "detail": {
+    "title": "DETAIL {{pileId}}",
+    "choosePile": "Choose Pile_ID",
+    "batchTotal": "Batch Total",
+    "ritAccept": "Accepted Rit",
+    "ritReject": "Rejected Rit",
+    "wrongTruck": "Wrong Truck",
+    "sampleTotal": "Sample Total",
+    "pendingSample": "Pending",
+    "empty": "No production data exists for this Pile_ID yet."
+  },
+  "legacy": {
+    "rejectUnavailable": "0"
+  },
+  "errors": {
+    "loadFailed": "Unable to load production data.",
+    "pileNotFound": "Pile_ID is not part of the active shift.",
+    "frontLoadFailed": "Active Fronts for this Pile_ID could not be loaded."
+  }
+}
