@@ -104,7 +104,7 @@ describe('HomePage', () => {
       manpower: [],
     })
 
-    expect(await screen.findByText('1')).toBeInTheDocument() // haulage count
+    expect(await screen.findByText('1')).toBeInTheDocument()
     const wrongTruckTile = (await screen.findByText('Wrong Truck')).closest('div')
     expect(wrongTruckTile).toHaveTextContent('1')
   })
@@ -128,7 +128,7 @@ describe('HomePage', () => {
     const picTile = (await screen.findByText('PIC')).closest('div')
     expect(picTile).toHaveTextContent('2')
 
-    expect(screen.getByRole('link', { name: 'Input DT / Open Pile' })).toHaveAttribute('href', '/piles')
+    expect(screen.getByRole('link', { name: 'Input DT / Open Pile' })).toHaveAttribute('href', '/production?tab=record')
     expect(screen.getByRole('link', { name: 'Sample Handling' })).toHaveAttribute('href', '/samples')
     expect(screen.getByRole('link', { name: 'Report' })).toHaveAttribute('href', '/report')
   })
