@@ -32,13 +32,12 @@ function renderNav(initialEntries: string[] = ['/home']) {
   )
 }
 
-/** Keeps a single BottomNav instance mounted while navigating, so route-change resets are observed on that instance rather than via remount. */
 function NavHarness() {
   const navigate = useNavigate()
   return (
     <>
-      <button type="button" onClick={() => navigate('/piles')}>
-        go to piles
+      <button type="button" onClick={() => navigate('/production')}>
+        go to production
       </button>
       <BottomNav />
     </>
@@ -55,37 +54,34 @@ describe('BottomNav', () => {
     setScrollY(0)
   })
 
-  it('shows the fixed 5-item nav (Home/Fleet/Pile/Sample/Report), with no extra items', () => {
+  it('shows the fixed 5-item nav (Home/Regist/Production/Sample/Report)', () => {
     renderNav()
-    const items = screen.getAllByRole('listitem')
-    expect(items).toHaveLength(5)
+    expect(screen.getAllByRole('listitem')).toHaveLength(5)
+    expect(screen.getByRole('link', { name: 'Regist' })).toHaveAttribute('href', '/regist')
+    expect(screen.getByRole('link', { name: 'Production' })).toHaveAttribute('href', '/production')
   })
 
-  it('labels the Piles route "Pile" and the Samples route "Sample" (Phase 18 §13, shortened per mobile hardening)', () => {
+  it('keeps Sample and Report as primary navigation items', () => {
     renderNav()
-    expect(screen.getByRole('link', { name: 'Pile' })).toHaveAttribute('href', '/piles')
     expect(screen.getByRole('link', { name: 'Sample' })).toHaveAttribute('href', '/samples')
+    expect(screen.getByRole('link', { name: 'Report' })).toHaveAttribute('href', '/report')
   })
 
-  it('no longer has a "More" nav item — its useful actions moved to Home/the Fleet page', () => {
+  it('does not expose Fleet or Pile as primary bottom-navigation destinations', () => {
     renderNav()
-    expect(screen.queryByRole('link', { name: 'More' })).not.toBeInTheDocument()
-  })
-
-  it('does not add a separate "Sample Input" item — /samples remains the only sample-related route', () => {
-    renderNav()
-    expect(screen.queryByRole('link', { name: /Sample Input/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Fleet' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Pile' })).not.toBeInTheDocument()
     expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
       '/home',
-      '/fleet',
-      '/piles',
+      '/regist',
+      '/production',
       '/samples',
       '/report',
     ])
   })
 
   it('A. stays visible while the page is not scrollable', () => {
-    setScrollableViewport(400, 800) // shorter than the viewport
+    setScrollableViewport(400, 800)
     renderNav()
     scrollTo(50)
     expect(isHidden(screen.getByRole('navigation'))).toBe(false)
@@ -94,8 +90,8 @@ describe('BottomNav', () => {
   it('B. hides after a meaningful downward scroll on a long page', () => {
     setScrollableViewport(3000, 800)
     renderNav()
-    scrollTo(100) // clear the top anchor first
-    scrollTo(140) // +40px downward, past the 16px threshold
+    scrollTo(100)
+    scrollTo(140)
     expect(isHidden(screen.getByRole('navigation'))).toBe(true)
   })
 
@@ -105,8 +101,7 @@ describe('BottomNav', () => {
     scrollTo(100)
     scrollTo(140)
     expect(isHidden(screen.getByRole('navigation'))).toBe(true)
-
-    scrollTo(100) // -40px upward, past the 16px threshold
+    scrollTo(100)
     expect(isHidden(screen.getByRole('navigation'))).toBe(false)
   })
 
@@ -116,20 +111,18 @@ describe('BottomNav', () => {
     scrollTo(100)
     scrollTo(140)
     expect(isHidden(screen.getByRole('navigation'))).toBe(true)
-
-    scrollTo(4) // back within the top anchor
+    scrollTo(4)
     expect(isHidden(screen.getByRole('navigation'))).toBe(false)
   })
 
   it('F. tiny scroll jitter does not toggle visibility', () => {
     setScrollableViewport(3000, 800)
     renderNav()
-    scrollTo(200) // settle away from the top anchor
+    scrollTo(200)
     const stateBeforeJitter = isHidden(screen.getByRole('navigation'))
-
-    scrollTo(206) // +6px wobble, under the 16px threshold
+    scrollTo(206)
     expect(isHidden(screen.getByRole('navigation'))).toBe(stateBeforeJitter)
-    scrollTo(198) // -8px wobble, still under threshold
+    scrollTo(198)
     expect(isHidden(screen.getByRole('navigation'))).toBe(stateBeforeJitter)
   })
 
@@ -144,9 +137,7 @@ describe('BottomNav', () => {
     scrollTo(100)
     scrollTo(140)
     expect(isHidden(screen.getByRole('navigation'))).toBe(true)
-
-    await user.click(screen.getByRole('button', { name: 'go to piles' }))
-
+    await user.click(screen.getByRole('button', { name: 'go to production' }))
     expect(isHidden(screen.getByRole('navigation'))).toBe(false)
   })
 })
