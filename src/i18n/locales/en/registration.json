@@ -1,0 +1,18 @@
+{
+  "navigation": {
+    "registration": "Regist"
+  },
+  "title": "Regist",
+  "manpower": {
+    "title": "Manpower",
+    "description": "Operator, checker, and crew"
+  },
+  "pile": {
+    "title": "Pile_ID",
+    "description": "Pile, batch, rit, and status"
+  },
+  "fleet": {
+    "title": "Fleet",
+    "description": "Front_No → Pile_ID"
+  }
+}
