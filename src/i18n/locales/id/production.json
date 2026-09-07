@@ -1,0 +1,39 @@
+{
+  "navigation": {
+    "production": "Produksi"
+  },
+  "title": "Produksi",
+  "tabs": {
+    "detail": "Detail",
+    "record": "Record"
+  },
+  "search": {
+    "label": "Cari Pile_ID",
+    "placeholder": "Cari Pile_ID…"
+  },
+  "record": {
+    "choosePile": "Pilih Pile_ID (Active)",
+    "empty": "Belum ada Pile_ID aktif pada shift ini.",
+    "title": "RECORD {{pileId}}",
+    "selectFront": "Front No",
+    "noFront": "Tidak ada Front aktif untuk Pile_ID ini."
+  },
+  "detail": {
+    "choosePile": "Pilih Pile_ID",
+    "batchTotal": "Batch Total",
+    "ritAccept": "Rit Accept",
+    "ritReject": "Rit Reject",
+    "wrongTruck": "Wrong Truck",
+    "sampleTotal": "Sample Total",
+    "pendingSample": "Pending",
+    "empty": "Belum ada data produksi pada Pile_ID ini."
+  },
+  "legacy": {
+    "rejectUnavailable": "0"
+  },
+  "errors": {
+    "loadFailed": "Gagal memuat data produksi.",
+    "pileNotFound": "Pile_ID tidak ditemukan pada shift aktif.",
+    "frontLoadFailed": "Front aktif untuk Pile_ID ini tidak dapat dimuat."
+  }
+}
