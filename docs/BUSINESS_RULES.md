@@ -383,6 +383,77 @@ CONFIRMED_BUSINESS_RULE
 
 ---
 
+## BR-MAN-004 — Current Shift Manpower May Be Updated After Activation (Field Trial Finding 1)
+
+Field trial menemukan bahwa manpower shift **berubah setelah shift
+berjalan** — crew replacement, tambahan crew, pergantian Staff/PIC,
+pergantian dispatcher, atau perubahan job assignment. Manpower Setup
+yang hanya bisa diisi sekali pada saat Registrasi Shift tidak
+mencerminkan kondisi lapangan ini.
+
+Manpower adalah **roster shift saat ini (current shift roster)**, bukan
+snapshot registrasi yang beku. Operator dapat membuka Home → bagian
+Manpower → **Ubah/Edit**, mengubah roster (tambah/hapus personel, ubah
+Job Desk), lalu **Save** — tanpa melewati ulang Start / Registrasi
+Shift / Fleet Setup
+(`src/features/manpower/manpower-edit-page.tsx`,
+`src/features/manpower/ManpowerEditRoute.tsx`).
+
+Validasi yang dipakai persis sama dengan Manpower Setup awal —
+`createManpowerFromDraft`
+(`src/application/manpower/create-manpower-from-draft.ts`) — sehingga
+BR-MAN-001..003 tetap berlaku tanpa perkecualian saat mengedit: Staff
+selalu PIC otomatis, Crew tidak pernah PIC, Job Desk Crew tetap wajib
+diisi jika master-nya kosong. Tidak ada validasi bisnis yang
+diduplikasi pada layer UI Home.
+
+Mengedit manpower **tidak pernah**:
+
+```text
+mengubah shift date
+mengubah shift code
+mengubah sector
+mengubah Sampling House
+me-reset fleet
+me-reset pile workspace
+me-reset haulage
+me-reset sample handling
+```
+
+Roster yang tersimpan (`LocalOperationalStore.updateShiftManpower`,
+`src/infrastructure/local-db/local-operational-store.ts`) menggantikan
+seluruh array `manpower` pada workspace shift yang sama — tidak pernah
+membuat snapshot haulage palsu, dan tidak pernah menyentuh
+`haulageTransactions` yang sudah tercatat. Lihat BR-MAN-005 untuk
+semantik report setelah edit.
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
+```
+
+---
+
+## BR-MAN-005 — Report Uses the Latest Saved Roster
+
+Report/export yang dibuat **setelah** manpower diedit membaca roster
+yang **terbaru tersimpan** pada workspace shift
+(`ReportPage.tsx` membaca `workspace.manpower` langsung dari
+`LocalOperationalStore`, lalu `buildShiftReport`
+mengalirkannya apa adanya — lihat BR-REPORT-002). Report yang sudah
+dibuat/dikirim sebelum edit tidak ditulis ulang secara retroaktif; ini
+konsisten dengan BR-TRUCK-003/BR-TRUCK-004 — data historis tidak pernah
+diklasifikasi ulang secara diam-diam.
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
+```
+
+---
+
 # 6. Previous Shift / Pending Rules
 
 Bagian ini merupakan salah satu business rule terpenting.
@@ -850,6 +921,95 @@ sementara effective result tetap sama.
 
 ---
 
+## BR-FLEET-006 — Persistent Active-Fleet Adjustment (Field Trial Finding 2)
+
+Field trial menemukan bahwa fleet efektif sebuah Front **ACTIVE** dapat
+berubah secara permanen/berulang di tengah shift — bukan hanya truck
+ad-hoc yang sesekali muncul di Pile (lihat BR-TRUCK-004 untuk
+perbedaan ad-hoc vs persistent). Contoh:
+
+```text
+BR1/04 saat ini:
+DT01
+DT02
+DT03
+
+Perubahan lapangan:
++ DT04
+- DT02
+
+Fleet efektif baru:
+DT01
+DT03
+DT04
+```
+
+Fleet page menyediakan aksi **"Atur Unit"** untuk setiap
+Front ACTIVE
+(`src/features/fleet/front-fleet-adjustment-editor.tsx`,
+`adjustFrontFleet` — `src/application/fleet-setup/adjust-front-fleet.ts`).
+Penyesuaian ini **truck-only**: Front No, Hauler, Destination, dan
+Fleet Reference (lineage) tidak diedit di sini — itu tetap milik alur
+continuation/new-BASE-Front yang sudah ada
+(`FrontContinuationEditor`).
+
+Aturan identitas Front (kritis):
+
+```text
+Penyesuaian truck BUKAN Front continuation.
+
+BR1/04 + DT04 - DT02 tetap BR1/04.
+
+Tidak pernah membuat BR1/05 hanya karena truck berubah.
+```
+
+Model lineage (BASE/DERIVED, `referenceFleetId`, linear, no branching —
+lihat BR-FLEET-004/005) tetap dipertahankan penuh:
+
+```text
+Front ACTIVE berstatus BASE
+→ truckIds definisinya sendiri diganti langsung dengan daftar truck
+  efektif baru.
+
+Front ACTIVE berstatus DERIVED
+→ referenceFleetId (dan karena itu seluruh rantai predecessor) TIDAK
+  disentuh; hanya addedTruckIds/removedTruckIds miliknya sendiri yang
+  dihitung ulang, sehingga hasil resolusinya sama dengan daftar truck
+  efektif baru yang disimpan operator.
+```
+
+Front HISTORICAL tidak pernah dapat diedit lewat jalur ini — persis
+seperti Fleet Setup awal, hanya Front ACTIVE yang boleh disesuaikan
+(`FRONT_NOT_ACTIVE`).
+
+**Amendment — minimum 1 unit per Front ACTIVE.** Sebuah Front ACTIVE
+harus selalu memiliki **minimal 1 truck efektif**. Operator boleh
+mengeluarkan truck sampai tersisa tepat 1, tetapi tidak boleh menyimpan
+hasil yang membuat fleet efektif menjadi 0 — baik pada Front BASE
+maupun DERIVED. Validasi ini dilakukan pada domain/application layer
+(`adjustFrontFleet`, kode error `FRONT_MINIMUM_UNIT_REQUIRED`), bukan
+validasi UI semata, sehingga berlaku konsisten dari jalur mana pun
+penyesuaian ini dipicu. UI menampilkan pesan tetap:
+
+```text
+Front aktif harus memiliki minimal 1 unit.
+```
+
+Penolakan ini **tidak** menandai Front menjadi tidak aktif dan **tidak**
+memperkenalkan status Front baru apa pun — status ACTIVE/HISTORICAL
+tetap murni diturunkan dari graf Fleet Reference (`deriveFrontLineage`),
+tidak berkaitan dengan jumlah unit. Aturan ini tidak mengubah lineage
+(BASE/DERIVED, `referenceFleetId`) maupun perilaku wrong-truck ad-hoc di
+Pile (BR-TRUCK-004) — keduanya tetap seperti sebelumnya.
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
+```
+
+---
+
 # 10. Truck Validation Rules
 
 ## BR-TRUCK-001 — Truck Valid Against Effective Fleet
@@ -918,6 +1078,48 @@ sebelumnya menolak setiap klasifikasi non-`VALID` sebagai defensive
 guard sudah dihapus — guard tersebut sebelumnya justru melanggar aturan
 ini karena mem-block penyimpanan Wrong Truck sama sekali dari alur
 checker normal.
+
+---
+
+## BR-TRUCK-004 — Temporary (Pile) vs Persistent (Fleet) Truck Adjustment (Field Trial Finding 2)
+
+Ada dua mekanisme berbeda yang keduanya harus tetap ada bersamaan:
+
+```text
+PILE PAGE (Truck checker saat mencatat haulage)
+= ad-hoc/temporary — truck di luar effective fleet tetap dapat dipilih
+  dan dicatat sebagai WRONG_TRUCK (BR-TRUCK-001/003), TANPA PERNAH
+  mengubah effective fleet Front yang bersangkutan secara otomatis.
+  Ini kejadian satu kali (one-off), bukan koreksi fleet.
+
+FLEET PAGE ("Atur Unit", BR-FLEET-006)
+= persistent — truck yang ditambahkan menjadi bagian resmi effective
+  fleet Front tersebut untuk seluruh Rit berikutnya; truck yang
+  dikeluarkan langsung berhenti menjadi bagian effective fleet, dan
+  jika truck itu muncul lagi pada Rit berikutnya, ia diklasifikasi
+  TRUCK SALAH (WRONG_TRUCK / NOT_IN_EFFECTIVE_FLEET).
+```
+
+Kapasitas Pile untuk mencatat wrong truck ad-hoc **tidak pernah**
+dihapus atau dilemahkan oleh adanya fitur "Atur Unit" — keduanya
+melayani kebutuhan operasional yang berbeda.
+
+Klasifikasi setelah penyesuaian persistent selalu memakai effective
+fleet **yang baru saja disimpan** (`resolveEffectiveFleetAgainstMaster`
+membaca `FleetSetup` yang sudah diganti pada workspace). Transaksi
+haulage yang **sudah tercatat sebelum** penyesuaian tidak pernah
+diklasifikasi ulang secara retroaktif — `truckValidation` yang sudah
+tersimpan pada `HaulageTransaction` adalah snapshot permanen milik
+transaksi itu (mengikuti BR-TRUCK-003), persis seperti sebuah Front
+continuation tidak pernah menulis ulang haulage historisnya
+(`LocalOperationalStore.updateActiveFrontFleet`, yang berbagi jalur
+atomic-replace yang sama dengan `appendFrontContinuation`).
+
+Classification:
+
+```text
+CONFIRMED_BUSINESS_RULE
+```
 
 ---
 

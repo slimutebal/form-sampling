@@ -117,10 +117,14 @@
     "remove": "Hapus",
     "removeNamed": "Hapus {{name}}",
     "continue": "Lanjutkan",
+    "editTitle": "Ubah Manpower Shift",
+    "save": "Simpan",
+    "cancel": "Batal",
     "errors": {
       "duplicatePerson": "Personel ini sudah ditambahkan.",
       "jobDeskRequired": "Job Desk wajib diisi.",
       "personNotFound": "Personel ini tidak ditemukan pada master Employee/Crew.",
+      "storeContextInvalid": "Workspace shift aktif tidak ditemukan.",
       "generic": "Terjadi kesalahan pada setup manpower."
     }
   },
@@ -137,6 +141,10 @@
     "haulageCount": "Haulage",
     "pendingSamples": "Sampel Tertunda",
     "wrongTruckCount": "Wrong Truck",
+    "manpower": {
+      "summary": "{{staffCount}} Staff · {{crewCount}} Crew",
+      "edit": "Ubah Manpower"
+    },
     "quickActions": {
       "inputDt": "Input DT / Buka Pile",
       "sampleHandling": "Penanganan Sampel",
@@ -284,9 +292,15 @@
     "detail": "Detail",
     "hideDetail": "Sembunyikan Detail",
     "continuedBy": "Dilanjutkan oleh {{frontId}}",
+    "adjustUnit": "Atur Unit",
+    "adjustUnitTitle": "Atur Unit — {{frontId}}",
+    "currentTrucks": "Truck Saat Ini",
+    "saveUnits": "Simpan Unit",
     "errors": {
       "frontNotFound": "Pilih Front acuan.",
       "alreadySuperseded": "Front ini sudah memiliki penerus. Acu ke penerusnya.",
+      "frontNotActive": "Front ini sudah historis — daftar unitnya tidak dapat diubah lagi.",
+      "minimumUnitRequired": "Front aktif harus memiliki minimal 1 unit.",
       "numberLimitReached": "Batas maksimum 25 Front untuk Sektor ini sudah tercapai.",
       "destinationRequired": "Pilih Destination/Pile untuk Front baru ini.",
       "storeContextInvalid": "Workspace shift aktif tidak ditemukan.",

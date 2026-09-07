@@ -3089,3 +3089,130 @@ operational status text (e.g. the Pile Haulage "SAMPLE REQUIRED"/"NO
 SAMPLE" banner, §31/§32) was left untouched — those are deliberately
 larger per §12's "critical values may use a larger size," not a plain
 section heading.
+
+---
+
+# 109. Field Trial Fix — Mid-Shift Manpower Edit & Persistent Active Fleet Adjustment
+
+Two field trial findings, both extending existing screens rather than
+introducing a new workflow (BUSINESS_RULES.md §5 BR-MAN-004/005, §9
+BR-FLEET-006, §10 BR-TRUCK-004).
+
+**Home — Manpower edit (Field Finding 1).** §26's Home Dashboard gains
+one compact row above the existing stat-tile grid, reusing the same
+Card primitive:
+
+```text
+MANPOWER
+1 Staff · 1 Crew                              [Ubah Manpower]
+```
+
+"Ubah Manpower" links to `/manpower/edit`
+(`src/features/manpower/ManpowerEditRoute.tsx` →
+`src/features/manpower/manpower-edit-page.tsx`), a full-screen editor —
+not a route back through Start/Registrasi Shift/Fleet Setup. It reuses
+§24's exact search/add/remove/Job-Desk-edit behavior and validation
+(`useManpowerRoster`, `PersonnelSearchField`, `SelectedPersonnelList` —
+`src/features/manpower/manpower-roster-fields.tsx`), pre-filled from the
+current shift's already-saved roster instead of starting empty:
+
+```text
+UBAH MANPOWER SHIFT
+
+[ Search NIK / Name ]
+
+Personel Terpilih
+SCM0333
+Raharjo Rahman
+Penanggung Jawab
+Job Desk [ ]
+
+260225
+Andri Tani Kusuma
+Job Desk [ Sampler ]
+
+[ Batal ]   [ Simpan ]
+```
+
+Save/Cancel replace Continue/Back: **Save** revalidates the roster
+(`createManpowerFromDraft`, unchanged) and persists it via
+`LocalOperationalStore.updateShiftManpower`, then returns to Home;
+**Cancel** discards every in-progress change and returns to Home
+without writing anything. No accidental shift restart is possible from
+this screen — it never touches shift date/code/sector/Sampling House,
+fleet, pile workspace, haulage, or sample handling.
+
+**Fleet — "Atur Unit" (Field Finding 2).** §105's Active Fronts card
+gains a second action next to "[Detail]":
+
+```text
+BR1/04
+Hauler: H1
+Destination: L18_S09
+Units: 3
+[Detail]   [Atur Unit]
+```
+
+"Atur Unit" opens `FrontFleetAdjustmentEditor`
+(`src/features/fleet/front-fleet-adjustment-editor.tsx`) in the same
+place §105's "+ Tambah Front" editor renders — this is deliberately
+**not** that editor: Front No, Hauler, Fleet Reference, and Destination
+are shown read-only, and only the truck list is editable.
+
+```text
+ATUR UNIT — BR1/04
+
+Hauler: H1
+Destination: L18_S09
+
+Truck Saat Ini
+DT01                                          [Hapus]
+DT03                                          [Hapus]
+
+Tambah Truck
+[ DT04 ▾ ]  [Tambah Truck]
+
+Fleet Efektif
+DT01  DT03  DT04
+
+[ Batal ]   [ Simpan Unit ]
+```
+
+Delegated entirely to `adjustFrontFleet`
+(`src/application/fleet-setup/adjust-front-fleet.ts`, BUSINESS_RULES.md
+BR-FLEET-006) — this screen never computes fleet membership itself
+(§97). Saving never changes the Front ID (BR1/04 stays BR1/04, this is
+not a continuation) and never touches lineage: a BASE Front's
+`truckIds` is replaced outright, a DERIVED Front's `referenceFleetId`
+is preserved and only its own Add/Remove delta is recomputed. Persisted
+via `LocalOperationalStore.updateActiveFrontFleet`, which shares
+`appendFrontContinuation`'s atomic replace-and-persist write path.
+
+Only ACTIVE Fronts show "Atur Unit" — a HISTORICAL Front stays entirely
+read-only, mirroring §105's existing "never revalidate historical
+state" rule (`FRONT_NOT_ACTIVE` if attempted anyway).
+
+**Minimum 1 unit (BR-FLEET-006 amendment).** An ACTIVE Front must always
+retain at least 1 effective truck. The operator can remove trucks freely
+down to exactly 1, but `adjustFrontFleet` rejects a save that would
+leave 0 (`FRONT_MINIMUM_UNIT_REQUIRED`) — enforced in the domain/
+application layer, not as UI-only validation, so the same guard applies
+however the screen is driven. The Save button stays enabled; instead the
+editor's live Effective Fleet preview and the Save attempt both surface
+the fixed Indonesian message:
+
+```text
+Front aktif harus memiliki minimal 1 unit.
+```
+
+This never marks the Front inactive and introduces no new Front status
+model — ACTIVE/HISTORICAL stays purely derived from the Fleet Reference
+graph (`deriveFrontLineage`), unrelated to unit count.
+
+**Temporary vs persistent, restated for this screen (BR-TRUCK-004):**
+Pile's existing Truck checker (§38/§39) still lets the operator select
+and record a truck outside the effective fleet as an ad-hoc WRONG_TRUCK
+transaction — that capability is unchanged and is never a substitute
+for "Atur Unit." Only a save through this Fleet-page editor changes
+what counts as VALID/expected for the Front going forward; a Pile-page
+wrong-truck entry never does.

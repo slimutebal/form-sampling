@@ -120,9 +120,12 @@ function buildWorkspace(fleetSetup: FleetSetup, masterData: MasterData, piles: r
   }
 }
 
-function fakeStore(result: Result<void, DomainError> = ok(undefined)): FleetActivePageStore & { appendFrontContinuation: ReturnType<typeof vi.fn> } {
+function fakeStore(
+  result: Result<void, DomainError> = ok(undefined),
+): FleetActivePageStore & { appendFrontContinuation: ReturnType<typeof vi.fn>; updateActiveFrontFleet: ReturnType<typeof vi.fn> } {
   return {
     appendFrontContinuation: vi.fn(async () => result),
+    updateActiveFrontFleet: vi.fn(async () => result),
   }
 }
 
@@ -276,5 +279,131 @@ describe('FleetActivePage — new independent BASE Front (Phase 18 §2, Fleet Re
     expect(newFleet).toMatchObject({ kind: 'BASE', truckIds: ['STM-A40_0001'] })
     // No DERIVED fleet was created for the new Front, so BR1/01 is never retired.
     expect(onFleetUpdated).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('FleetActivePage — persistent unit adjustment (Field Finding 2, "Atur Unit")', () => {
+  it('offers Atur Unit only for ACTIVE fronts, never for a HISTORICAL one', async () => {
+    await i18n.changeLanguage('en')
+    const masterData = buildMasterData()
+    const fleetSetup = buildContinuedFleetSetup(masterData)
+    const workspace = buildWorkspace(fleetSetup, masterData)
+
+    render(<FleetActivePage workspace={workspace} store={fakeStore()} onFleetUpdated={vi.fn()} />)
+
+    expect(screen.getAllByRole('button', { name: 'Atur Unit' })).toHaveLength(1)
+  })
+
+  it('adds a truck persistently through Fleet — Front ID stays unchanged, no continuation is created', async () => {
+    await i18n.changeLanguage('en')
+    const user = userEvent.setup()
+    const masterData = buildMasterData()
+    const fleetSetup = buildSingleFrontFleetSetup(masterData) // S1/01 BASE = { T1 }
+    const workspace = buildWorkspace(fleetSetup, masterData)
+    const store = fakeStore()
+    const onFleetUpdated = vi.fn()
+
+    render(<FleetActivePage workspace={workspace} store={store} onFleetUpdated={onFleetUpdated} />)
+
+    await user.click(screen.getByRole('button', { name: 'Atur Unit' }))
+    expect(screen.getByText('Adjust Unit — S1/01')).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Add Truck'), 'T2')
+    await user.click(screen.getByRole('button', { name: 'Add Truck' }))
+    await user.click(screen.getByRole('button', { name: 'Save Units' }))
+
+    expect(store.updateActiveFrontFleet).toHaveBeenCalledTimes(1)
+    const [, savedFleetSetup] = store.updateActiveFrontFleet.mock.calls[0] as [ShiftId, FleetSetup]
+    expect(savedFleetSetup.fronts.map((front) => front.frontId)).toEqual(['S1/01'])
+    const savedFleet = savedFleetSetup.fleets.find((fleet) => fleet.frontId === 'S1/01')
+    expect(savedFleet).toMatchObject({ kind: 'BASE', truckIds: ['T1', 'T2'] })
+    expect(onFleetUpdated).toHaveBeenCalledTimes(1)
+  })
+
+  it('removes a truck down to exactly 1 unit — succeeds (minimum is 1, not 0)', async () => {
+    await i18n.changeLanguage('en')
+    const user = userEvent.setup()
+    const masterData = buildMasterData()
+    const fleetSetup = buildSingleFrontFleetSetup(masterData) // S1/01 BASE = { T1 }
+    const workspace = buildWorkspace(fleetSetup, masterData)
+    const store = fakeStore()
+
+    render(<FleetActivePage workspace={workspace} store={store} onFleetUpdated={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Atur Unit' }))
+    // Add T2, then remove the original T1 — ends at exactly 1 truck (T2), never 0.
+    await user.selectOptions(screen.getByLabelText('Add Truck'), 'T2')
+    await user.click(screen.getByRole('button', { name: 'Add Truck' }))
+    await user.click(screen.getByRole('button', { name: 'Remove T1' }))
+    await user.click(screen.getByRole('button', { name: 'Save Units' }))
+
+    expect(store.updateActiveFrontFleet).toHaveBeenCalledTimes(1)
+    const [, savedFleetSetup] = store.updateActiveFrontFleet.mock.calls[0] as [ShiftId, FleetSetup]
+    const savedFleet = savedFleetSetup.fleets.find((fleet) => fleet.frontId === 'S1/01')
+    expect(savedFleet).toMatchObject({ kind: 'BASE', truckIds: ['T2'] })
+  })
+
+  it('cannot save after removing the last effective truck — an ACTIVE Front must retain at least 1 unit', async () => {
+    await i18n.changeLanguage('en')
+    const user = userEvent.setup()
+    const masterData = buildMasterData()
+    const fleetSetup = buildSingleFrontFleetSetup(masterData) // S1/01 BASE = { T1 }
+    const workspace = buildWorkspace(fleetSetup, masterData)
+    const store = fakeStore()
+
+    render(<FleetActivePage workspace={workspace} store={store} onFleetUpdated={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Atur Unit' }))
+    await user.click(screen.getByRole('button', { name: 'Remove T1' }))
+    await user.click(screen.getByRole('button', { name: 'Save Units' }))
+
+    expect(await screen.findByText('Front aktif harus memiliki minimal 1 unit.')).toBeInTheDocument()
+    expect(store.updateActiveFrontFleet).not.toHaveBeenCalled()
+  })
+
+  it('preserves DERIVED lineage (referenceFleetId) when adjusting an active continuation Front', async () => {
+    await i18n.changeLanguage('en')
+    const user = userEvent.setup()
+    const masterData = buildMasterData()
+    const fleetSetup = buildContinuedFleetSetup(masterData) // S1/02 DERIVED, references S1/01 (empty BASE)
+    const workspace = buildWorkspace(fleetSetup, masterData)
+    const store = fakeStore()
+
+    render(<FleetActivePage workspace={workspace} store={store} onFleetUpdated={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Atur Unit' }))
+    await user.selectOptions(screen.getByLabelText('Add Truck'), 'T1')
+    await user.click(screen.getByRole('button', { name: 'Add Truck' }))
+    await user.click(screen.getByRole('button', { name: 'Save Units' }))
+
+    const [, savedFleetSetup] = store.updateActiveFrontFleet.mock.calls[0] as [ShiftId, FleetSetup]
+    expect(savedFleetSetup.fronts.map((front) => front.frontId).sort()).toEqual(['S1/01', 'S1/02'])
+    const savedFleet = savedFleetSetup.fleets.find((fleet) => fleet.frontId === 'S1/02')
+    expect(savedFleet?.kind).toBe('DERIVED')
+    if (savedFleet?.kind === 'DERIVED') {
+      const originalFleet = fleetSetup.fleets.find((fleet) => fleet.frontId === 'S1/02')
+      expect(savedFleet.referenceFleetId).toBe(originalFleet && originalFleet.kind === 'DERIVED' ? originalFleet.referenceFleetId : undefined)
+    }
+    // The predecessor Front's own fleet is never mutated by this adjustment.
+    const predecessorFleet = savedFleetSetup.fleets.find((fleet) => fleet.frontId === 'S1/01')
+    expect(predecessorFleet).toMatchObject({ kind: 'BASE', truckIds: [] })
+  })
+
+  it('surfaces a store error instead of silently succeeding', async () => {
+    await i18n.changeLanguage('en')
+    const user = userEvent.setup()
+    const masterData = buildMasterData()
+    const fleetSetup = buildSingleFrontFleetSetup(masterData)
+    const workspace = buildWorkspace(fleetSetup, masterData)
+    const store = fakeStore({ ok: false, error: { code: 'SHIFT_WORKSPACE_NOT_FOUND', message: 'x' } })
+    const onFleetUpdated = vi.fn()
+
+    render(<FleetActivePage workspace={workspace} store={store} onFleetUpdated={onFleetUpdated} />)
+
+    await user.click(screen.getByRole('button', { name: 'Atur Unit' }))
+    await user.click(screen.getByRole('button', { name: 'Save Units' }))
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(onFleetUpdated).not.toHaveBeenCalled()
   })
 })

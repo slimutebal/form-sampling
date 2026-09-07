@@ -6,6 +6,8 @@
 const FLEET_ACTIVE_ERROR_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   FRONT_NOT_FOUND: 'fleetActive.errors.frontNotFound',
   FRONT_ALREADY_SUPERSEDED: 'fleetActive.errors.alreadySuperseded',
+  FRONT_NOT_ACTIVE: 'fleetActive.errors.frontNotActive',
+  FRONT_MINIMUM_UNIT_REQUIRED: 'fleetActive.errors.minimumUnitRequired',
   FRONT_NUMBER_LIMIT_REACHED: 'fleetActive.errors.numberLimitReached',
   FLEET_REFERENCE_BRANCHING: 'fleetActive.errors.alreadySuperseded',
   FLEET_DESTINATION_PILE_NOT_FOUND: 'fleetSetup.errors.destinationNotFound',

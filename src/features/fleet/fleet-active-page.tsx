@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { AdjustFrontFleetResult } from '@/application/fleet-setup/adjust-front-fleet'
 import type { AppendFrontContinuationResult } from '@/application/fleet-setup/append-front-continuation'
 import {
   generateFleetId as defaultGenerateFleetId,
@@ -19,6 +20,7 @@ import type { Pile } from '@/domain/pile/pile'
 import { EffectiveFleetPreview } from '@/features/fleet-setup/effective-fleet-preview'
 import { fleetActiveErrorTranslationKey } from '@/features/fleet/error-messages'
 import { FrontContinuationEditor } from '@/features/fleet/front-continuation-editor'
+import { FrontFleetAdjustmentEditor } from '@/features/fleet/front-fleet-adjustment-editor'
 import type { LocalShiftWorkspace } from '@/infrastructure/local-db/local-operational-store'
 
 /** The smallest write shape this page needs from `LocalOperationalStore`. */
@@ -27,6 +29,7 @@ export interface FleetActivePageStore {
     shiftId: ShiftId,
     params: { readonly fleetSetup: FleetSetup; readonly activatePile?: Pile },
   ): Promise<Result<void, DomainError>>
+  updateActiveFrontFleet(shiftId: ShiftId, fleetSetup: FleetSetup): Promise<Result<void, DomainError>>
 }
 
 export interface FleetActivePageProps {
@@ -60,6 +63,7 @@ export function FleetActivePage({
   const [adding, setAdding] = useState(false)
   const [fleetId, setFleetId] = useState(generateFleetId)
   const [expandedFrontIds, setExpandedFrontIds] = useState<ReadonlySet<string>>(new Set())
+  const [adjustingFrontId, setAdjustingFrontId] = useState<string>()
   const [saving, setSaving] = useState(false)
   const [errorCode, setErrorCode] = useState<string>()
 
@@ -68,6 +72,7 @@ export function FleetActivePage({
 
   const activeFronts = fleetSetup.fronts.filter((front) => lineage.activeFrontIds.includes(front.frontId))
   const historicalFronts = fleetSetup.fronts.filter((front) => lineage.historicalFrontIds.includes(front.frontId))
+  const adjustingFront = adjustingFrontId ? activeFronts.find((front) => front.frontId === adjustingFrontId) : undefined
 
   function toggleExpanded(frontId: string) {
     setExpandedFrontIds((current) => {
@@ -112,6 +117,33 @@ export function FleetActivePage({
     }
   }
 
+  function openAdjustUnit(frontId: string) {
+    setAdjustingFrontId(frontId)
+    setErrorCode(undefined)
+  }
+
+  function cancelAdjustUnit() {
+    setAdjustingFrontId(undefined)
+    setErrorCode(undefined)
+  }
+
+  async function handleSaveAdjustment(result: AdjustFrontFleetResult) {
+    if (saving) return
+    setSaving(true)
+    setErrorCode(undefined)
+    try {
+      const saveResult = await store.updateActiveFrontFleet(workspace.shiftId, result.fleetSetup)
+      if (!saveResult.ok) {
+        setErrorCode(saveResult.error.code)
+        return
+      }
+      setAdjustingFrontId(undefined)
+      onFleetUpdated()
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div>
       <PageHeader title={t('fleetActive.title')} />
@@ -125,7 +157,15 @@ export function FleetActivePage({
           </p>
         ) : null}
 
-        {adding ? (
+        {adjustingFront ? (
+          <FrontFleetAdjustmentEditor
+            front={adjustingFront}
+            masterData={workspace.masterData}
+            fleetSetup={fleetSetup}
+            onSave={(result) => void handleSaveAdjustment(result)}
+            onCancel={cancelAdjustUnit}
+          />
+        ) : adding ? (
           <FrontContinuationEditor
             shift={workspace.shift}
             masterData={workspace.masterData}
@@ -185,9 +225,14 @@ export function FleetActivePage({
                           <dt className="text-muted-foreground">{t('fleetActive.units')}</dt>
                           <dd className="break-all text-right font-medium">{truckIds.length}</dd>
                         </dl>
-                        <Button type="button" variant="secondary" onClick={() => toggleExpanded(front.frontId)}>
-                          {expanded ? t('fleetActive.hideDetail') : t('fleetActive.detail')}
-                        </Button>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button type="button" variant="secondary" onClick={() => toggleExpanded(front.frontId)}>
+                            {expanded ? t('fleetActive.hideDetail') : t('fleetActive.detail')}
+                          </Button>
+                          <Button type="button" variant="secondary" onClick={() => openAdjustUnit(front.frontId)}>
+                            {t('fleetActive.adjustUnit')}
+                          </Button>
+                        </div>
                         {expanded ? <EffectiveFleetPreview truckIds={truckIds} /> : null}
                       </CardContent>
                     </Card>

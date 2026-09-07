@@ -692,6 +692,72 @@ export class LocalOperationalStore {
   }
 
   /**
+   * Replaces the current shift's Manpower roster (Field Finding 1 — mid-
+   * shift crew/staff changes). Unlike `initializeShiftWorkspace`'s
+   * write-once `manpower`, this is a deliberate whole-array replace: the
+   * caller (`@/application/manpower/create-manpower-from-draft`, reused
+   * unchanged for both initial setup and this edit) has already re-
+   * validated the full incoming roster against MasterData, so this store
+   * method only ever persists an already-validated array — it never
+   * merges or diffs against the previously stored one. Every other field
+   * on the workspace record — shift, piles, masterData, fleetSetup,
+   * pendingBatches/pendingSamples — is carried through unchanged, so this
+   * can never reset fleet/pile/sample-handling state. Existing
+   * `haulageTransactions` are a separate table entirely and are never
+   * touched here — historical haulage keeps whatever manpower roster was
+   * in effect when it was recorded (there is no per-transaction manpower
+   * snapshot to rewrite). `SHIFT_WORKSPACE_NOT_FOUND` if no workspace
+   * exists for `shiftId`. No schema change: `manpower` is an existing
+   * field on the stored record.
+   */
+  async updateShiftManpower(
+    shiftId: ShiftId,
+    manpower: readonly ManpowerAssignment[],
+  ): Promise<StoreResult<void>> {
+    // Snapshot before the first `await`, mirroring every other write
+    // method on this store (Phase 7 §29).
+    const manpowerSnapshot: readonly ManpowerAssignment[] = structuredClone(manpower)
+
+    try {
+      await this.db.transaction('rw', this.db.shiftWorkspaces, async () => {
+        const existing = await this.db.shiftWorkspaces.get(shiftId)
+        if (!existing) {
+          raiseExpectedError(
+            'SHIFT_WORKSPACE_NOT_FOUND',
+            `No shift workspace exists for ShiftId ${shiftId}`,
+          )
+        }
+
+        await this.db.shiftWorkspaces.put({
+          ...existing,
+          manpower: manpowerSnapshot,
+        })
+      })
+      return ok(undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Persists a persistent effective-fleet (unit) adjustment for an
+   * ACTIVE Front (Field Finding 2 — mid-shift crew replacement/addition
+   * of trucks, distinct from Pile's ad-hoc "wrong truck" recording).
+   * `fleetSetup` is an already fully-validated snapshot built by
+   * `@/application/fleet-setup/adjust-front-fleet`, which rebuilds only
+   * the target Front's own FleetDefinition (same FrontId — BASE
+   * `truckIds` replaced outright, or DERIVED add/remove delta
+   * recomputed against its unchanged `referenceFleetId` so lineage is
+   * preserved) and re-validates the whole Front/Fleet graph. Delegates
+   * to `appendFrontContinuation`'s identical atomic replace-and-persist
+   * behavior — a persistent truck adjustment never activates a new
+   * destination Pile, so `activatePile` is never passed.
+   */
+  async updateActiveFrontFleet(shiftId: ShiftId, fleetSetup: FleetSetup): Promise<StoreResult<void>> {
+    return this.appendFrontContinuation(shiftId, { fleetSetup })
+  }
+
+  /**
    * Appends one validated HaulageTransaction (Phase 7 §20–§25). Add-only:
    * a repeated `transaction.id` fails with
    * `DUPLICATE_HAULAGE_TRANSACTION_ID` rather than overwriting the

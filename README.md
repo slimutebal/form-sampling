@@ -91,7 +91,10 @@ Fleet Setup → masuk workspace shift aktif (Beranda)**.
   didukung.
 - **Manpower** — memilih personel dari master Staff/Crew (pencarian
   nama/NIK). Penanggung Jawab (PIC) ditentukan otomatis dari sumber master
-  personel tersebut, bukan dipilih manual.
+  personel tersebut, bukan dipilih manual. Roster ini dapat **diubah lagi
+  setelah shift berjalan** dari Beranda (lihat [Beranda](#b-beranda)) —
+  tidak perlu mengulang Registrasi Shift/Fleet Setup untuk pergantian
+  crew/staff/dispatcher.
 - **Fleet Setup** — mendaftarkan Front awal (Sector/Front No, Hauler,
   Destination/Pile, daftar truck). Lihat detail lengkap di bagian
   [Fleet](#c-fleet).
@@ -103,6 +106,13 @@ Fleet Setup → masuk workspace shift aktif (Beranda)**.
 Halaman ringkasan status shift aktif: shift/sector/sampling house yang
 sedang berjalan, jumlah pile aktif, dan navigasi cepat ke pekerjaan yang
 sedang berlangsung.
+
+- Ringkasan **Manpower** (jumlah Staff/Crew) ditampilkan dengan aksi
+  **Ubah** — membuka layar edit roster manpower shift saat ini
+  (tambah/hapus personel, ubah Job Desk), lalu **Simpan**. Ini tidak
+  mengulang Registrasi Shift/Fleet Setup dan tidak mengubah tanggal
+  shift, kode shift, sector, Sampling House, fleet, pile, maupun data
+  haulage/sample yang sudah tercatat.
 
 ### C. Fleet
 
@@ -130,6 +140,17 @@ dapat berpindah kapan saja.
   ```
 
 - **Riwayat Front** ditampilkan read-only di halaman yang sama.
+- **Atur Unit / Edit Unit** (per Front aktif) — penyesuaian fleet efektif
+  yang **permanen**, berbeda dari truck di luar fleet yang dicatat di
+  halaman Pile (lihat [Pile](#d-pile)):
+  - Truck yang **ditambahkan** di sini langsung berlaku VALID untuk Rit
+    berikutnya pada Front tersebut.
+  - Truck yang **dikeluarkan** langsung berhenti valid — jika truck itu
+    dipakai lagi pada Rit berikutnya, akan ditandai **TRUCK SALAH**.
+  - Front ID **tidak berubah** (bukan continuation baru), dan riwayat
+    haulage yang sudah tercatat sebelumnya **tidak** diklasifikasi ulang.
+  - Hanya berlaku untuk Front **aktif** — Front historis tidak dapat
+    diubah dari sini.
 
 ### D. Pile
 

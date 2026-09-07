@@ -132,4 +132,21 @@ describe('HomePage', () => {
     expect(screen.getByRole('link', { name: 'Sample Handling' })).toHaveAttribute('href', '/samples')
     expect(screen.getByRole('link', { name: 'Report' })).toHaveAttribute('href', '/report')
   })
+
+  it('D. shows a compact Manpower summary with an Edit action linking to the mid-shift edit screen', async () => {
+    vi.spyOn(localOperationalStore, 'listHaulageTransactionsForShift').mockResolvedValue({ ok: true, value: [] })
+    vi.spyOn(localOperationalStore, 'listSamplePositionsForShift').mockResolvedValue({ ok: true, value: [] })
+
+    const workspace = {
+      ...buildWorkspace(),
+      manpower: [
+        createManpowerAssignment('SCM0333', 'Raharjo Rahman', 'Checker', true),
+        createManpowerAssignment('260225', 'Andri Tani Kusuma', 'Sampler', false),
+      ],
+    }
+    renderHome(workspace)
+
+    expect(await screen.findByText('1 Staff · 1 Crew')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Ubah Manpower' })).toHaveAttribute('href', '/manpower/edit')
+  })
 })

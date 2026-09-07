@@ -116,6 +116,20 @@ export function HomePage() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardContent className="flex flex-row items-center justify-between gap-3">
+            <p className="text-sm font-medium">
+              {t('home.manpower.summary', {
+                staffCount: workspace.manpower.filter((assignment) => assignment.isPic).length,
+                crewCount: workspace.manpower.filter((assignment) => !assignment.isPic).length,
+              })}
+            </p>
+            <Button asChild type="button" variant="secondary">
+              <Link to="/manpower/edit">{t('home.manpower.edit')}</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-2 gap-3">
           <StatTile label={t('home.manpowerCount')} value={workspace.manpower.length} />
           <StatTile label={t('home.picCount')} value={workspace.manpower.filter((assignment) => assignment.isPic).length} />

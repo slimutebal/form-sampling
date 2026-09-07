@@ -117,10 +117,14 @@
     "remove": "Remove",
     "removeNamed": "Remove {{name}}",
     "continue": "Continue",
+    "editTitle": "Edit Shift Manpower",
+    "save": "Save",
+    "cancel": "Cancel",
     "errors": {
       "duplicatePerson": "This person has already been added.",
       "jobDeskRequired": "Job Desk is required.",
       "personNotFound": "This person was not found in the Employee/Crew master.",
+      "storeContextInvalid": "The active shift workspace could not be found.",
       "generic": "Something went wrong with Manpower setup."
     }
   },
@@ -137,6 +141,10 @@
     "haulageCount": "Haulage",
     "pendingSamples": "Pending Samples",
     "wrongTruckCount": "Wrong Truck",
+    "manpower": {
+      "summary": "{{staffCount}} Staff · {{crewCount}} Crew",
+      "edit": "Ubah Manpower"
+    },
     "quickActions": {
       "inputDt": "Input DT / Open Pile",
       "sampleHandling": "Sample Handling",
@@ -284,9 +292,15 @@
     "detail": "Detail",
     "hideDetail": "Hide Detail",
     "continuedBy": "Continued by {{frontId}}",
+    "adjustUnit": "Atur Unit",
+    "adjustUnitTitle": "Adjust Unit — {{frontId}}",
+    "currentTrucks": "Current Trucks",
+    "saveUnits": "Save Units",
     "errors": {
       "frontNotFound": "Select a reference Front.",
       "alreadySuperseded": "This Front already has a successor. Reference its successor instead.",
+      "frontNotActive": "This Front is historical — its unit list can no longer be adjusted.",
+      "minimumUnitRequired": "Front aktif harus memiliki minimal 1 unit.",
       "numberLimitReached": "The maximum of 25 Fronts for this Sector has already been reached.",
       "destinationRequired": "Select a Destination/Pile for this new Front.",
       "storeContextInvalid": "The active shift workspace could not be found.",
