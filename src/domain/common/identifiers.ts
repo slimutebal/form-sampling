@@ -10,6 +10,7 @@ export type EmployeeId = Brand<string, 'EmployeeId'>
 export type HaulageTransactionId = Brand<string, 'HaulageTransactionId'>
 export type SampleHandlingId = Brand<string, 'SampleHandlingId'>
 export type SamplePositionId = Brand<string, 'SamplePositionId'>
+export type ProductionCorrectionId = Brand<string, 'ProductionCorrectionId'>
 
 export const parseShiftId = createNonBlankStringParser('ShiftId', 'BLANK_SHIFT_ID')
 export const parsePileId = createNonBlankStringParser('PileId', 'BLANK_PILE_ID')
@@ -23,3 +24,7 @@ export const parseHaulageTransactionId = createNonBlankStringParser(
 )
 export const parseSampleHandlingId = createNonBlankStringParser('SampleHandlingId', 'BLANK_SAMPLE_HANDLING_ID')
 export const parseSamplePositionId = createNonBlankStringParser('SamplePositionId', 'BLANK_SAMPLE_POSITION_ID')
+export const parseProductionCorrectionId = createNonBlankStringParser(
+  'ProductionCorrectionId',
+  'BLANK_PRODUCTION_CORRECTION_ID',
+)

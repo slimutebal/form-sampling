@@ -4,10 +4,15 @@ import { useTranslation } from 'react-i18next'
 import { Link, useOutletContext, useSearchParams } from 'react-router'
 import type { ActiveWorkspaceContext } from '@/app/router/AppLayout'
 import { localOperationalStore } from '@/app/local-operational-store'
+import { selectEffectiveTransactions } from '@/application/production/effective-production'
+import { deriveProductionBatchSummaries } from '@/application/production/production-batch-summary'
+import { deriveProductionPileSummary, type ProductionPileSummary } from '@/application/production/production-pile-summary'
+import { derivePendingSamples } from '@/application/sample-handling/derive-pending-samples'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/components/ui/cn'
-import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
+import type { ProductionRecord } from '@/domain/production/production-record'
+import type { SamplePosition } from '@/domain/sample-handling/sample-position'
 
 const TAB_VALUES = ['detail', 'record'] as const
 type ProductionTab = (typeof TAB_VALUES)[number]
@@ -15,7 +20,11 @@ type ProductionTab = (typeof TAB_VALUES)[number]
 type LoadPhase =
   | { readonly kind: 'loading' }
   | { readonly kind: 'error' }
-  | { readonly kind: 'loaded'; readonly transactions: readonly HaulageTransaction[] }
+  | {
+      readonly kind: 'loaded'
+      readonly productionRecords: readonly ProductionRecord[]
+      readonly samplePositions: readonly SamplePosition[]
+    }
 
 function isProductionTab(value: string | null): value is ProductionTab {
   return value === 'detail' || value === 'record'
@@ -32,9 +41,20 @@ export function ProductionPage() {
 
   useEffect(() => {
     let cancelled = false
-    void localOperationalStore.listHaulageTransactionsForShift(workspace.shift.id).then((result) => {
+    void Promise.all([
+      localOperationalStore.listProductionRecordsForShift(workspace.shift.id),
+      localOperationalStore.listSamplePositionsForShift(workspace.shift.id),
+    ]).then(([productionRecordResult, samplePositionResult]) => {
       if (cancelled) return
-      setPhase(result.ok ? { kind: 'loaded', transactions: result.value } : { kind: 'error' })
+      if (!productionRecordResult.ok || !samplePositionResult.ok) {
+        setPhase({ kind: 'error' })
+        return
+      }
+      setPhase({
+        kind: 'loaded',
+        productionRecords: productionRecordResult.value,
+        samplePositions: samplePositionResult.value,
+      })
     })
     return () => {
       cancelled = true
@@ -50,7 +70,36 @@ export function ProductionPage() {
     [normalizedQuery, workspace.piles],
   )
 
-  const transactions = phase.kind === 'loaded' ? phase.transactions : []
+  const pileSummaries = useMemo((): ReadonlyMap<string, ProductionPileSummary> => {
+    if (phase.kind !== 'loaded' || activeTab !== 'detail') {
+      return new Map()
+    }
+    const pendingSamplePiles = derivePendingSamples({
+      shiftId: workspace.shift.id,
+      piles: workspace.piles,
+      haulageTransactions: selectEffectiveTransactions(phase.productionRecords),
+      samplePositions: phase.samplePositions,
+    })
+    return new Map(
+      workspace.piles.map((pile) => {
+        // A batch-summary failure (e.g. missing Ore sampling config) is
+        // degraded to "no missed-Rit info" for this landing card rather
+        // than blocking the whole Detail tab — the dedicated Pile Detail
+        // screen surfaces the real error.
+        const batchSummariesResult = deriveProductionBatchSummaries(
+          pile,
+          workspace.masterData,
+          phase.productionRecords,
+          workspace.pendingBatches,
+        )
+        const batchSummaries = batchSummariesResult.ok ? batchSummariesResult.value : []
+        return [
+          pile.id as string,
+          deriveProductionPileSummary(pile, phase.productionRecords, pendingSamplePiles, batchSummaries),
+        ]
+      }),
+    )
+  }, [phase, activeTab, workspace.shift.id, workspace.piles, workspace.masterData, workspace.pendingBatches])
 
   function switchTab(tab: ProductionTab) {
     setSearchParams({ tab })
@@ -76,11 +125,7 @@ export function ProductionPage() {
           </p>
         ) : (
           visiblePiles.map((pile) => {
-            const pileTransactions = transactions.filter((transaction) => transaction.pileId === pile.id)
-            const batchTotal = new Set(pileTransactions.map((transaction) => Number(transaction.batchPosition.batchNumber))).size
-            const sampleTotal = pileTransactions.filter((transaction) => transaction.samplingEvaluation.sampleRequired).length
-            const wrongTruck = pileTransactions.filter((transaction) => transaction.truckValidation.status === 'WRONG_TRUCK').length
-            const pendingSample = workspace.pendingSamples.filter((sample) => sample.pileId === pile.id).length
+            const summary = pileSummaries.get(pile.id as string)
 
             return (
               <Link
@@ -93,27 +138,57 @@ export function ProductionPage() {
                 className="block"
               >
                 <Card className="transition-colors hover:border-primary/40">
-                  <CardContent className="flex items-center justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="truncate font-semibold">{pile.id}</span>
-                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                          {pile.oreCode}
-                        </span>
-                      </div>
-
-                      {activeTab === 'detail' ? (
-                        <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                          <span>{t('detail.batchTotal')}: {batchTotal}</span>
-                          <span>{t('detail.ritAccept')}: {pileTransactions.length}</span>
-                          <span>{t('detail.ritReject')}: {t('legacy.rejectUnavailable')}</span>
-                          <span>{t('detail.wrongTruck')}: {wrongTruck}</span>
-                          <span>{t('detail.sampleTotal')}: {sampleTotal}</span>
-                          <span>{t('detail.pendingSample')}: {pendingSample}</span>
+                  <CardContent className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="truncate font-semibold">{pile.id}</span>
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                            {pile.oreCode}
+                          </span>
                         </div>
-                      ) : null}
+                        {activeTab === 'detail' && summary && summary.missedBatchNumbers.length > 0 ? (
+                          <p className="mt-1 text-xs font-semibold text-amber-700">
+                            {t('detail.cardMissedInline', {
+                              batches: summary.missedBatchNumbers.map((batch) => Number(batch)).join(', '),
+                            })}
+                          </p>
+                        ) : null}
+                      </div>
+                      <ChevronRight aria-hidden="true" className="shrink-0 self-start text-muted-foreground" size={20} />
                     </div>
-                    <ChevronRight aria-hidden="true" className="shrink-0 text-muted-foreground" size={20} />
+
+                    {activeTab === 'detail' && summary ? (
+                      <div className="flex flex-col gap-2 text-xs text-muted-foreground">
+                        <div>
+                          <p className="font-semibold text-foreground">{t('detail.batch')}</p>
+                          <p>
+                            {t('detail.total')}: {summary.batchTotal}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-foreground">{t('detail.ritase')}</p>
+                          <p>
+                            {t('detail.accept')}: {summary.acceptRitCount}
+                          </p>
+                          <p>
+                            {t('detail.reject')}: {summary.rejectCount}
+                          </p>
+                          <p>
+                            {t('detail.wrongTruck')}: {summary.wrongTruckCount}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-foreground">{t('detail.sample')}</p>
+                          <p>
+                            {t('detail.total')}: {summary.sampleTotal}
+                          </p>
+                          <p>
+                            {t('detail.pendingSample')}: {summary.pendingSampleCount}
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
                   </CardContent>
                 </Card>
               </Link>

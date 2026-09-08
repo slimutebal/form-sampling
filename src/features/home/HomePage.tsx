@@ -5,12 +5,14 @@ import type { ActiveWorkspaceContext } from '@/app/router/AppLayout'
 import { refreshAppsScriptMasterData } from '@/app/google/google-master-data-sync'
 import { localOperationalStore } from '@/app/local-operational-store'
 import { useMasterDataCacheStatus } from '@/app/hooks/useMasterDataCacheStatus'
+import { selectEffectiveTransactions } from '@/application/production/effective-production'
 import { derivePendingSamples } from '@/application/sample-handling/derive-pending-samples'
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardTitle } from '@/components/ui/card'
 import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
+import type { ProductionRecord } from '@/domain/production/production-record'
 import type { SamplePosition } from '@/domain/sample-handling/sample-position'
 import { formatShiftDateForDisplay } from '@/features/shift-registration/format-shift-date'
 import type { SupportedLanguage } from '@/i18n'
@@ -18,7 +20,12 @@ import type { SupportedLanguage } from '@/i18n'
 type LoadPhase =
   | { readonly kind: 'loading' }
   | { readonly kind: 'error' }
-  | { readonly kind: 'loaded'; readonly haulageTransactions: readonly HaulageTransaction[]; readonly samplePositions: readonly SamplePosition[] }
+  | {
+      readonly kind: 'loaded'
+      readonly haulageTransactions: readonly HaulageTransaction[]
+      readonly productionRecords: readonly ProductionRecord[]
+      readonly samplePositions: readonly SamplePosition[]
+    }
 
 function StatTile({ label, value }: { label: string; value: number }) {
   return (
@@ -54,14 +61,20 @@ export function HomePage() {
     let cancelled = false
     void Promise.all([
       localOperationalStore.listHaulageTransactionsForShift(workspace.shift.id),
+      localOperationalStore.listProductionRecordsForShift(workspace.shift.id),
       localOperationalStore.listSamplePositionsForShift(workspace.shift.id),
-    ]).then(([haulageResult, sampleResult]) => {
+    ]).then(([haulageResult, productionRecordResult, sampleResult]) => {
       if (cancelled) return
-      if (!haulageResult.ok || !sampleResult.ok) {
+      if (!haulageResult.ok || !productionRecordResult.ok || !sampleResult.ok) {
         setPhase({ kind: 'error' })
         return
       }
-      setPhase({ kind: 'loaded', haulageTransactions: haulageResult.value, samplePositions: sampleResult.value })
+      setPhase({
+        kind: 'loaded',
+        haulageTransactions: haulageResult.value,
+        productionRecords: productionRecordResult.value,
+        samplePositions: sampleResult.value,
+      })
     })
     return () => {
       cancelled = true
@@ -74,7 +87,7 @@ export function HomePage() {
       ? derivePendingSamples({
           shiftId: workspace.shift.id,
           piles: workspace.piles,
-          haulageTransactions: phase.haulageTransactions,
+          haulageTransactions: selectEffectiveTransactions(phase.productionRecords),
           samplePositions: phase.samplePositions,
         }).reduce(
           (total, pendingPile) =>

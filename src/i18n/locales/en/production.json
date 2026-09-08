@@ -16,7 +16,66 @@
     "empty": "No active Pile_ID is available for this shift.",
     "title": "RECORD {{pileId}}",
     "selectFront": "Front No",
-    "noFront": "No active Front is available for this Pile_ID."
+    "selectFrontPlaceholder": "—",
+    "noFront": "No active Front is available for this Pile_ID.",
+    "loading": "Loading production data…",
+    "retry": "Retry",
+    "batch": "Batch",
+    "rit": "Rit",
+    "sample": "Sample",
+    "truck": "Truck",
+    "searchTruckPlaceholder": "Search Truck…",
+    "noTruckFound": "Truck not found.",
+    "changeTruck": "Change",
+    "physicalCondition": "Physical Condition",
+    "physicalConditionOptions": {
+      "DRY": "Dry",
+      "MOIST": "Moist",
+      "WET": "Wet",
+      "MUDDY": "Muddy"
+    },
+    "contamination": "Contamination",
+    "contaminationOptions": {
+      "CLN": "Clean",
+      "OVR": "Oversize Rock",
+      "OGC": "Organic",
+      "TRH": "Trash"
+    },
+    "disposition": "Disposition",
+    "dispositionOptions": {
+      "ACCEPT": "ACCEPT",
+      "REJECT": "REJECT"
+    },
+    "remark": "Remark",
+    "remarkPlaceholder": "Remark (optional)",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving…",
+    "acceptedFeedback": "Batch {{batch}} • Rit {{rit}} saved (ACCEPT)",
+    "rejectedFeedback": "Batch {{batch}} • Rit {{rit}} saved (REJECT)",
+    "planExhausted": "No planned production positions remain.",
+    "missedCorrection": {
+      "banner": "Missed Rit correction: Batch {{batch}} • Rit {{rit}}",
+      "noLongerMissed": "This position is no longer missed. It may already have been recorded from another device."
+    },
+    "confirmReject": {
+      "title": "CONFIRM REJECT",
+      "notice": "This Rit will not be counted as production and the Rit position stays available.",
+      "cancel": "Cancel",
+      "confirm": "Reject & Save"
+    },
+    "errors": {
+      "planEmpty": "The starting position for this new pile has not been confirmed. Contact a supervisor before recording production.",
+      "planInvalid": "The production plan for this Pile is invalid.",
+      "samplingConfigMissing": "No sampling configuration exists yet for this Pile's ore.",
+      "fleetContextInvalid": "The fleet/truck configuration for this Pile is invalid.",
+      "storeContextInvalid": "This Pile is not part of the active shift workspace.",
+      "duplicateTransaction": "This production entry has already been recorded.",
+      "checkerNotAssigned": "No Checker is assigned to this shift yet. Contact a supervisor.",
+      "checkerAmbiguous": "More than one Checker is assigned to this shift. Contact a supervisor.",
+      "loadFailed": "Unable to load production data for this Pile.",
+      "generic": "Something went wrong. Please try again."
+    }
   },
   "detail": {
     "title": "DETAIL {{pileId}}",
@@ -27,10 +86,181 @@
     "wrongTruck": "Wrong Truck",
     "sampleTotal": "Sample Total",
     "pendingSample": "Pending",
-    "empty": "No production data exists for this Pile_ID yet."
+    "empty": "No production data exists for this Pile_ID yet.",
+    "loading": "Loading production data…",
+    "retry": "Retry",
+    "batch": "BATCH",
+    "ritase": "RITASE",
+    "sample": "SAMPLE",
+    "total": "Total",
+    "accept": "Accept",
+    "reject": "Reject",
+    "summaryTitle": "PRODUCTION SUMMARY",
+    "batchSectionTitle": "Batch",
+    "cardMissedInline": "⚠ Missed Ritase • Batch {{batches}}",
+    "warning": {
+      "title": "⚠ PRODUCTION WARNING",
+      "lineItem": "Batch {{batch}} • Missed Rit: {{rits}}",
+      "view": "View"
+    },
+    "errors": {
+      "loadFailed": "Unable to load production data for this Pile.",
+      "samplingConfigMissing": "No sampling configuration exists yet for this Pile's ore."
+    }
   },
-  "legacy": {
-    "rejectUnavailable": "0"
+  "batch": {
+    "headerTitle": "{{pileId}} Batch {{batchNumber}}",
+    "notFound": "This Batch was not found.",
+    "status": "Status",
+    "material": "Material",
+    "capacity": "Capacity",
+    "capacityValue": "{{size}} Rit",
+    "progress": "Progress",
+    "progressValue": "{{accepted}} Accepted / {{size}}",
+    "reject": "Reject",
+    "sample": "Sample",
+    "wrongTruck": "Wrong Truck",
+    "missedRit": "⚠ Missed Rit: {{rits}}",
+    "statusOptions": {
+      "ACTIVE": "ACTIVE",
+      "COMPLETE": "COMPLETE",
+      "PENDING": "PENDING"
+    },
+    "ritaseTitle": "RITASE",
+    "missedLabel": "MISSED",
+    "sampleTag": "SAMPLE",
+    "empty": "No Rit has been recorded for this Batch yet.",
+    "errors": {
+      "loadFailed": "Unable to load this Batch's data.",
+      "samplingConfigMissing": "No sampling configuration exists yet for this Pile's ore."
+    }
+  },
+  "rit": {
+    "headerTitle": "{{pileId}} Batch {{batchNumber}} Rit {{ritNumber}}",
+    "notFound": "This Rit was not found.",
+    "truck": "Truck",
+    "front": "Front",
+    "physicalCondition": "Physical Condition",
+    "contamination": "Contamination",
+    "disposition": "Disposition",
+    "sampling": "Sampling",
+    "samplingRequired": "SAMPLE • Increment {{increment}}",
+    "samplingNotRequired": "NO SAMPLE",
+    "truckValidation": "Truck Validation",
+    "truckValidationValid": "VALID",
+    "truckValidationWrongTruck": "WRONG TRUCK",
+    "remark": "Remark",
+    "remarkEmpty": "-",
+    "recordedBy": "Recorded By",
+    "recordedAt": "Recorded At",
+    "recordedUnknown": "-",
+    "missed": {
+      "title": "⚠ MISSED RITASE",
+      "description": "There is no ACCEPT record at this position, and a later Rit has already been recorded.",
+      "attemptsTitle": "Attempts:",
+      "attemptLine": "{{truckId}} • {{disposition}} • {{physicalCondition}} • {{contamination}}",
+      "noAttempts": "No recording attempt exists at this position yet.",
+      "recordHere": "Record This Rit",
+      "switchExisting": "Switch Existing Record"
+    },
+    "open": {
+      "description": "This position has no ACCEPT record yet."
+    },
+    "actions": {
+      "edit": "Edit",
+      "switch": "Switch",
+      "delete": "Delete Record"
+    },
+    "correctedBadge": "CORRECTED",
+    "viewCorrections": "Correction History",
+    "voidedTitle": "Voided",
+    "voidedBadge": "VOIDED"
+  },
+  "editRecord": {
+    "title": "EDIT RECORD",
+    "headerTitle": "{{pileId}} Batch {{batchNumber}} Rit {{ritNumber}}",
+    "notFound": "This record was not found.",
+    "cancel": "Cancel",
+    "save": "Save Changes",
+    "saving": "Saving…"
+  },
+  "switchRecord": {
+    "title": "SWITCH RECORD",
+    "headerTitleFrom": "{{pileId}} Batch {{batchNumber}} Rit {{ritNumber}}",
+    "headerTitleInto": "{{pileId}} Batch {{batchNumber}} Rit {{ritNumber}}",
+    "notFound": "This record was not found.",
+    "from": "From",
+    "target": "Target",
+    "selectSource": "Select an existing record",
+    "sourceOption": "Batch {{batch}} Rit {{rit}} • {{truckId}}",
+    "targetBatch": "Target Batch",
+    "targetRit": "Target Rit",
+    "statusAvailable": "AVAILABLE",
+    "statusOccupied": "OCCUPIED — {{truckId}} — records will be exchanged",
+    "cancel": "Cancel",
+    "previewSwitch": "Preview Switch",
+    "modeMove": "MOVE",
+    "modeSwap": "SWAP",
+    "sourceSummary": "From Batch {{batch}} Rit {{rit}} • {{truckId}}",
+    "targetSummary": "To Batch {{batch}} Rit {{rit}}",
+    "confirm": "Confirm Switch",
+    "sampleImpact": {
+      "title": "⚠ SAMPLE IMPACT",
+      "description": "This position change alters the sampling requirement.",
+      "before": "Before",
+      "after": "After",
+      "line": "Batch {{batch}} / Rit {{rit}} • {{sample}}",
+      "notice": "Sample handling may need to be adjusted.",
+      "proceed": "Continue Correction"
+    }
+  },
+  "corrections": {
+    "headerTitle": "{{pileId}} Batch {{batchNumber}} Rit {{ritNumber}}",
+    "notFound": "This record was not found.",
+    "empty": "No corrections have been recorded for this record.",
+    "by": "By {{correctedBy}}",
+    "reason": "Reason: {{reason}}",
+    "types": {
+      "EDIT_FIELDS": "EDIT RECORD",
+      "SWITCH_POSITION": "SWITCH RECORD",
+      "VOID_RECORD": "VOID RECORD"
+    },
+    "fields": {
+      "position": "Position",
+      "frontId": "Front No",
+      "truckId": "Truck",
+      "physicalCondition": "Physical Condition",
+      "contamination": "Contamination",
+      "disposition": "Disposition",
+      "remark": "Remark",
+      "status": "Status"
+    }
+  },
+  "voidRecord": {
+    "title": "VOID RECORD",
+    "notice": "This record will not be permanently deleted. It will be deactivated and remains available in the audit history.",
+    "cancel": "Cancel",
+    "confirm": "Void Record"
+  },
+  "correction": {
+    "reasonLabel": "Correction Reason",
+    "reasonPlaceholder": "e.g. Wrong truck entered",
+    "errors": {
+      "reasonRequired": "A correction reason is required.",
+      "recordVoided": "This record has already been voided and cannot be edited.",
+      "alreadyVoided": "This record has already been voided.",
+      "recordNotSwitchable": "Only an ACCEPT record can be switched.",
+      "switchTargetSameAsSource": "The target position is the same as the current position.",
+      "positionOccupied": "Another ACCEPT record already occupies this position.",
+      "recordNotFound": "This record could not be found.",
+      "frontNotAvailable": "The selected Front is not available for this Pile.",
+      "truckNotFound": "The selected Truck was not found in master data.",
+      "fleetContextInvalid": "The fleet/truck configuration for this Pile is invalid.",
+      "samplingConfigMissing": "No sampling configuration exists yet for this Pile's ore.",
+      "checkerNotAssigned": "No Checker is assigned to this shift yet. Contact a supervisor.",
+      "checkerAmbiguous": "More than one Checker is assigned to this shift. Contact a supervisor.",
+      "generic": "Something went wrong. Please try again."
+    }
   },
   "errors": {
     "loadFailed": "Unable to load production data.",

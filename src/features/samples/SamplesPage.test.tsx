@@ -48,6 +48,7 @@ describe('SamplesPage', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en')
     vi.spyOn(localOperationalStore, 'listHaulageTransactionsForShift').mockResolvedValue({ ok: true, value: [] })
+    vi.spyOn(localOperationalStore, 'listProductionRecordsForShift').mockResolvedValue({ ok: true, value: [] })
     vi.spyOn(localOperationalStore, 'listSamplePositionsForShift').mockResolvedValue({ ok: true, value: [] })
   })
 

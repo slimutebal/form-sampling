@@ -5,6 +5,7 @@ import {
   buildFixtureFleetSetup,
   buildFixtureHaulageTransaction,
   buildFixtureMasterData,
+  buildFixtureProductionRecord,
   buildFixtureSapPile,
   buildFixtureShift,
 } from '@/test/fixtures/haulage-operation-test-fixtures'
@@ -20,7 +21,7 @@ function buildReport(language: 'en' | 'id') {
     language,
     shift,
     piles: [pile],
-    haulageTransactions: [
+    productionRecords: [
       buildFixtureHaulageTransaction({ id: 'T-1', shiftId: 'SHIFT-1', pile, batch: 1, rit: 2, masterData, fleetSetup }),
       buildFixtureHaulageTransaction({ id: 'T-2', shiftId: 'SHIFT-1', pile, batch: 1, rit: 4, masterData, fleetSetup }),
       buildFixtureHaulageTransaction({
@@ -33,7 +34,7 @@ function buildReport(language: 'en' | 'id') {
         fleetSetup,
         truckId: FIXTURE_WRONG_TRUCK_TRUCK_ID,
       }),
-    ],
+    ].map((transaction) => buildFixtureProductionRecord({ transaction })),
     samplePositions: [],
     masterData,
     manpowerAssignments: [],

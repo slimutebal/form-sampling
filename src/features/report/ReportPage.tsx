@@ -10,7 +10,7 @@ import { exportShiftWorkbook } from '@/features/export/export-shift-workbook'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
+import type { ProductionRecord } from '@/domain/production/production-record'
 import type { SamplePosition } from '@/domain/sample-handling/sample-position'
 import { downloadFile } from '@/infrastructure/device/download-file'
 import { WhatsAppReportPreview } from '@/features/report/WhatsAppReportPreview'
@@ -20,7 +20,7 @@ type LoadPhase =
   | { readonly kind: 'error' }
   | {
       readonly kind: 'loaded'
-      readonly haulageTransactions: readonly HaulageTransaction[]
+      readonly productionRecords: readonly ProductionRecord[]
       readonly samplePositions: readonly SamplePosition[]
     }
 
@@ -50,15 +50,15 @@ export function ReportPage() {
     let cancelled = false
 
     void Promise.all([
-      localOperationalStore.listHaulageTransactionsForShift(workspace.shift.id),
+      localOperationalStore.listProductionRecordsForShift(workspace.shift.id),
       localOperationalStore.listSamplePositionsForShift(workspace.shift.id),
-    ]).then(([haulageResult, sampleResult]) => {
+    ]).then(([productionRecordResult, sampleResult]) => {
       if (cancelled) return
-      if (!haulageResult.ok || !sampleResult.ok) {
+      if (!productionRecordResult.ok || !sampleResult.ok) {
         setPhase({ kind: 'error' })
         return
       }
-      setPhase({ kind: 'loaded', haulageTransactions: haulageResult.value, samplePositions: sampleResult.value })
+      setPhase({ kind: 'loaded', productionRecords: productionRecordResult.value, samplePositions: sampleResult.value })
     })
 
     return () => {
@@ -74,7 +74,7 @@ export function ReportPage() {
       const result = await exportShiftWorkbook({
         shift: workspace.shift,
         piles: workspace.piles,
-        haulageTransactions: phase.haulageTransactions,
+        productionRecords: phase.productionRecords,
         samplePositions: phase.samplePositions,
         pendingBatches: workspace.pendingBatches,
         masterData: workspace.masterData,
@@ -128,7 +128,7 @@ export function ReportPage() {
           language,
           shift: workspace.shift,
           piles: workspace.piles,
-          haulageTransactions: phase.haulageTransactions,
+          productionRecords: phase.productionRecords,
           samplePositions: phase.samplePositions,
           masterData: workspace.masterData,
           manpowerAssignments: workspace.manpower.map((assignment) => ({

@@ -8,7 +8,9 @@ import type { ActiveWorkspaceContext } from '@/app/router/AppLayout'
 import type { LocalShiftWorkspace } from '@/infrastructure/local-db/local-operational-store'
 import {
   buildFixtureFleetSetup,
+  buildFixtureHaulageTransaction,
   buildFixtureMasterData,
+  buildFixtureProductionRecord,
   buildFixtureSapPile,
   buildFixtureShift,
 } from '@/infrastructure/local-db/local-db-test-fixtures'
@@ -54,7 +56,8 @@ function renderProduction(initialEntry = '/production') {
 describe('ProductionPage', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('id')
-    vi.spyOn(localOperationalStore, 'listHaulageTransactionsForShift').mockResolvedValue({ ok: true, value: [] })
+    vi.spyOn(localOperationalStore, 'listProductionRecordsForShift').mockResolvedValue({ ok: true, value: [] })
+    vi.spyOn(localOperationalStore, 'listSamplePositionsForShift').mockResolvedValue({ ok: true, value: [] })
   })
 
   afterEach(() => {
@@ -93,5 +96,78 @@ describe('ProductionPage', () => {
 
     expect(await screen.findByText('Pilih Pile_ID')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /S5_02/i })).toHaveAttribute('href', '/production/detail/S5_02')
+  })
+
+  it('a normal Pile (no missed Rit) shows no missed-ritase warning on its Detail card', async () => {
+    const user = userEvent.setup()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const pile = buildFixtureSapPile('S5_02')
+    const transaction = buildFixtureHaulageTransaction({
+      id: 'TX-1',
+      shiftId: 'production-ui-shift',
+      pile,
+      batch: 1,
+      rit: 1,
+      masterData,
+      fleetSetup,
+    })
+    vi.spyOn(localOperationalStore, 'listProductionRecordsForShift').mockResolvedValue({
+      ok: true,
+      value: [buildFixtureProductionRecord({ transaction })],
+    })
+
+    renderProduction()
+    await user.click(await screen.findByRole('button', { name: 'Detail' }))
+
+    expect(await screen.findByText(/Total: 1/)).toBeInTheDocument()
+    expect(screen.queryByText(/Missed Ritase/)).not.toBeInTheDocument()
+  })
+
+  it('a Pile with a missed Rit shows the inline missed-ritase warning on its Detail card', async () => {
+    const user = userEvent.setup()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const pile = buildFixtureSapPile('S5_02')
+    const acceptedRit1 = buildFixtureHaulageTransaction({
+      id: 'TX-1',
+      shiftId: 'production-ui-shift',
+      pile,
+      batch: 4,
+      rit: 1,
+      masterData,
+      fleetSetup,
+    })
+    const rejectedRit2 = buildFixtureHaulageTransaction({
+      id: 'TX-2',
+      shiftId: 'production-ui-shift',
+      pile,
+      batch: 4,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    const acceptedRit3 = buildFixtureHaulageTransaction({
+      id: 'TX-3',
+      shiftId: 'production-ui-shift',
+      pile,
+      batch: 4,
+      rit: 3,
+      masterData,
+      fleetSetup,
+    })
+    vi.spyOn(localOperationalStore, 'listProductionRecordsForShift').mockResolvedValue({
+      ok: true,
+      value: [
+        buildFixtureProductionRecord({ transaction: acceptedRit1, disposition: 'ACCEPT' }),
+        buildFixtureProductionRecord({ transaction: rejectedRit2, disposition: 'REJECT' }),
+        buildFixtureProductionRecord({ transaction: acceptedRit3, disposition: 'ACCEPT' }),
+      ],
+    })
+
+    renderProduction()
+    await user.click(await screen.findByRole('button', { name: 'Detail' }))
+
+    expect(await screen.findByText('⚠ Missed Ritase • Batch 4')).toBeInTheDocument()
   })
 })

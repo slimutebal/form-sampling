@@ -57,6 +57,13 @@ import {
   parseSamplingInterval,
 } from '../../domain/master/sampling-config'
 import { createPile, type Pile } from '../../domain/pile/pile'
+import {
+  createProductionRecord,
+  type Contamination,
+  type Disposition,
+  type PhysicalCondition,
+  type ProductionRecord,
+} from '../../domain/production/production-record'
 import type { SampleDelivery } from '../../domain/sample-handling/delivery-status'
 import {
   createSamplePosition,
@@ -251,6 +258,31 @@ export function buildFixtureSamplePosition(
       ritTo: must(parseRitNumber(params.ritTo)),
       masterData: params.masterData,
       delivery: params.delivery,
+    }),
+  )
+}
+
+export interface BuildFixtureProductionRecordParams {
+  readonly transaction: HaulageTransaction
+  readonly physicalCondition?: PhysicalCondition
+  readonly contamination?: Contamination
+  readonly disposition?: Disposition
+  readonly remark?: string | null
+  readonly createdAt?: Date
+  readonly createdBy?: string
+}
+
+/** Builds a validated, operator-created ProductionRecord around a fixture HaulageTransaction. */
+export function buildFixtureProductionRecord(params: BuildFixtureProductionRecordParams): ProductionRecord {
+  return must(
+    createProductionRecord({
+      transaction: params.transaction,
+      physicalCondition: params.physicalCondition ?? 'DRY',
+      contamination: params.contamination ?? 'CLN',
+      disposition: params.disposition ?? 'ACCEPT',
+      remark: params.remark,
+      createdAt: params.createdAt ?? new Date('2026-09-04T10:00:00.000Z'),
+      createdBy: fixtureEmployeeId(params.createdBy ?? FIXTURE_EMPLOYEE_ID),
     }),
   )
 }

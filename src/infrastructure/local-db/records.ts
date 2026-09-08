@@ -9,6 +9,7 @@ import type { HaulageTransaction } from '../../domain/haulage/haulage-transactio
 import type { ManpowerAssignment } from '../../domain/manpower/manpower-assignment'
 import type { MasterData } from '../../domain/master/master-data'
 import type { Pile } from '../../domain/pile/pile'
+import type { ProductionRecord } from '../../domain/production/production-record'
 import type { SamplePosition } from '../../domain/sample-handling/sample-position'
 import type { Shift } from '../../domain/shift/shift'
 
@@ -92,6 +93,22 @@ export interface SamplePositionRecord {
   readonly shiftId: ShiftId
   readonly pileId: PileId
   readonly samplePosition: SamplePosition
+}
+
+/**
+ * IndexedDB row for the `productionRecords` table (primary key: id, the
+ * same HaulageTransactionId as the ProductionRecord's own
+ * `productionRecord.transaction.id` — one ProductionRecord per
+ * HaulageTransaction). `shiftId`/`pileId` are top-level indexed copies
+ * derived from `productionRecord.transaction`, never independently
+ * supplied (mirrors `HaulageTransactionRecord`/`SamplePositionRecord`),
+ * so a query index can never disagree with the stored snapshot.
+ */
+export interface ProductionRecordRecord {
+  readonly id: HaulageTransactionId
+  readonly shiftId: ShiftId
+  readonly pileId: PileId
+  readonly productionRecord: ProductionRecord
 }
 
 /** The single metadata key used to mark the local current-shift pointer. */

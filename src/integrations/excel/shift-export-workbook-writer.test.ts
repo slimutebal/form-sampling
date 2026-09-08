@@ -8,15 +8,18 @@ import { parseBatchNumber } from '@/domain/batch/batch-number'
 import { createPendingBatch } from '@/domain/batch/pending-batch'
 import { parseRitNumber } from '@/domain/batch/rit-number'
 import type { PendingBatchCarryOver } from '@/domain/handover/carry-over-pending-batch'
+import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
 import { createDeliveredDelivery, createNotPickedUpDelivery } from '@/domain/sample-handling/delivery-status'
 import { parseDeliveryDestinationCode } from '@/domain/sample-handling/delivery-destination'
 import type { Pile } from '@/domain/pile/pile'
+import type { ProductionRecord } from '@/domain/production/production-record'
 import {
   FIXTURE_WRONG_TRUCK_TRUCK_ID,
   buildFixtureFleetSetup,
   buildFixtureHaulageTransaction,
   buildFixtureLimPile,
   buildFixtureMasterData,
+  buildFixtureProductionRecord,
   buildFixtureSamplePosition,
   buildFixtureSapPile,
   buildFixtureShift,
@@ -30,10 +33,15 @@ const REQUIRED_SHEET_NAMES = [
   'Pile_Summary',
   'Haulage_Detail',
   'Sampling_Detail',
+  'Production_Correction',
   'Sample_Position',
   'Pending_Sample',
   'App_Data',
 ]
+
+function acceptedRecordFrom(transaction: HaulageTransaction): ProductionRecord {
+  return buildFixtureProductionRecord({ transaction })
+}
 
 function pendingBatchCarryOver(pile: Pile, batch: number, lastRit: number, status: 'CONTINUE' | 'HOLD'): PendingBatchCarryOver {
   const batchNumberResult = parseBatchNumber(batch)
@@ -57,7 +65,7 @@ function minimalInput(overrides: Partial<ShiftExportInput> = {}): ShiftExportInp
   return {
     shift: buildFixtureShift('SHIFT-1'),
     piles: [sapPile],
-    haulageTransactions: [],
+    productionRecords: [],
     samplePositions: [],
     pendingBatches: [],
     applicationVersion: '9.9.9',
@@ -68,7 +76,7 @@ function minimalInput(overrides: Partial<ShiftExportInput> = {}): ShiftExportInp
 }
 
 describe('writeShiftExportWorkbookBytes', () => {
-  it('writes all 8 required sheets, in the Phase 13 contract order', () => {
+  it('writes all 9 required sheets, in the Phase 22 contract order', () => {
     const snapshotResult = buildShiftExportSnapshot(minimalInput())
     expect(snapshotResult.ok).toBe(true)
     if (!snapshotResult.ok) return
@@ -77,7 +85,7 @@ describe('writeShiftExportWorkbookBytes', () => {
     expect(workbook.SheetNames).toEqual(REQUIRED_SHEET_NAMES)
   })
 
-  it('writes exact App_Data values', () => {
+  it('writes exact App_Data values, SchemaVersion 2', () => {
     const snapshotResult = buildShiftExportSnapshot(minimalInput())
     expect(snapshotResult.ok).toBe(true)
     if (!snapshotResult.ok) return
@@ -86,7 +94,7 @@ describe('writeShiftExportWorkbookBytes', () => {
     const rows = XLSX.utils.sheet_to_json<{ Key: string; Value: unknown }>(workbook.Sheets.App_Data)
     const appData = Object.fromEntries(rows.map((row) => [row.Key, row.Value]))
     expect(appData.FileType).toBe('FORM_SAMPLING_SHIFT')
-    expect(appData.SchemaVersion).toBe(1)
+    expect(appData.SchemaVersion).toBe(2)
     expect(appData.ApplicationVersion).toBe('9.9.9')
     expect(appData.Shift_ID).toBe('SHIFT-1')
     expect(appData.ExportTimestamp).toBe('2026-09-04T10:00:00.000Z')
@@ -118,18 +126,71 @@ describe('writeShiftExportWorkbookBytes', () => {
       'Dispatcher_Employee_ID',
     ])
     expect(headerRow('App_Data')).toEqual(['Key', 'Value'])
+    expect(headerRow('Haulage_Detail')).toEqual([
+      'Transaction_ID',
+      'Shift_ID',
+      'Pile_ID',
+      'Original_Batch',
+      'Original_Rit',
+      'Original_Front_ID',
+      'Original_Fleet_ID',
+      'Original_Truck_ID',
+      'Effective_Batch',
+      'Effective_Rit',
+      'Effective_Front_ID',
+      'Effective_Fleet_ID',
+      'Effective_Truck_ID',
+      'Physical_Condition',
+      'Contamination',
+      'Disposition',
+      'Record_Status',
+      'Remark',
+      'Sample_Required_Original',
+      'Sample_Required_Effective',
+      'Truck_Status_Original',
+      'Truck_Status_Effective',
+      'Created_At',
+      'Created_By',
+      'Updated_At',
+      'Updated_By',
+      'Correction_Count',
+    ])
+    expect(headerRow('Production_Correction')).toEqual([
+      'Correction_ID',
+      'Transaction_ID',
+      'Correction_Type',
+      'Reason',
+      'Corrected_At',
+      'Corrected_By',
+      'Before_Batch',
+      'Before_Rit',
+      'After_Batch',
+      'After_Rit',
+      'Before_Front_ID',
+      'After_Front_ID',
+      'Before_Truck_ID',
+      'After_Truck_ID',
+      'Before_Physical_Condition',
+      'After_Physical_Condition',
+      'Before_Contamination',
+      'After_Contamination',
+      'Before_Disposition',
+      'After_Disposition',
+      'Before_Status',
+      'After_Status',
+    ])
   })
 
-  it('allows empty Haulage_Detail while still writing its header row', () => {
-    const snapshotResult = buildShiftExportSnapshot(minimalInput({ haulageTransactions: [] }))
+  it('allows empty Haulage_Detail and Production_Correction while still writing their header rows', () => {
+    const snapshotResult = buildShiftExportSnapshot(minimalInput({ productionRecords: [] }))
     expect(snapshotResult.ok).toBe(true)
     if (!snapshotResult.ok) return
     const bytes = writeShiftExportWorkbookBytes(snapshotResult.value)
     const workbook = XLSX.read(bytes, { type: 'array' })
-    const rows = XLSX.utils.sheet_to_json(workbook.Sheets.Haulage_Detail)
-    expect(rows).toEqual([])
+    expect(XLSX.utils.sheet_to_json(workbook.Sheets.Haulage_Detail)).toEqual([])
+    expect(XLSX.utils.sheet_to_json(workbook.Sheets.Production_Correction)).toEqual([])
     const headerRow = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets.Haulage_Detail, { header: 1 })[0]
-    expect(headerRow).toContain('Truck_ID')
+    expect(headerRow).toContain('Effective_Truck_ID')
   })
 
   it('allows empty Sample_Position while still writing its header row', () => {
@@ -181,7 +242,7 @@ describe('writeShiftExportWorkbookBytes', () => {
     })
 
     const snapshotResult = buildShiftExportSnapshot(
-      minimalInput({ piles: [pile], haulageTransactions: [transaction], masterData, reportLanguage: 'en' }),
+      minimalInput({ piles: [pile], productionRecords: [acceptedRecordFrom(transaction)], masterData, reportLanguage: 'en' }),
     )
     expect(snapshotResult.ok).toBe(true)
     if (!snapshotResult.ok) return
@@ -224,7 +285,7 @@ describe('writeShiftExportWorkbookBytes', () => {
     const snapshotResult = buildShiftExportSnapshot(
       minimalInput({
         piles: [pile],
-        haulageTransactions: [validTransaction, wrongTruckTransaction],
+        productionRecords: [acceptedRecordFrom(validTransaction), acceptedRecordFrom(wrongTruckTransaction)],
         masterData,
         reportLanguage: 'en',
       }),
@@ -289,22 +350,24 @@ describe('writeShiftExportWorkbookBytes', () => {
         delivery: createDeliveredDelivery(destination.value),
       })
 
-      const haulageTransactions = [
-        buildFixtureHaulageTransaction({
-          id: 'T-1',
-          shiftId: 'SHIFT-A',
-          pile: sapPile,
-          batch: 24,
-          rit: 11,
-          masterData,
-          fleetSetup,
-        }),
+      const productionRecords = [
+        acceptedRecordFrom(
+          buildFixtureHaulageTransaction({
+            id: 'T-1',
+            shiftId: 'SHIFT-A',
+            pile: sapPile,
+            batch: 24,
+            rit: 11,
+            masterData,
+            fleetSetup,
+          }),
+        ),
       ]
 
       const snapshotResult = buildShiftExportSnapshot({
         shift,
         piles: [sapPile, limPile],
-        haulageTransactions,
+        productionRecords,
         samplePositions: [notPickedUp, delivered],
         pendingBatches,
         applicationVersion: '1.0.0',
@@ -373,7 +436,7 @@ describe('writeShiftExportWorkbookBytes', () => {
       const snapshotResult = buildShiftExportSnapshot({
         shift,
         piles: [sapPile],
-        haulageTransactions: [],
+        productionRecords: [],
         samplePositions: [],
         pendingBatches: [],
         applicationVersion: '1.0.0',
@@ -402,6 +465,41 @@ describe('writeShiftExportWorkbookBytes', () => {
       if (!confirmed.ok) return
       expect(confirmed.value.pendingBatches).toEqual([])
       expect(confirmed.value.pendingSamples).toEqual([])
+    })
+
+    it('a pre-Phase-22 SchemaVersion 1 archive still imports (backward compatibility)', async () => {
+      const shift = buildFixtureShift('SHIFT-LEGACY')
+      const sapPile = buildFixtureSapPile('PILE-1')
+      const snapshotResult = buildShiftExportSnapshot({
+        shift,
+        piles: [sapPile],
+        productionRecords: [],
+        samplePositions: [],
+        pendingBatches: [],
+        applicationVersion: '1.0.0',
+        clock: { now: () => new Date('2026-09-04T00:00:00.000Z') },
+        masterData: buildFixtureMasterData(),
+      })
+      expect(snapshotResult.ok).toBe(true)
+      if (!snapshotResult.ok) return
+
+      // Force a legacy SchemaVersion 1 App_Data row, as a pre-Phase-22 export would have written.
+      const legacySnapshot = {
+        ...snapshotResult.value,
+        appData: snapshotResult.value.appData.map((row) => (row.Key === 'SchemaVersion' ? { ...row, Value: 1 } : row)),
+      }
+      const bytes = writeShiftExportWorkbookBytes(legacySnapshot)
+      const rawResult = readHandoverWorkbookFromBytes(bytes)
+      expect(rawResult.ok).toBe(true)
+      if (!rawResult.ok) return
+
+      const preview = await previewHandoverImport({
+        raw: rawResult.value,
+        fingerprint: 'fingerprint-legacy',
+        expectedPreviousShift: { date: shift.date, shiftCode: shift.shiftCode },
+        store: new FakeHandoverImportStore(),
+      })
+      expect(preview.ok).toBe(true)
     })
   })
 })

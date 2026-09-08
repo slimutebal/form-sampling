@@ -1,24 +1,53 @@
-import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate, useOutletContext, useParams } from 'react-router'
+import { useOutletContext, useParams, useSearchParams } from 'react-router'
 import type { ActiveWorkspaceContext } from '@/app/router/AppLayout'
-import { operationalFleetOptionsForPile } from '@/application/haulage-operation/operational-fleet-options'
+import { localOperationalStore } from '@/app/local-operational-store'
 import { PageHeader } from '@/components/shared/PageHeader'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { createBatchPosition, type BatchPosition } from '@/domain/batch/batch-position'
+import { parseBatchNumber } from '@/domain/batch/batch-number'
+import { parseRitNumber } from '@/domain/batch/rit-number'
+import { ProductionRecordEntry } from '@/features/production/production-record-entry'
 
+/**
+ * Parses the optional `?batch=&rit=&mode=missed` missed-Rit correction
+ * target (Phase 3 §9 — `/production/detail/.../rit/:ritNumber`'s "Record
+ * Rit Ini" action). A malformed/absent target is never treated as an
+ * error here — it simply falls back to the normal auto-derived-next-
+ * position flow, since only `mode=missed` with both a valid BatchNumber
+ * and RitNumber is a genuine correction request.
+ */
+function parseMissedTargetPosition(searchParams: URLSearchParams): BatchPosition | undefined {
+  if (searchParams.get('mode') !== 'missed') {
+    return undefined
+  }
+  const batchNumberResult = parseBatchNumber(Number(searchParams.get('batch')))
+  const ritNumberResult = parseRitNumber(Number(searchParams.get('rit')))
+  if (!batchNumberResult.ok || !ritNumberResult.ok) {
+    return undefined
+  }
+  return createBatchPosition(batchNumberResult.value, ritNumberResult.value)
+}
+
+/**
+ * Router adapter for `/production/record/:pileId` (Phase 2 — Production
+ * Record final UI + write flow; Phase 3 — Missed Rit correction target).
+ * Resolves the URL's PileId against the current workspace's own Pile
+ * list and renders `ProductionRecordEntry` with the real Shift/Pile/
+ * MasterData/FleetSetup/manpower/store — this is now the single screen
+ * for the whole Production Record flow (Front No selection, Truck,
+ * Physical Condition/Contamination/Disposition/Keterangan, save),
+ * replacing the old two-step Front-select -> Haulage-checker flow. An
+ * optional `?batch=&rit=&mode=missed` query targets a specific missed
+ * Rit for correction (`ProductionRecordEntry` re-validates it is still
+ * missed before allowing a save) — the operator never types a Rit value
+ * either way.
+ */
 export function ProductionRecordPage() {
   const { t } = useTranslation('production')
-  const { t: tc } = useTranslation('common')
-  const { workspace } = useOutletContext<ActiveWorkspaceContext>()
   const { pileId } = useParams<{ pileId: string }>()
-  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const { workspace } = useOutletContext<ActiveWorkspaceContext>()
   const pile = workspace.piles.find((candidate) => candidate.id === pileId)
-  const optionsResult = useMemo(
-    () => (pile ? operationalFleetOptionsForPile(workspace.masterData, workspace.fleetSetup, pile.id) : undefined),
-    [pile, workspace.fleetSetup, workspace.masterData],
-  )
-  const [selectedFrontId, setSelectedFrontId] = useState('')
 
   if (!pile) {
     return (
@@ -33,69 +62,16 @@ export function ProductionRecordPage() {
     )
   }
 
-  if (!optionsResult?.ok) {
-    return (
-      <div>
-        <PageHeader title={t('record.title', { pileId: pile.id })} />
-        <div className="px-5 py-4">
-          <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {t('errors.frontLoadFailed')}
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  const options = optionsResult.value
-
   return (
-    <div>
-      <PageHeader title={t('record.title', { pileId: pile.id })} />
-      <div className="flex flex-col gap-4 px-5 py-4">
-        <div className="flex items-center justify-between">
-          <span className="font-semibold">{pile.id}</span>
-          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">{pile.oreCode}</span>
-        </div>
-
-        <Card>
-          <CardContent className="flex flex-col gap-4">
-            <label className="flex flex-col gap-1.5 text-sm font-medium">
-              {t('record.selectFront')}
-              <select
-                value={selectedFrontId}
-                onChange={(event) => setSelectedFrontId(event.target.value)}
-                className="h-12 rounded-lg border border-input bg-background px-3 text-sm"
-              >
-                <option value="">—</option>
-                {options.map((option) => (
-                  <option key={option.frontId} value={option.frontId as string}>
-                    {option.frontId}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {options.length === 0 ? <p className="text-sm text-muted-foreground">{t('record.noFront')}</p> : null}
-
-            <div className="grid grid-cols-2 gap-3">
-              <Button type="button" variant="secondary" onClick={() => navigate('/production?tab=record')}>
-                {tc('fleetSetup.cancel')}
-              </Button>
-              <Button
-                type="button"
-                disabled={!selectedFrontId}
-                onClick={() =>
-                  navigate(
-                    `/production/record/${encodeURIComponent(pile.id as string)}/haulage?front=${encodeURIComponent(selectedFrontId)}`,
-                  )
-                }
-              >
-                {tc('fleetSetup.continue')}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+    <ProductionRecordEntry
+      shift={workspace.shift}
+      pile={pile}
+      masterData={workspace.masterData}
+      fleetSetup={workspace.fleetSetup}
+      manpower={workspace.manpower}
+      pendingBatches={workspace.pendingBatches}
+      targetPosition={parseMissedTargetPosition(searchParams)}
+      store={localOperationalStore}
+    />
   )
 }

@@ -63,7 +63,7 @@ describe('ReportPage', () => {
   })
 
   it('is not a placeholder — builds the real shift report and shows the WhatsApp preview plus Excel export action', async () => {
-    vi.spyOn(localOperationalStore, 'listHaulageTransactionsForShift').mockResolvedValue({ ok: true, value: [] })
+    vi.spyOn(localOperationalStore, 'listProductionRecordsForShift').mockResolvedValue({ ok: true, value: [] })
     vi.spyOn(localOperationalStore, 'listSamplePositionsForShift').mockResolvedValue({ ok: true, value: [] })
 
     renderReport(buildWorkspace())
@@ -74,7 +74,7 @@ describe('ReportPage', () => {
   })
 
   it('shows only ONE operational report preview — no duplicate plain "Laporan" section above the WhatsApp report (Phase 18 §9)', async () => {
-    vi.spyOn(localOperationalStore, 'listHaulageTransactionsForShift').mockResolvedValue({ ok: true, value: [] })
+    vi.spyOn(localOperationalStore, 'listProductionRecordsForShift').mockResolvedValue({ ok: true, value: [] })
     vi.spyOn(localOperationalStore, 'listSamplePositionsForShift').mockResolvedValue({ ok: true, value: [] })
 
     renderReport(buildWorkspace())
@@ -90,7 +90,7 @@ describe('ReportPage', () => {
   })
 
   it('keeps the report action buttons (Copy/Share/Export) available on the single preview', async () => {
-    vi.spyOn(localOperationalStore, 'listHaulageTransactionsForShift').mockResolvedValue({ ok: true, value: [] })
+    vi.spyOn(localOperationalStore, 'listProductionRecordsForShift').mockResolvedValue({ ok: true, value: [] })
     vi.spyOn(localOperationalStore, 'listSamplePositionsForShift').mockResolvedValue({ ok: true, value: [] })
 
     renderReport(buildWorkspace())
@@ -101,7 +101,7 @@ describe('ReportPage', () => {
   })
 
   it('wires workspace.manpower (Phase 18 §4) into the built report — never a hardcoded empty list', async () => {
-    vi.spyOn(localOperationalStore, 'listHaulageTransactionsForShift').mockResolvedValue({ ok: true, value: [] })
+    vi.spyOn(localOperationalStore, 'listProductionRecordsForShift').mockResolvedValue({ ok: true, value: [] })
     vi.spyOn(localOperationalStore, 'listSamplePositionsForShift').mockResolvedValue({ ok: true, value: [] })
 
     const workspace = buildWorkspace({
@@ -114,7 +114,7 @@ describe('ReportPage', () => {
   })
 
   it('shows a translated, non-blocking error when shift data fails to load — never a raw store error', async () => {
-    vi.spyOn(localOperationalStore, 'listHaulageTransactionsForShift').mockResolvedValue({
+    vi.spyOn(localOperationalStore, 'listProductionRecordsForShift').mockResolvedValue({
       ok: false,
       error: { code: 'LOCAL_DATABASE_OPERATION_FAILED', message: 'boom' },
     })

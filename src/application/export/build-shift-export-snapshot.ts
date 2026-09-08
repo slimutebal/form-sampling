@@ -1,15 +1,22 @@
 import type { Clock } from '@/application/common/clock'
+import { selectEffectiveProductionRecords } from '@/application/production/effective-production'
+import { deriveEffectiveSamplingRequirement } from '@/application/production/production-sample-impact'
 import { buildShiftReport } from '@/application/reporting/build-shift-report'
 import type { ManpowerAssignment, ReportLanguage, ShiftReport } from '@/application/reporting/report-types'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err, ok } from '@/domain/common/result'
 import type { PendingBatchCarryOver } from '@/domain/handover/carry-over-pending-batch'
 import { HANDOVER_FILE_TYPE, SUPPORTED_HANDOVER_SCHEMA_VERSIONS } from '@/domain/handover/handover-schema'
-import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
 import type { MasterData } from '@/domain/master/master-data'
 import type { Pile } from '@/domain/pile/pile'
+import type { ProductionRecord } from '@/domain/production/production-record'
 import type { SamplePosition } from '@/domain/sample-handling/sample-position'
 import type { Shift } from '@/domain/shift/shift'
+import { buildMachineHaulageDetailRows, type ExportHaulageDetailRow } from './build-machine-haulage-detail-rows'
+import { buildProductionCorrectionRows, type ExportProductionCorrectionRow } from './build-production-correction-rows'
+
+export type { ExportHaulageDetailRow } from './build-machine-haulage-detail-rows'
+export type { ExportProductionCorrectionRow } from './build-production-correction-rows'
 
 /** The Report sheet defaults to Indonesian when no explicit report language is given (the app's own default UI language, `defaultLanguage` in `@/i18n`) — the two settings remain otherwise independent (ROADMAP Phase 14 §10). */
 const DEFAULT_REPORT_LANGUAGE: ReportLanguage = 'id'
@@ -28,14 +35,14 @@ export const EXPORT_SCHEMA_VERSION = SUPPORTED_HANDOVER_SCHEMA_VERSIONS[0]
 export interface ShiftExportInput {
   readonly shift: Shift
   readonly piles: readonly Pile[]
-  readonly haulageTransactions: readonly HaulageTransaction[]
+  readonly productionRecords: readonly ProductionRecord[]
   readonly samplePositions: readonly SamplePosition[]
   /**
    * The outgoing shift's own unfinished batches, per Pile — explicit,
    * validated caller input (rule 4). There is no authoritative
    * end-of-shift pending derivation in this codebase yet (CONTINUE vs
    * HOLD is an operator decision no current engine makes), so this
-   * function never invents pending state from `haulageTransactions`/
+   * function never invents pending state from `productionRecords`/
    * `samplePositions` and never reads a previously *imported*
    * `LocalShiftWorkspace.pendingBatches` (that field holds carry-over
    * *received* from the previous shift, not what this shift owes the
@@ -86,20 +93,6 @@ export interface ExportSamplePositionRow {
   readonly Dispatcher_Employee_ID: string
 }
 
-export interface ExportHaulageDetailRow {
-  readonly Shift_ID: string
-  readonly Pile_ID: string
-  readonly Batch: number
-  readonly Rit: number
-  readonly Front_ID: string
-  readonly Fleet_ID: string
-  readonly Truck_ID: string
-  readonly Sample_Status: 'REQUIRED' | 'NOT_REQUIRED'
-  readonly Sample_Increment: number | ''
-  readonly Truck_Status: 'VALID' | 'WRONG_TRUCK'
-  readonly Wrong_Truck_Reasons: string
-}
-
 export interface ExportSamplingDetailRow {
   readonly Shift_ID: string
   readonly Pile_ID: string
@@ -134,6 +127,8 @@ export interface ShiftExportSnapshot {
   readonly haulageDetail: readonly ExportHaulageDetailRow[]
   readonly samplingDetail: readonly ExportSamplingDetailRow[]
   readonly pileSummary: readonly ExportPileSummaryRow[]
+  /** Phase 22 §5 correction event log, flattened from every ProductionRecord's `audit.corrections`. */
+  readonly productionCorrection: readonly ExportProductionCorrectionRow[]
   /** The Phase 14 report DTO (`@/application/reporting`) — already fully computed; the Excel writer only serializes it (ROADMAP Phase 14 §12). */
   readonly report: ShiftReport
 }
@@ -181,7 +176,7 @@ export function buildShiftExportSnapshot(input: ShiftExportInput): Result<ShiftE
   const {
     shift,
     piles,
-    haulageTransactions,
+    productionRecords,
     samplePositions,
     pendingBatches,
     applicationVersion,
@@ -199,7 +194,8 @@ export function buildShiftExportSnapshot(input: ShiftExportInput): Result<ShiftE
     pileById.set(pile.id, pile)
   }
 
-  for (const transaction of haulageTransactions) {
+  for (const record of productionRecords) {
+    const transaction = record.transaction
     if (transaction.shiftId !== shift.id) {
       return buildError(
         'EXPORT_HAULAGE_SHIFT_ID_MISMATCH',
@@ -308,44 +304,48 @@ export function buildShiftExportSnapshot(input: ShiftExportInput): Result<ShiftE
         : '',
   }))
 
-  const haulageDetail: ExportHaulageDetailRow[] = haulageTransactions.map((transaction) => ({
-    Shift_ID: String(transaction.shiftId),
-    Pile_ID: String(transaction.pileId),
-    Batch: Number(transaction.batchPosition.batchNumber),
-    Rit: Number(transaction.batchPosition.ritNumber),
-    Front_ID: String(transaction.frontId),
-    Fleet_ID: String(transaction.fleetId),
-    Truck_ID: String(transaction.truckId),
-    Sample_Status: transaction.samplingEvaluation.sampleRequired ? 'REQUIRED' : 'NOT_REQUIRED',
-    Sample_Increment: transaction.samplingEvaluation.sampleRequired
-      ? Number(transaction.samplingEvaluation.incrementNumber)
-      : '',
-    Truck_Status: transaction.truckValidation.status,
-    Wrong_Truck_Reasons:
-      transaction.truckValidation.status === 'WRONG_TRUCK' ? transaction.truckValidation.reasons.join(',') : '',
-  }))
+  // Machine archive: every ProductionRecord, no disposition/status
+  // filtering (§8/§9/§10) — REJECT and VOIDED rows are preserved with both
+  // Original (immutable transaction) and Effective (current) columns.
+  const haulageDetailResult = buildMachineHaulageDetailRows(piles, masterData, productionRecords)
+  if (!haulageDetailResult.ok) {
+    return haulageDetailResult
+  }
+  const haulageDetail = haulageDetailResult.value
 
-  const samplingDetail: ExportSamplingDetailRow[] = haulageTransactions
-    .filter((transaction) => transaction.samplingEvaluation.sampleRequired)
-    .map((transaction) => {
-      const evaluation = transaction.samplingEvaluation
-      return {
-        Shift_ID: String(transaction.shiftId),
-        Pile_ID: String(transaction.pileId),
-        Batch: Number(transaction.batchPosition.batchNumber),
-        Rit: Number(transaction.batchPosition.ritNumber),
-        Sample_Increment: evaluation.sampleRequired ? Number(evaluation.incrementNumber) : 0,
-        Front_ID: String(transaction.frontId),
-        Fleet_ID: String(transaction.fleetId),
-        Truck_ID: String(transaction.truckId),
-        Truck_Status: transaction.truckValidation.status,
-      }
+  const productionCorrection: readonly ExportProductionCorrectionRow[] = buildProductionCorrectionRows(productionRecords)
+
+  // Sampling_Detail is an operational "what needs a physical sample" list
+  // (Phase 22 §1/§6), so it is scoped to effective (ACCEPT + ACTIVE)
+  // production only, at the *effective* position — a REJECT/VOIDED record,
+  // or a position a SWITCH_POSITION correction has moved off, never
+  // demands a physical sample here.
+  const samplingDetail: ExportSamplingDetailRow[] = []
+  for (const record of selectEffectiveProductionRecords(productionRecords)) {
+    const { transaction, effective } = record
+    const pile = piles.find((candidate) => candidate.id === transaction.pileId)!
+    const requirement = deriveEffectiveSamplingRequirement(pile, masterData, effective.batchPosition)
+    if (!requirement.ok) {
+      return requirement
+    }
+    if (!requirement.value.sampleRequired) continue
+    samplingDetail.push({
+      Shift_ID: String(transaction.shiftId),
+      Pile_ID: String(transaction.pileId),
+      Batch: Number(effective.batchPosition.batchNumber),
+      Rit: Number(effective.batchPosition.ritNumber),
+      Sample_Increment: Number(requirement.value.incrementNumber),
+      Front_ID: String(effective.frontId),
+      Fleet_ID: String(effective.fleetId),
+      Truck_ID: String(effective.truckId),
+      Truck_Status: effective.truckValidation.status,
     })
+  }
 
   const pileSummary: ExportPileSummaryRow[] = piles.map((pile) => ({
     Pile_ID: String(pile.id),
     Ore: String(pile.oreCode),
-    Haulage_Transaction_Count: haulageTransactions.filter((transaction) => transaction.pileId === pile.id).length,
+    Haulage_Transaction_Count: productionRecords.filter((record) => record.transaction.pileId === pile.id).length,
     Sample_Position_Count: samplePositions.filter((position) => position.pileId === pile.id).length,
     Pending_Batch_Count: pendingBatches.filter((row) => row.pile.id === pile.id).length,
   }))
@@ -354,7 +354,7 @@ export function buildShiftExportSnapshot(input: ShiftExportInput): Result<ShiftE
     language: reportLanguage,
     shift,
     piles,
-    haulageTransactions,
+    productionRecords,
     samplePositions,
     masterData,
     manpowerAssignments,
@@ -371,6 +371,7 @@ export function buildShiftExportSnapshot(input: ShiftExportInput): Result<ShiftE
     haulageDetail,
     samplingDetail,
     pileSummary,
+    productionCorrection,
     report: reportResult.value,
   })
 }

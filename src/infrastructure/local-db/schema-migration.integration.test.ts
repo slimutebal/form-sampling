@@ -5,6 +5,7 @@ import {
   buildFixtureFleetSetup,
   buildFixtureHaulageTransaction,
   buildFixtureMasterData,
+  buildFixtureProductionRecord,
   buildFixtureSamplePosition,
   buildFixtureSapPile,
   buildFixtureShift,
@@ -381,6 +382,191 @@ describe('LocalOperationalStore — v3 to v4 schema migration (Phase 16 §7)', (
     if (!pending.ok) return
     expect(pending.value.map((record) => record.shiftId)).toEqual(['SHIFT-1'])
 
+    store.close()
+  })
+})
+
+describe('LocalOperationalStore — v4 to v5 schema migration (Production Data Model)', () => {
+  it('existing v4 haulageTransactions data survives opening through the v5-aware store, and every pre-existing transaction gets a legacy ProductionRecord', async () => {
+    const databaseName = uniqueDatabaseName()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    const pile = buildFixtureSapPile('PILE-1')
+
+    // 1. Create a legacy schema-v4 database directly with Dexie, using the
+    // exact v1/v2/v3/v4 `.stores()` shapes — bypassing LocalOperationalStore
+    // entirely so this test does not depend on the current (v5) store
+    // already knowing how to write v4 data.
+    const legacyDb = new Dexie(databaseName)
+    legacyDb.version(1).stores({
+      shiftWorkspaces: 'shiftId',
+      haulageTransactions: 'id, shiftId, pileId, [shiftId+pileId]',
+      metadata: 'key',
+    })
+    legacyDb.version(2).stores({
+      shiftWorkspaces: 'shiftId',
+      haulageTransactions: 'id, shiftId, pileId, [shiftId+pileId]',
+      metadata: 'key',
+      samplePositions: 'id, shiftId, pileId, [shiftId+pileId]',
+    })
+    legacyDb.version(3).stores({
+      shiftWorkspaces: 'shiftId',
+      haulageTransactions: 'id, shiftId, pileId, [shiftId+pileId]',
+      metadata: 'key',
+      samplePositions: 'id, shiftId, pileId, [shiftId+pileId]',
+      importHistory: 'fingerprint',
+    })
+    legacyDb.version(4).stores({
+      shiftWorkspaces: 'shiftId',
+      haulageTransactions: 'id, shiftId, pileId, [shiftId+pileId]',
+      metadata: 'key',
+      samplePositions: 'id, shiftId, pileId, [shiftId+pileId]',
+      importHistory: 'fingerprint',
+      masterDataCache: 'key',
+      shiftSummarySync: 'shiftId',
+    })
+
+    const workspaceRecord: ShiftWorkspaceRecord = {
+      shiftId: shift.id,
+      shift,
+      piles: [pile],
+      masterData,
+      fleetSetup,
+    }
+    await legacyDb.table('shiftWorkspaces').add(workspaceRecord)
+    await legacyDb.table('metadata').put({ key: CURRENT_SHIFT_METADATA_KEY, value: shift.id })
+
+    const transaction = buildFixtureHaulageTransaction({
+      id: 'TX-LEGACY-V4',
+      shiftId: 'SHIFT-1',
+      pile,
+      batch: 24,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    const transactionRecord: HaulageTransactionRecord = {
+      id: transaction.id,
+      shiftId: transaction.shiftId,
+      pileId: transaction.pileId,
+      transaction,
+    }
+    await legacyDb.table('haulageTransactions').add(transactionRecord)
+
+    // 2. Close the legacy connection before reopening through the real store.
+    legacyDb.close()
+
+    // 3. Open the same database name through the current (v5) store — this
+    // triggers Dexie's in-place v4 -> v5 upgrade.
+    const store = new LocalOperationalStore(databaseName)
+
+    // 4. Existing v4 data is still readable — nothing was deleted, and
+    // every existing HaulageTransaction API keeps working unchanged.
+    const loadedWorkspace = await store.loadCurrentShiftWorkspace()
+    expect(loadedWorkspace.ok).toBe(true)
+    if (!loadedWorkspace.ok) return
+    expect(loadedWorkspace.value?.shiftId).toBe('SHIFT-1')
+    expect(loadedWorkspace.value?.piles.map((p) => p.id)).toEqual(['PILE-1'])
+
+    const loadedTransaction = await store.getHaulageTransaction(fixtureTransactionId('TX-LEGACY-V4'))
+    expect(loadedTransaction.ok).toBe(true)
+    if (!loadedTransaction.ok) return
+    expect(loadedTransaction.value).toEqual(transaction)
+
+    // 5. The pre-existing transaction (which had no Production metadata)
+    // gets a legacy ProductionRecord: disposition ACCEPT, status ACTIVE,
+    // physicalCondition/contamination/remark null, no audit user/timestamp
+    // invented, and an empty corrections history.
+    const migratedRecord = await store.getProductionRecord(fixtureTransactionId('TX-LEGACY-V4'))
+    expect(migratedRecord.ok).toBe(true)
+    if (!migratedRecord.ok) return
+    expect(migratedRecord.value?.transaction).toEqual(transaction)
+    expect(migratedRecord.value?.effective).toEqual({
+      batchPosition: transaction.batchPosition,
+      frontId: transaction.frontId,
+      fleetId: transaction.fleetId,
+      truckId: transaction.truckId,
+      truckValidation: transaction.truckValidation,
+      physicalCondition: null,
+      contamination: null,
+      disposition: 'ACCEPT',
+      remark: null,
+      status: 'ACTIVE',
+    })
+    expect(migratedRecord.value?.audit).toEqual({
+      createdAt: null,
+      createdBy: null,
+      updatedAt: null,
+      updatedBy: null,
+      corrections: [],
+    })
+
+    const migratedByShift = await store.listProductionRecordsForShift(fixtureShiftId('SHIFT-1'))
+    expect(migratedByShift.ok).toBe(true)
+    if (!migratedByShift.ok) return
+    expect(migratedByShift.value.map((record) => record.transaction.id)).toEqual(['TX-LEGACY-V4'])
+
+    // 6. A new, operator-created ProductionRecord can be written and read
+    // after migration, for a HaulageTransaction added after the upgrade.
+    const newTransaction = buildFixtureHaulageTransaction({
+      id: 'TX-AFTER-MIGRATION',
+      shiftId: 'SHIFT-1',
+      pile,
+      batch: 24,
+      rit: 4,
+      masterData,
+      fleetSetup,
+    })
+    expect((await store.addHaulageTransaction(newTransaction)).ok).toBe(true)
+
+    const newProductionRecord = buildFixtureProductionRecord({ transaction: newTransaction })
+    const addResult = await store.addProductionRecord(newProductionRecord)
+    expect(addResult.ok).toBe(true)
+
+    const readBack = await store.getProductionRecord(fixtureTransactionId('TX-AFTER-MIGRATION'))
+    expect(readBack.ok).toBe(true)
+    if (!readBack.ok) return
+    expect(readBack.value).toEqual(newProductionRecord)
+
+    const byShiftPile = await store.listProductionRecordsForShiftPile(
+      fixtureShiftId('SHIFT-1'),
+      fixturePileId('PILE-1'),
+    )
+    expect(byShiftPile.ok).toBe(true)
+    if (!byShiftPile.ok) return
+    expect(byShiftPile.value.map((record) => record.transaction.id).sort()).toEqual([
+      'TX-AFTER-MIGRATION',
+      'TX-LEGACY-V4',
+    ])
+
+    store.close()
+  })
+
+  it('a fresh (never-existing) database opens directly at v5 with a usable productionRecords table', async () => {
+    const databaseName = uniqueDatabaseName()
+    const store = new LocalOperationalStore(databaseName)
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    const pile = buildFixtureSapPile('PILE-1')
+
+    const initResult = await store.initializeShiftWorkspace({ shift, piles: [pile], masterData, fleetSetup })
+    expect(initResult.ok).toBe(true)
+
+    const transaction = buildFixtureHaulageTransaction({
+      id: 'TX-1',
+      shiftId: 'SHIFT-1',
+      pile,
+      batch: 24,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    expect((await store.addHaulageTransaction(transaction)).ok).toBe(true)
+
+    const addResult = await store.addProductionRecord(buildFixtureProductionRecord({ transaction }))
+    expect(addResult.ok).toBe(true)
     store.close()
   })
 })

@@ -25,8 +25,20 @@
  * `.stores()` declarations are preserved unchanged, so every existing
  * shiftWorkspaces/haulageTransactions/samplePositions/importHistory/
  * metadata row survives the upgrade untouched.
+ *
+ * v5 (Production Data Model): adds `productionRecords` (one row per
+ * HaulageTransaction, primary key: id, holding a `ProductionRecord` —
+ * the immutable original transaction plus the operator-observed/
+ * correctable production fields around it). The v1/v2/v3/v4 `.stores()`
+ * declarations are preserved unchanged — `haulageTransactions` itself is
+ * untouched, so every existing HaulageTransaction API keeps working. An
+ * `.upgrade()` step migrates every pre-existing `haulageTransactions`
+ * row into a corresponding legacy `productionRecords` row (disposition
+ * ACCEPT, status ACTIVE, physicalCondition/contamination/remark/audit
+ * fields null, no corrections) — no DRY/CLN/timestamp/user is invented
+ * for data recorded before production recording existed.
  */
-export const LOCAL_DATABASE_SCHEMA_VERSION = 4
+export const LOCAL_DATABASE_SCHEMA_VERSION = 5
 
 /** Stable production database name (Phase 7 §12). */
 export const DEFAULT_LOCAL_DATABASE_NAME = 'form-sampling'

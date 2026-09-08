@@ -14,7 +14,7 @@ describe('exportShiftWorkbook', () => {
     const result = await exportShiftWorkbook({
       shift,
       piles: [pile],
-      haulageTransactions: [],
+      productionRecords: [],
       samplePositions: [],
       pendingBatches: [],
       applicationVersion: '1.0.0-test',
@@ -39,7 +39,7 @@ describe('exportShiftWorkbook', () => {
     const result = await exportShiftWorkbook({
       shift,
       piles: [pile],
-      haulageTransactions: [],
+      productionRecords: [],
       samplePositions: [],
       pendingBatches: [
         {
@@ -69,7 +69,7 @@ describe('exportShiftWorkbook', () => {
     const resultPromise = exportShiftWorkbook({
       shift,
       piles: [pile],
-      haulageTransactions: [],
+      productionRecords: [],
       samplePositions: [],
       pendingBatches: [],
       applicationVersion: '1.0.0-test',
@@ -100,7 +100,7 @@ describe('exportShiftWorkbook', () => {
     const result = await exportShiftWorkbook({
       shift,
       piles: [pile],
-      haulageTransactions: [],
+      productionRecords: [],
       samplePositions: [],
       pendingBatches: [
         {

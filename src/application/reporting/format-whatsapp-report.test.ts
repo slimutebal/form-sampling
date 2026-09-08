@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { parseDeliveryDestinationCode } from '@/domain/sample-handling/delivery-destination'
 import { createDeliveredDelivery, createNotPickedUpDelivery } from '@/domain/sample-handling/delivery-status'
+import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
+import type { ProductionRecord } from '@/domain/production/production-record'
 import {
   FIXTURE_EMPLOYEE_ID,
   FIXTURE_EMPLOYEE_NAME,
@@ -9,6 +11,7 @@ import {
   buildFixtureHaulageTransaction,
   buildFixtureLimPile,
   buildFixtureMasterData,
+  buildFixtureProductionRecord,
   buildFixtureSamplePosition,
   buildFixtureSapPile,
   buildFixtureShift,
@@ -23,13 +26,18 @@ const fleetSetup = buildFixtureFleetSetup(masterData)
 const destination = parseDeliveryDestinationCode('LAB-1')
 if (!destination.ok) throw new Error('bad fixture')
 
+/** Wraps fixture HaulageTransactions into validated ProductionRecords (ACCEPT/ACTIVE by default) for `productionRecords` input. */
+function productionRecordsFrom(transactions: readonly HaulageTransaction[]): readonly ProductionRecord[] {
+  return transactions.map((transaction) => buildFixtureProductionRecord({ transaction }))
+}
+
 function baseInput(overrides: Partial<BuildShiftReportInput> = {}): BuildShiftReportInput {
   const pile = buildFixtureSapPile('PILE-1')
   return {
     language: 'en',
     shift: buildFixtureShift('SHIFT-1'),
     piles: [pile],
-    haulageTransactions: [],
+    productionRecords: [],
     samplePositions: [],
     masterData,
     manpowerAssignments: [],
@@ -130,10 +138,10 @@ describe('formatWhatsAppReport — production', () => {
     const limPile = buildFixtureLimPile('PILE-LIM')
     const report = buildReport({
       piles: [sapPile, limPile],
-      haulageTransactions: [
+      productionRecords: productionRecordsFrom([
         buildFixtureHaulageTransaction({ id: 'T-1', shiftId: 'SHIFT-1', pile: sapPile, batch: 1, rit: 2, masterData, fleetSetup }),
         buildFixtureHaulageTransaction({ id: 'T-2', shiftId: 'SHIFT-1', pile: limPile, batch: 1, rit: 5, masterData, fleetSetup }),
-      ],
+      ]),
     })
     const text = formatWhatsAppReport(report)
 
@@ -232,7 +240,7 @@ describe('formatWhatsAppReport — haulage detail (Phase 18 §1/§11)', () => {
     const pile = buildFixtureSapPile('PILE-1')
     const report = buildReport({
       piles: [pile],
-      haulageTransactions: [
+      productionRecords: productionRecordsFrom([
         buildFixtureHaulageTransaction({ id: 'T-1', shiftId: 'SHIFT-1', pile, batch: 1, rit: 1, masterData, fleetSetup }),
         buildFixtureHaulageTransaction({
           id: 'T-2',
@@ -244,7 +252,7 @@ describe('formatWhatsAppReport — haulage detail (Phase 18 §1/§11)', () => {
           fleetSetup,
           truckId: FIXTURE_WRONG_TRUCK_TRUCK_ID,
         }),
-      ],
+      ]),
     })
     const text = formatWhatsAppReport(report)
 
@@ -258,7 +266,9 @@ describe('formatWhatsAppReport — haulage detail (Phase 18 §1/§11)', () => {
     const pile = buildFixtureSapPile('PILE-1')
     const report = buildReport({
       piles: [pile],
-      haulageTransactions: [buildFixtureHaulageTransaction({ id: 'T-1', shiftId: 'SHIFT-1', pile, batch: 1, rit: 1, masterData, fleetSetup })],
+      productionRecords: productionRecordsFrom([
+        buildFixtureHaulageTransaction({ id: 'T-1', shiftId: 'SHIFT-1', pile, batch: 1, rit: 1, masterData, fleetSetup }),
+      ]),
     })
     const text = formatWhatsAppReport(report)
 
@@ -271,7 +281,7 @@ describe('formatWhatsAppReport — wrong truck', () => {
     const pile = buildFixtureSapPile('PILE-1')
     const report = buildReport({
       piles: [pile],
-      haulageTransactions: [
+      productionRecords: productionRecordsFrom([
         buildFixtureHaulageTransaction({
           id: 'T-1',
           shiftId: 'SHIFT-1',
@@ -282,7 +292,7 @@ describe('formatWhatsAppReport — wrong truck', () => {
           fleetSetup,
           truckId: FIXTURE_WRONG_TRUCK_TRUCK_ID,
         }),
-      ],
+      ]),
     })
     const text = formatWhatsAppReport(report)
 
@@ -304,7 +314,9 @@ describe('formatWhatsAppReport — pending samples', () => {
     const pile = buildFixtureSapPile('PILE-1')
     const report = buildReport({
       piles: [pile],
-      haulageTransactions: [buildFixtureHaulageTransaction({ id: 'T-1', shiftId: 'SHIFT-1', pile, batch: 1, rit: 2, masterData, fleetSetup })],
+      productionRecords: productionRecordsFrom([
+        buildFixtureHaulageTransaction({ id: 'T-1', shiftId: 'SHIFT-1', pile, batch: 1, rit: 2, masterData, fleetSetup }),
+      ]),
     })
     const text = formatWhatsAppReport(report)
 
@@ -357,8 +369,8 @@ describe('formatWhatsAppReport — determinism, immutability, no dummy text', ()
         truckId: FIXTURE_WRONG_TRUCK_TRUCK_ID,
       }),
     ]
-    const en = buildReport({ language: 'en', piles: [pile], haulageTransactions: transactions })
-    const id = buildReport({ language: 'id', piles: [pile], haulageTransactions: transactions })
+    const en = buildReport({ language: 'en', piles: [pile], productionRecords: productionRecordsFrom(transactions) })
+    const id = buildReport({ language: 'id', piles: [pile], productionRecords: productionRecordsFrom(transactions) })
     const enText = formatWhatsAppReport(en)
     const idText = formatWhatsAppReport(id)
 

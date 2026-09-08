@@ -1,20 +1,21 @@
+import { deriveEffectiveSamplingRequirement } from '@/application/production/production-sample-impact'
+import { selectEffectiveProductionRecords, selectEffectiveTransactions } from '@/application/production/effective-production'
 import { derivePendingSamples } from '@/application/sample-handling/derive-pending-samples'
 import type { PileId } from '@/domain/common/identifiers'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err, ok } from '@/domain/common/result'
-import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
 import { findEmployee, findPileArea, type MasterData } from '@/domain/master/master-data'
 import type { Pile } from '@/domain/pile/pile'
+import type { ProductionRecord } from '@/domain/production/production-record'
 import type { SamplePosition } from '@/domain/sample-handling/sample-position'
 import type { Shift } from '@/domain/shift/shift'
+import { deriveShiftProductionReport } from './derive-shift-production-report'
 import { isoWeekOf } from './iso-week'
 import { getReportLabels, shiftCodeDisplayLabel } from './report-localization'
 import type {
   HaulageDetailRow,
   ManpowerAssignment,
   PendingSampleRow,
-  ProductionSummaryRow,
-  ProductionTotals,
   ReportLanguage,
   ReportManpowerRow,
   SampleHandlingRow,
@@ -26,7 +27,7 @@ export interface BuildShiftReportInput {
   readonly language: ReportLanguage
   readonly shift: Shift
   readonly piles: readonly Pile[]
-  readonly haulageTransactions: readonly HaulageTransaction[]
+  readonly productionRecords: readonly ProductionRecord[]
   readonly samplePositions: readonly SamplePosition[]
   readonly masterData: MasterData
   /** Explicit, caller-supplied manpower for this shift (ROADMAP Phase 14 §3). Defaults to none. */
@@ -39,28 +40,30 @@ function buildError(code: string, message: string): Result<never, DomainError> {
 
 /**
  * Builds the immutable Phase 14 shift report from already-validated,
- * already-stored domain state (ROADMAP Phase 14). Never recomputes a
- * historical sampling decision, increment identity, or truck
- * validation — every such value is read from the stored
- * HaulageTransaction/SamplePosition snapshots (§0). Never mutates any
- * input array/object.
+ * already-stored domain state (ROADMAP Phase 14), rewired for Phase 22 to
+ * read `ProductionRecord[]` — never the raw, unfiltered HaulageTransaction
+ * table (§1). Every production total/list here reflects the *current
+ * effective* state (`record.effective.*`): a REJECT or VOIDED record never
+ * counts as production, and a MOVE/SWAP/EDIT_FIELDS correction is always
+ * reported at its current position/Front/Truck, never the transaction's
+ * original one. Never mutates any input array/object.
  *
  * Validated before anything is derived, mirroring
  * `buildShiftExportSnapshot`'s carry-over checks (§11):
  *  - no two Piles share a PileId (`REPORT_DUPLICATE_PILE_ID`);
- *  - every HaulageTransaction/SamplePosition's `shiftId` equals
- *    `shift.id` (`REPORT_HAULAGE_SHIFT_ID_MISMATCH` /
- *    `REPORT_SAMPLE_POSITION_SHIFT_ID_MISMATCH`);
- *  - every HaulageTransaction/SamplePosition's `pileId` resolves to a
- *    Pile in `piles` (`REPORT_HAULAGE_PILE_NOT_FOUND` /
- *    `REPORT_SAMPLE_POSITION_PILE_NOT_FOUND`), and a SamplePosition's
+ *  - every ProductionRecord's underlying transaction `shiftId` equals
+ *    `shift.id` (`REPORT_HAULAGE_SHIFT_ID_MISMATCH`), and its `pileId`
+ *    resolves to a Pile in `piles` (`REPORT_HAULAGE_PILE_NOT_FOUND`);
+ *  - every SamplePosition's `shiftId` equals `shift.id`
+ *    (`REPORT_SAMPLE_POSITION_SHIFT_ID_MISMATCH`), its `pileId` resolves to
+ *    a Pile in `piles` (`REPORT_SAMPLE_POSITION_PILE_NOT_FOUND`), and its
  *    `oreCode` matches that Pile's Ore
  *    (`REPORT_SAMPLE_POSITION_PILE_ORE_MISMATCH`);
  *  - every ManpowerAssignment's `employeeId` resolves in `masterData`
  *    (`REPORT_MANPOWER_EMPLOYEE_NOT_FOUND`, §3).
  */
 export function buildShiftReport(input: BuildShiftReportInput): Result<ShiftReport, DomainError> {
-  const { language, shift, piles, haulageTransactions, samplePositions, masterData, manpowerAssignments } = input
+  const { language, shift, piles, productionRecords, samplePositions, masterData, manpowerAssignments } = input
   const labels = getReportLabels(language)
 
   const pileById = new Map<PileId, Pile>()
@@ -71,7 +74,8 @@ export function buildShiftReport(input: BuildShiftReportInput): Result<ShiftRepo
     pileById.set(pile.id, pile)
   }
 
-  for (const transaction of haulageTransactions) {
+  for (const record of productionRecords) {
+    const transaction = record.transaction
     if (transaction.shiftId !== shift.id) {
       return buildError(
         'REPORT_HAULAGE_SHIFT_ID_MISMATCH',
@@ -121,40 +125,14 @@ export function buildShiftReport(input: BuildShiftReportInput): Result<ShiftRepo
     employeeName: assignment.name,
   }))
 
-  // Rit = transaction count; Batch = distinct BatchNumber count — both
-  // pile-local (ROADMAP Phase 14 §4/§5). Only Piles with production
-  // transactions get a row, in caller Pile order.
-  const productionSummary: ProductionSummaryRow[] = []
-  for (const pile of piles) {
-    const pileTransactions = haulageTransactions.filter((transaction) => transaction.pileId === pile.id)
-    if (pileTransactions.length === 0) continue
-
-    const distinctBatchNumbers = new Set(pileTransactions.map((transaction) => Number(transaction.batchPosition.batchNumber)))
-    const increment = pileTransactions.filter((transaction) => transaction.samplingEvaluation.sampleRequired).length
-    const wrongTruck = pileTransactions.filter((transaction) => transaction.truckValidation.status === 'WRONG_TRUCK').length
-
-    productionSummary.push({
-      pileId: pile.id,
-      oreCode: pile.oreCode,
-      rit: pileTransactions.length,
-      batch: distinctBatchNumbers.size,
-      increment,
-      wrongTruck,
-    })
+  // Effective (ACCEPT + ACTIVE) production only (Phase 22 §1/§2) — never
+  // recomputed here; delegated entirely to the shared projection so the
+  // Report and any future consumer never drift apart.
+  const productionReport = deriveShiftProductionReport(piles, masterData, productionRecords)
+  if (!productionReport.ok) {
+    return productionReport
   }
-
-  // Batch identity is pile-local: total Batch is the SUM of each Pile's
-  // own distinct Batch count, never one global Set of batch numbers
-  // (ROADMAP Phase 14 §5).
-  const productionTotals: ProductionTotals = productionSummary.reduce<ProductionTotals>(
-    (totals, row) => ({
-      rit: totals.rit + row.rit,
-      batch: totals.batch + row.batch,
-      increment: totals.increment + row.increment,
-      wrongTruck: totals.wrongTruck + row.wrongTruck,
-    }),
-    { rit: 0, batch: 0, increment: 0, wrongTruck: 0 },
-  )
+  const { summary: productionSummary, totals: productionTotals } = productionReport.value
 
   const sampleHandling: SampleHandlingRow[] = samplePositions.map((position) => {
     const delivery = position.delivery
@@ -179,28 +157,39 @@ export function buildShiftReport(input: BuildShiftReportInput): Result<ShiftRepo
     }
   })
 
-  const wrongTruck: WrongTruckRow[] = haulageTransactions
-    .filter((transaction) => transaction.truckValidation.status === 'WRONG_TRUCK')
-    .map((transaction) => {
-      const validation = transaction.truckValidation
+  // Wrong Truck (Phase 22 §2): effective ACCEPT + ACTIVE records only,
+  // whose *current* effective.truckValidation is WRONG_TRUCK — matches the
+  // productionSummary/productionTotals Wrong Truck count exactly.
+  const wrongTruck: WrongTruckRow[] = selectEffectiveProductionRecords(productionRecords)
+    .filter((record) => record.effective.truckValidation.status === 'WRONG_TRUCK')
+    .map((record) => {
+      const validation = record.effective.truckValidation
       const reasons = validation.status === 'WRONG_TRUCK' ? validation.reasons : []
       return {
-        transactionId: transaction.id,
-        pileId: transaction.pileId,
-        batchNumber: transaction.batchPosition.batchNumber,
-        ritNumber: transaction.batchPosition.ritNumber,
-        frontId: transaction.frontId,
-        truckId: transaction.truckId,
+        transactionId: record.transaction.id,
+        pileId: record.transaction.pileId,
+        batchNumber: record.effective.batchPosition.batchNumber,
+        ritNumber: record.effective.batchPosition.ritNumber,
+        frontId: record.effective.frontId,
+        truckId: record.effective.truckId,
         reasons,
         reasonLabels: reasons.map((reason) => labels.wrongTruckReason[reason]),
       }
     })
 
   // Reuses derive-pending-samples verbatim — never reimplemented here
-  // (§8). Only this shift's own stored records feed it; any previously
-  // imported workspace.pendingSamples carry-over is deliberately never
-  // merged in (see the Phase 14 implementation report's ambiguity note).
-  const pendingPiles = derivePendingSamples({ shiftId: shift.id, piles, haulageTransactions, samplePositions })
+  // (§8), fed only effective (ACCEPT + ACTIVE) transactions
+  // (`selectEffectiveTransactions`) so a REJECT/VOIDED record never
+  // generates a pending physical sample requirement. Only this shift's own
+  // stored records feed it; any previously imported
+  // workspace.pendingSamples carry-over is deliberately never merged in
+  // (see the Phase 14 implementation report's ambiguity note).
+  const pendingPiles = derivePendingSamples({
+    shiftId: shift.id,
+    piles,
+    haulageTransactions: selectEffectiveTransactions(productionRecords),
+    samplePositions,
+  })
   const pendingSamples: PendingSampleRow[] = pendingPiles.flatMap((pendingPile) =>
     pendingPile.batches.map((batch) => ({
       pileId: pendingPile.pile.id,
@@ -210,32 +199,45 @@ export function buildShiftReport(input: BuildShiftReportInput): Result<ShiftRepo
     })),
   )
 
+  // Haulage Detail (Phase 22 §2/§9/§10): every ACTIVE record — ACCEPT and
+  // REJECT alike, since this is a full operational per-delivery listing,
+  // not the compact production summary — using effective
+  // position/Front/Fleet/Truck/sample/truck-status throughout. VOIDED
+  // records never appear here (they remain archive/machine-only, §8).
   const haulageDetail: HaulageDetailRow[] = []
-  for (const transaction of haulageTransactions) {
-    // Non-null: every transaction.pileId was validated against pileById above.
+  for (const record of productionRecords) {
+    if (record.effective.status !== 'ACTIVE') continue
+    const { transaction, effective } = record
+    // Non-null: every record.transaction.pileId was validated against
+    // pileById above.
     const pile = pileById.get(transaction.pileId)!
     // A Pile with no resolvable Pile_Areas master row (e.g. a stale local
     // master snapshot) never blocks the rest of the report — Stockpile is
     // simply left undefined for that row (§11), mirroring how
     // `dispatcherName` is already optional elsewhere in this module.
     const stockpileCode = findPileArea(masterData, pile.id)?.stockpileCode
-    const sampleStatus = transaction.samplingEvaluation.sampleRequired ? 'REQUIRED' : 'NOT_REQUIRED'
-    const truckStatus = transaction.truckValidation.status
-    const wrongTruckReasons = transaction.truckValidation.status === 'WRONG_TRUCK' ? transaction.truckValidation.reasons : []
+
+    const effectiveRequirement = deriveEffectiveSamplingRequirement(pile, masterData, effective.batchPosition)
+    if (!effectiveRequirement.ok) {
+      return effectiveRequirement
+    }
+    const sampleStatus = effectiveRequirement.value.sampleRequired ? 'REQUIRED' : 'NOT_REQUIRED'
+    const truckStatus = effective.truckValidation.status
+    const wrongTruckReasons = effective.truckValidation.status === 'WRONG_TRUCK' ? effective.truckValidation.reasons : []
     haulageDetail.push({
       transactionId: transaction.id,
-      truckId: transaction.truckId,
+      truckId: effective.truckId,
       oreCode: pile.oreCode,
       stockpileCode,
       pileId: transaction.pileId,
-      batchNumber: transaction.batchPosition.batchNumber,
-      ritNumber: transaction.batchPosition.ritNumber,
+      batchNumber: effective.batchPosition.batchNumber,
+      ritNumber: effective.batchPosition.ritNumber,
       sampleStatus,
       sampleStatusLabel: labels.sampleStatus[sampleStatus],
       truckStatus,
       truckStatusLabel: labels.truckStatus[truckStatus],
-      frontId: transaction.frontId,
-      fleetId: transaction.fleetId,
+      frontId: effective.frontId,
+      fleetId: effective.fleetId,
       wrongTruckReasons,
       wrongTruckReasonLabels: wrongTruckReasons.map((reason) => labels.wrongTruckReason[reason]),
     })

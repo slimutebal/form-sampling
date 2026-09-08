@@ -25,6 +25,8 @@ import { parseShiftDate } from '@/domain/common/shift-date'
 import { createBaseFleetDefinition } from '@/domain/fleet/fleet-definition'
 import { createFleetSetup, type FleetSetup } from '@/domain/fleet/fleet-setup'
 import { createFrontDefinition } from '@/domain/fleet/front'
+import { createPendingBatch } from '@/domain/batch/pending-batch'
+import type { PendingBatchCarryOver } from '@/domain/handover/carry-over-pending-batch'
 import { createHaulageTransaction, type HaulageTransaction } from '@/domain/haulage/haulage-transaction'
 import { parseHaulerCode } from '@/domain/master/master-codes'
 import { createMasterData, type MasterData } from '@/domain/master/master-data'
@@ -41,6 +43,13 @@ import {
   parseSamplingInterval,
 } from '@/domain/master/sampling-config'
 import { createPile, type Pile } from '@/domain/pile/pile'
+import {
+  createProductionRecord,
+  type Contamination,
+  type Disposition,
+  type PhysicalCondition,
+  type ProductionRecord,
+} from '@/domain/production/production-record'
 import type { SampleDelivery } from '@/domain/sample-handling/delivery-status'
 import { createSamplePosition, type SamplePosition } from '@/domain/sample-handling/sample-position'
 import { createShift, type Shift } from '@/domain/shift/shift'
@@ -218,6 +227,31 @@ export interface BuildFixtureSamplePositionParams {
   readonly delivery: SampleDelivery
 }
 
+export interface BuildFixtureProductionRecordParams {
+  readonly transaction: HaulageTransaction
+  readonly physicalCondition?: PhysicalCondition
+  readonly contamination?: Contamination
+  readonly disposition?: Disposition
+  readonly remark?: string | null
+  readonly createdAt?: Date
+  readonly createdBy?: string
+}
+
+/** Builds a validated, operator-created ProductionRecord around a fixture HaulageTransaction. */
+export function buildFixtureProductionRecord(params: BuildFixtureProductionRecordParams): ProductionRecord {
+  return must(
+    createProductionRecord({
+      transaction: params.transaction,
+      physicalCondition: params.physicalCondition ?? 'DRY',
+      contamination: params.contamination ?? 'CLN',
+      disposition: params.disposition ?? 'ACCEPT',
+      remark: params.remark,
+      createdAt: params.createdAt ?? new Date('2026-09-04T10:00:00.000Z'),
+      createdBy: fixtureEmployeeId(params.createdBy ?? FIXTURE_EMPLOYEE_ID),
+    }),
+  )
+}
+
 /** Builds a validated SamplePosition (NOT_PICKED_UP by default via `delivery`). */
 export function buildFixtureSamplePosition(params: BuildFixtureSamplePositionParams): SamplePosition {
   return must(
@@ -232,4 +266,22 @@ export function buildFixtureSamplePosition(params: BuildFixtureSamplePositionPar
       delivery: params.delivery,
     }),
   )
+}
+
+/** Builds a validated PendingBatchCarryOver (handover carry-over). */
+export function buildFixturePendingBatchCarryOver(
+  pile: Pile,
+  batch: number,
+  lastRit: number,
+  status: 'CONTINUE' | 'HOLD',
+): PendingBatchCarryOver {
+  return {
+    pile,
+    pendingBatch: createPendingBatch({
+      pileId: pile.id,
+      batchNumber: must(parseBatchNumber(batch)),
+      lastRit: must(parseRitNumber(lastRit)),
+      status,
+    }),
+  }
 }

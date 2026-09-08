@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { selectEffectiveTransactions } from '@/application/production/effective-production'
 import type { DeliveryDestinationOption } from '@/application/sample-handling/delivery-destination'
 import { derivePendingSamples } from '@/application/sample-handling/derive-pending-samples'
 import { previewSampleRange } from '@/application/sample-handling/sample-range-preview'
@@ -17,6 +18,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
 import type { MasterData } from '@/domain/master/master-data'
 import type { Pile } from '@/domain/pile/pile'
+import type { ProductionRecord } from '@/domain/production/production-record'
 import type { SamplePosition } from '@/domain/sample-handling/sample-position'
 import type { Shift } from '@/domain/shift/shift'
 import { loadErrorTranslationKey, saveErrorTranslationKey } from '@/features/samples/error-messages'
@@ -48,6 +50,7 @@ type LoadPhase =
   | {
       readonly kind: 'loaded'
       readonly haulageTransactions: readonly HaulageTransaction[]
+      readonly productionRecords: readonly ProductionRecord[]
       readonly samplePositions: readonly SamplePosition[]
     }
 
@@ -91,26 +94,33 @@ export function SampleHandlingPage({
     let cancelled = false
     setPhase({ kind: 'loading' })
 
-    void Promise.all([store.listHaulageTransactionsForShift(shift.id), store.listSamplePositionsForShift(shift.id)]).then(
-      ([haulageResult, samplePositionResult]) => {
-        if (cancelled) {
-          return
-        }
-        if (!haulageResult.ok) {
-          setPhase({ kind: 'error', code: haulageResult.error.code })
-          return
-        }
-        if (!samplePositionResult.ok) {
-          setPhase({ kind: 'error', code: samplePositionResult.error.code })
-          return
-        }
-        setPhase({
-          kind: 'loaded',
-          haulageTransactions: haulageResult.value,
-          samplePositions: samplePositionResult.value,
-        })
-      },
-    )
+    void Promise.all([
+      store.listHaulageTransactionsForShift(shift.id),
+      store.listProductionRecordsForShift(shift.id),
+      store.listSamplePositionsForShift(shift.id),
+    ]).then(([haulageResult, productionRecordResult, samplePositionResult]) => {
+      if (cancelled) {
+        return
+      }
+      if (!haulageResult.ok) {
+        setPhase({ kind: 'error', code: haulageResult.error.code })
+        return
+      }
+      if (!productionRecordResult.ok) {
+        setPhase({ kind: 'error', code: productionRecordResult.error.code })
+        return
+      }
+      if (!samplePositionResult.ok) {
+        setPhase({ kind: 'error', code: samplePositionResult.error.code })
+        return
+      }
+      setPhase({
+        kind: 'loaded',
+        haulageTransactions: haulageResult.value,
+        productionRecords: productionRecordResult.value,
+        samplePositions: samplePositionResult.value,
+      })
+    })
 
     return () => {
       cancelled = true
@@ -128,7 +138,7 @@ export function SampleHandlingPage({
     return derivePendingSamples({
       shiftId: shift.id,
       piles,
-      haulageTransactions: phase.haulageTransactions,
+      haulageTransactions: selectEffectiveTransactions(phase.productionRecords),
       samplePositions: phase.samplePositions,
     })
   }, [phase, shift.id, piles])
@@ -347,6 +357,7 @@ export function SampleHandlingPage({
           ? {
               kind: 'loaded',
               haulageTransactions: current.haulageTransactions,
+              productionRecords: current.productionRecords,
               samplePositions: [...current.samplePositions, savedPosition],
             }
           : current,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { derivePileHaulagePlan } from './derive-pile-haulage-plan'
+import { deriveExpectedRitsForBatch, derivePileHaulagePlan } from './derive-pile-haulage-plan'
 import { parseOreCode, parseSectorCode } from '@/domain/common/codes'
 import { parsePileId } from '@/domain/common/identifiers'
 import { createMasterData, type MasterData } from '@/domain/master/master-data'
@@ -136,5 +136,51 @@ describe('derivePileHaulagePlan', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.error.code).toBe('ORE_SAMPLING_CONFIG_NOT_FOUND')
+  })
+})
+
+describe('deriveExpectedRitsForBatch', () => {
+  const batchSize = must(parseBatchSize(20))
+
+  it('defaults to a Rit 1 start when this Batch has no carry-over and no matching freshStartPosition', () => {
+    const result = deriveExpectedRitsForBatch(PILE, batchSize, [], must(parseBatchNumber(1)))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.map(Number)).toEqual(Array.from({ length: 20 }, (_, index) => index + 1))
+  })
+
+  it('starts immediately after a CONTINUE carry-over row\'s Last_Rit for this exact Batch — never from Rit 1', () => {
+    const pendingBatches = [buildFixturePendingBatchCarryOver(PILE, 3, 10, 'CONTINUE')]
+    const result = deriveExpectedRitsForBatch(PILE, batchSize, pendingBatches, must(parseBatchNumber(3)))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.map(Number)).toEqual(Array.from({ length: 10 }, (_, index) => index + 11))
+    expect(result.value.map(Number)).not.toContain(1)
+  })
+
+  it('a CONTINUE carry-over for a different Batch number never bounds this Batch', () => {
+    const pendingBatches = [buildFixturePendingBatchCarryOver(PILE, 3, 10, 'CONTINUE')]
+    const result = deriveExpectedRitsForBatch(PILE, batchSize, pendingBatches, must(parseBatchNumber(4)))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // Batch 4 has no carry-over of its own and no matching freshStartPosition -> defaults to Rit 1.
+    expect(result.value.map(Number)[0]).toBe(1)
+  })
+
+  it('starts at a confirmed freshStartPosition\'s Rit for the exact Batch it names — never from Rit 1', () => {
+    const freshStartPosition = { batchNumber: must(parseBatchNumber(4)), ritNumber: must(parseRitNumber(5)) }
+    const result = deriveExpectedRitsForBatch(PILE, batchSize, [], must(parseBatchNumber(4)), freshStartPosition)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.map(Number)).toEqual(Array.from({ length: 16 }, (_, index) => index + 5))
+    expect(result.value.map(Number)).not.toContain(1)
+  })
+
+  it('a freshStartPosition naming a different Batch never bounds this Batch', () => {
+    const freshStartPosition = { batchNumber: must(parseBatchNumber(4)), ritNumber: must(parseRitNumber(5)) }
+    const result = deriveExpectedRitsForBatch(PILE, batchSize, [], must(parseBatchNumber(7)), freshStartPosition)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.map(Number)[0]).toBe(1)
   })
 })

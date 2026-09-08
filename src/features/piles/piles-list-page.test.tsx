@@ -236,7 +236,7 @@ describe('PilesListPage', () => {
     expect(onPileAdded).toHaveBeenCalledTimes(1)
   })
 
-  it('H. shows every ACTIVE Front whose Destination matches this Pile, each linking to the checker with both ids (Phase 18 §3/§4)', () => {
+  it('H. shows every ACTIVE Front whose Destination matches this Pile, each linking to Production > Record for this Pile (Phase 2 retires the /piles haulage checker)', () => {
     const hauler = must(parseHaulerCode('H1'))
     const sector = must(parseSectorCode('BR1'))
     const front1 = createFrontDefinition(must(createFrontId(sector, 3)), sector, hauler, must(parsePileId('PILE-1')))
@@ -251,8 +251,8 @@ describe('PilesListPage', () => {
 
     const chip1 = screen.getByRole('link', { name: 'BR1/03' })
     const chip2 = screen.getByRole('link', { name: 'BR1/05' })
-    expect(chip1).toHaveAttribute('href', `/piles/PILE-1?front=${encodeURIComponent('BR1/03')}`)
-    expect(chip2).toHaveAttribute('href', `/piles/PILE-1?front=${encodeURIComponent('BR1/05')}`)
+    expect(chip1).toHaveAttribute('href', '/production/record/PILE-1')
+    expect(chip2).toHaveAttribute('href', '/production/record/PILE-1')
   })
 
   it('I. a HISTORICAL Front (superseded by a continuation) is never offered on the Pile list', () => {

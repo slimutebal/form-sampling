@@ -16,6 +16,7 @@ import { createMasterData, type MasterData } from '../../domain/master/master-da
 import type { PileAreaReference } from '../../domain/master/references'
 import type { FreshPileStartPosition } from '../../domain/pile/fresh-pile-start-position'
 import type { Pile } from '../../domain/pile/pile'
+import { createLegacyProductionRecord, type ProductionRecord } from '../../domain/production/production-record'
 import { validateNoSampleOverlap } from '../../domain/sample-handling/sample-overlap'
 import type { SamplePosition } from '../../domain/sample-handling/sample-position'
 import type { Shift } from '../../domain/shift/shift'
@@ -27,6 +28,7 @@ import {
   type ImportHistoryRecord,
   type MasterDataCacheRecord,
   type MetadataRecord,
+  type ProductionRecordRecord,
   type SamplePositionRecord,
   type ShiftSummarySyncRecord,
   type ShiftWorkspaceRecord,
@@ -47,6 +49,7 @@ class LocalOperationalDatabase extends Dexie {
   readonly importHistory!: Table<ImportHistoryRecord, string>
   readonly masterDataCache!: Table<MasterDataCacheRecord, string>
   readonly shiftSummarySync!: Table<ShiftSummarySyncRecord, string>
+  readonly productionRecords!: Table<ProductionRecordRecord, string>
 
   constructor(databaseName: string) {
     super(databaseName)
@@ -93,6 +96,44 @@ class LocalOperationalDatabase extends Dexie {
       masterDataCache: 'key',
       shiftSummarySync: 'shiftId',
     })
+    // v5 (Production Data Model): adds productionRecords only — every
+    // v1/v2/v3/v4 table/index is repeated unchanged, so
+    // haulageTransactions itself (and every existing HaulageTransaction
+    // API) is untouched by this upgrade. The `.upgrade()` step below
+    // migrates every pre-existing haulageTransactions row that has no
+    // Production metadata yet into a corresponding legacy
+    // productionRecords row, via createLegacyProductionRecord — no
+    // DRY/CLN/timestamp/user is invented for data recorded before
+    // production recording existed.
+    this.version(5)
+      .stores({
+        shiftWorkspaces: 'shiftId',
+        haulageTransactions: 'id, shiftId, pileId, [shiftId+pileId]',
+        metadata: 'key',
+        samplePositions: 'id, shiftId, pileId, [shiftId+pileId]',
+        importHistory: 'fingerprint',
+        masterDataCache: 'key',
+        shiftSummarySync: 'shiftId',
+        productionRecords: 'id, shiftId, pileId, [shiftId+pileId]',
+      })
+      .upgrade(async (tx) => {
+        const haulageTransactionRows = await tx
+          .table<HaulageTransactionRecord, string>('haulageTransactions')
+          .toArray()
+        const productionRecordsTable = tx.table<ProductionRecordRecord, string>('productionRecords')
+        for (const row of haulageTransactionRows) {
+          const existing = await productionRecordsTable.get(row.id)
+          if (existing) {
+            continue
+          }
+          await productionRecordsTable.add({
+            id: row.id,
+            shiftId: row.shiftId,
+            pileId: row.pileId,
+            productionRecord: createLegacyProductionRecord(row.transaction),
+          })
+        }
+      })
   }
 }
 
@@ -990,6 +1031,405 @@ export class LocalOperationalStore {
         .equals([shiftId, pileId])
         .toArray()
       return ok(records.map((record) => record.samplePosition))
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Appends one validated ProductionRecord (Production Data Model). One
+   * ProductionRecord per HaulageTransaction, keyed by the same
+   * HaulageTransactionId as `productionRecord.transaction.id`: the
+   * referenced HaulageTransaction must already be durably stored
+   * (`HAULAGE_TRANSACTION_NOT_FOUND` otherwise) — a ProductionRecord is
+   * always recorded against an already-persisted transaction, never a
+   * speculative one. Add-only: a repeated
+   * `productionRecord.transaction.id` fails with
+   * `DUPLICATE_PRODUCTION_RECORD_ID` rather than overwriting the
+   * original. Verifies the same Shift/Pile referential integrity as
+   * `addHaulageTransaction` (`SHIFT_WORKSPACE_NOT_FOUND` /
+   * `PILE_NOT_IN_SHIFT_WORKSPACE`), atomically with the insert. Never
+   * touches `haulageTransactions` — `productionRecord` (including its
+   * own embedded copy of the original transaction) is stored exactly as
+   * given, in the separate `productionRecords` table.
+   */
+  async addProductionRecord(productionRecord: ProductionRecord): Promise<StoreResult<void>> {
+    // Snapshot before the first `await`, mirroring every other write
+    // method on this store (Phase 7 §29).
+    const productionRecordSnapshot: ProductionRecord = structuredClone(productionRecord)
+    const shiftId = productionRecordSnapshot.transaction.shiftId
+    const pileId = productionRecordSnapshot.transaction.pileId
+    const id = productionRecordSnapshot.transaction.id
+
+    try {
+      await this.db.transaction(
+        'rw',
+        this.db.shiftWorkspaces,
+        this.db.haulageTransactions,
+        this.db.productionRecords,
+        async () => {
+          const workspace = await this.db.shiftWorkspaces.get(shiftId)
+          if (!workspace) {
+            raiseExpectedError(
+              'SHIFT_WORKSPACE_NOT_FOUND',
+              `No shift workspace exists for ShiftId ${shiftId}`,
+            )
+          }
+
+          const pileExists = workspace.piles.some((pile) => pile.id === pileId)
+          if (!pileExists) {
+            raiseExpectedError(
+              'PILE_NOT_IN_SHIFT_WORKSPACE',
+              `PileId ${pileId} is not part of shift workspace ${shiftId}`,
+            )
+          }
+
+          const haulageTransactionExists = await this.db.haulageTransactions.get(id)
+          if (!haulageTransactionExists) {
+            raiseExpectedError(
+              'HAULAGE_TRANSACTION_NOT_FOUND',
+              `No HaulageTransaction exists for HaulageTransactionId ${id}`,
+            )
+          }
+
+          const existing = await this.db.productionRecords.get(id)
+          if (existing) {
+            raiseExpectedError(
+              'DUPLICATE_PRODUCTION_RECORD_ID',
+              `Duplicate ProductionRecord for HaulageTransactionId: ${id}`,
+            )
+          }
+
+          await this.db.productionRecords.add({
+            id,
+            shiftId,
+            pileId,
+            productionRecord: productionRecordSnapshot,
+          })
+        },
+      )
+      return ok(undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /** Reads one stored ProductionRecord by its HaulageTransactionId. `undefined` if not found. */
+  async getProductionRecord(id: HaulageTransactionId): Promise<StoreResult<ProductionRecord | undefined>> {
+    try {
+      const record = await this.db.productionRecords.get(id)
+      return ok(record?.productionRecord)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Lists every stored ProductionRecord for a Shift, via the `shiftId`
+   * index. Array order reflects no confirmed operational sequence
+   * (mirrors `listHaulageTransactionsForShift`).
+   */
+  async listProductionRecordsForShift(
+    shiftId: ShiftId,
+  ): Promise<StoreResult<readonly ProductionRecord[]>> {
+    try {
+      const records = await this.db.productionRecords.where('shiftId').equals(shiftId).toArray()
+      return ok(records.map((record) => record.productionRecord))
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Lists every stored ProductionRecord for a Shift/Pile, via the
+   * compound `[shiftId+pileId]` index.
+   */
+  async listProductionRecordsForShiftPile(
+    shiftId: ShiftId,
+    pileId: PileId,
+  ): Promise<StoreResult<readonly ProductionRecord[]>> {
+    try {
+      const records = await this.db.productionRecords
+        .where('[shiftId+pileId]')
+        .equals([shiftId, pileId])
+        .toArray()
+      return ok(records.map((record) => record.productionRecord))
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Persists one HaulageTransaction and its paired ProductionRecord
+   * together, atomically, in a single Dexie transaction (Phase 2 —
+   * Production Record final UI + write flow). This is the only write
+   * path the Production Record screen uses: unlike `addProductionRecord`
+   * (which requires the HaulageTransaction to already be durably stored),
+   * this method writes both rows itself, so a caller never has to save
+   * the transaction first and hope the record write that follows does
+   * not fail — if either insert is rejected, the whole Dexie transaction
+   * aborts and neither row is committed (no half-saved state).
+   *
+   * Validates, before writing:
+   *  - `productionRecord.transaction` matches `transaction` exactly
+   *    (`PRODUCTION_TRANSACTION_MISMATCH` otherwise) — the embedded
+   *    transaction snapshot inside the ProductionRecord may never
+   *    silently diverge from the HaulageTransaction actually being
+   *    persisted alongside it;
+   *  - the stored Shift workspace exists and this Pile belongs to it
+   *    (`SHIFT_WORKSPACE_NOT_FOUND` / `PILE_NOT_IN_SHIFT_WORKSPACE`);
+   *  - no existing HaulageTransaction or ProductionRecord already uses
+   *    this id (`DUPLICATE_HAULAGE_TRANSACTION_ID` /
+   *    `DUPLICATE_PRODUCTION_RECORD_ID`) — add-only, mirroring every
+   *    other write method on this store.
+   */
+  async addProductionTransaction(params: {
+    readonly transaction: HaulageTransaction
+    readonly productionRecord: ProductionRecord
+  }): Promise<StoreResult<void>> {
+    // Snapshot before the first `await`, mirroring every other write
+    // method on this store (Phase 7 §29).
+    const transactionSnapshot: HaulageTransaction = structuredClone(params.transaction)
+    const productionRecordSnapshot: ProductionRecord = structuredClone(params.productionRecord)
+
+    if (JSON.stringify(productionRecordSnapshot.transaction) !== JSON.stringify(transactionSnapshot)) {
+      return err({
+        code: 'PRODUCTION_TRANSACTION_MISMATCH',
+        message: 'productionRecord.transaction does not match the transaction being persisted',
+      })
+    }
+
+    const shiftId = transactionSnapshot.shiftId
+    const pileId = transactionSnapshot.pileId
+    const id = transactionSnapshot.id
+
+    try {
+      await this.db.transaction(
+        'rw',
+        this.db.shiftWorkspaces,
+        this.db.haulageTransactions,
+        this.db.productionRecords,
+        async () => {
+          const workspace = await this.db.shiftWorkspaces.get(shiftId)
+          if (!workspace) {
+            raiseExpectedError(
+              'SHIFT_WORKSPACE_NOT_FOUND',
+              `No shift workspace exists for ShiftId ${shiftId}`,
+            )
+          }
+
+          const pileExists = workspace.piles.some((pile) => pile.id === pileId)
+          if (!pileExists) {
+            raiseExpectedError(
+              'PILE_NOT_IN_SHIFT_WORKSPACE',
+              `PileId ${pileId} is not part of shift workspace ${shiftId}`,
+            )
+          }
+
+          const existingTransaction = await this.db.haulageTransactions.get(id)
+          if (existingTransaction) {
+            raiseExpectedError(
+              'DUPLICATE_HAULAGE_TRANSACTION_ID',
+              `Duplicate HaulageTransactionId: ${id}`,
+            )
+          }
+
+          const existingRecord = await this.db.productionRecords.get(id)
+          if (existingRecord) {
+            raiseExpectedError(
+              'DUPLICATE_PRODUCTION_RECORD_ID',
+              `Duplicate ProductionRecord for HaulageTransactionId: ${id}`,
+            )
+          }
+
+          await this.db.haulageTransactions.add({
+            id,
+            shiftId,
+            pileId,
+            transaction: transactionSnapshot,
+          })
+          await this.db.productionRecords.add({
+            id,
+            shiftId,
+            pileId,
+            productionRecord: productionRecordSnapshot,
+          })
+        },
+      )
+      return ok(undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Re-checks the Phase 4 §25 slot invariant — at most one ACCEPT +
+   * ACTIVE ProductionRecord may occupy a given Pile_ID + Batch + Rit —
+   * against every OTHER stored ProductionRecord for the same Shift/Pile
+   * (`excludeIds` is every row this same atomic write is itself about to
+   * replace, so a record is never treated as conflicting with its own new
+   * position). Only ever called from inside an already-open
+   * `productionRecords` read/write transaction below; never checks
+   * anything when `candidate.effective` does not resolve to ACCEPT +
+   * ACTIVE, since a REJECT/VOIDED record never occupies a slot.
+   */
+  private async assertNoProductionSlotConflict(
+    shiftId: ShiftId,
+    pileId: PileId,
+    candidate: ProductionRecord,
+    excludeIds: ReadonlySet<string>,
+  ): Promise<void> {
+    if (candidate.effective.disposition !== 'ACCEPT' || candidate.effective.status !== 'ACTIVE') {
+      return
+    }
+    const siblings = await this.db.productionRecords.where('[shiftId+pileId]').equals([shiftId, pileId]).toArray()
+    const conflict = siblings.some(
+      (row) =>
+        !excludeIds.has(row.id) &&
+        row.productionRecord.effective.disposition === 'ACCEPT' &&
+        row.productionRecord.effective.status === 'ACTIVE' &&
+        Number(row.productionRecord.effective.batchPosition.batchNumber) ===
+          Number(candidate.effective.batchPosition.batchNumber) &&
+        Number(row.productionRecord.effective.batchPosition.ritNumber) ===
+          Number(candidate.effective.batchPosition.ritNumber),
+    )
+    if (conflict) {
+      raiseExpectedError(
+        'PRODUCTION_POSITION_OCCUPIED',
+        `Another ACCEPT + ACTIVE ProductionRecord already occupies Pile ${pileId} Batch ${Number(candidate.effective.batchPosition.batchNumber)} Rit ${Number(candidate.effective.batchPosition.ritNumber)}`,
+      )
+    }
+  }
+
+  /**
+   * Persists an EDIT_FIELDS-corrected ProductionRecord (Phase 4 §4/§6),
+   * in place — same `id`/`shiftId`/`pileId` key, since Edit never changes
+   * Pile/Batch/Rit or the Transaction_ID. `PRODUCTION_RECORD_NOT_FOUND` if
+   * no row exists for `updatedRecord.transaction.id` yet (a correction is
+   * always applied to an already-persisted record, never a speculative
+   * one). Re-checks the §25 slot invariant against every OTHER stored
+   * ProductionRecord for this Shift/Pile inside the same atomic
+   * transaction as the write, so a REJECT -> ACCEPT edit can never slip
+   * past a concurrent write that already filled the same position.
+   */
+  async updateProductionRecordWithCorrection(updatedRecord: ProductionRecord): Promise<StoreResult<void>> {
+    // Snapshot before the first `await`, mirroring every other write
+    // method on this store (Phase 7 §29).
+    const snapshot: ProductionRecord = structuredClone(updatedRecord)
+    const id = snapshot.transaction.id
+    const shiftId = snapshot.transaction.shiftId
+    const pileId = snapshot.transaction.pileId
+
+    try {
+      await this.db.transaction('rw', this.db.productionRecords, async () => {
+        const existing = await this.db.productionRecords.get(id)
+        if (!existing) {
+          raiseExpectedError(
+            'PRODUCTION_RECORD_NOT_FOUND',
+            `No ProductionRecord exists for HaulageTransactionId ${id}`,
+          )
+        }
+
+        await this.assertNoProductionSlotConflict(shiftId, pileId, snapshot, new Set([id]))
+
+        await this.db.productionRecords.put({ id, shiftId, pileId, productionRecord: snapshot })
+      })
+      return ok(undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Persists a VOID_RECORD-corrected ProductionRecord (Phase 4 §19/§20),
+   * in place. Never a hard delete — the row is updated (`effective.status
+   * = 'VOIDED'`), never removed, and the original HaulageTransaction row
+   * is untouched. `PRODUCTION_RECORD_NOT_FOUND` if no row exists yet for
+   * `updatedRecord.transaction.id`.
+   */
+  async voidProductionRecord(updatedRecord: ProductionRecord): Promise<StoreResult<void>> {
+    // Snapshot before the first `await`, mirroring every other write
+    // method on this store (Phase 7 §29).
+    const snapshot: ProductionRecord = structuredClone(updatedRecord)
+    const id = snapshot.transaction.id
+    const shiftId = snapshot.transaction.shiftId
+    const pileId = snapshot.transaction.pileId
+
+    try {
+      await this.db.transaction('rw', this.db.productionRecords, async () => {
+        const existing = await this.db.productionRecords.get(id)
+        if (!existing) {
+          raiseExpectedError(
+            'PRODUCTION_RECORD_NOT_FOUND',
+            `No ProductionRecord exists for HaulageTransactionId ${id}`,
+          )
+        }
+
+        await this.db.productionRecords.put({ id, shiftId, pileId, productionRecord: snapshot })
+      })
+      return ok(undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Persists a Switch Record MOVE (`updatedTarget` omitted) or SWAP
+   * (`updatedTarget` present) atomically, in a single Dexie transaction
+   * (Phase 4 §13/§14/§15) — if either write would violate the §25 slot
+   * invariant, or either referenced row does not already exist, neither
+   * record changes (`PRODUCTION_RECORD_NOT_FOUND` /
+   * `PRODUCTION_POSITION_OCCUPIED`, whole transaction aborted). Both rows
+   * keep their existing `id`/`shiftId`/`pileId` key — Switch never changes
+   * the Transaction_ID and Phase 4 restricts Switch to the same Pile_ID.
+   */
+  async switchProductionRecords(params: {
+    readonly updatedSource: ProductionRecord
+    readonly updatedTarget?: ProductionRecord
+  }): Promise<StoreResult<void>> {
+    // Snapshot before the first `await`, mirroring every other write
+    // method on this store (Phase 7 §29).
+    const sourceSnapshot: ProductionRecord = structuredClone(params.updatedSource)
+    const targetSnapshot: ProductionRecord | undefined = params.updatedTarget
+      ? structuredClone(params.updatedTarget)
+      : undefined
+
+    const sourceId = sourceSnapshot.transaction.id
+    const shiftId = sourceSnapshot.transaction.shiftId
+    const pileId = sourceSnapshot.transaction.pileId
+    const targetId = targetSnapshot?.transaction.id
+
+    try {
+      await this.db.transaction('rw', this.db.productionRecords, async () => {
+        const existingSource = await this.db.productionRecords.get(sourceId)
+        if (!existingSource) {
+          raiseExpectedError(
+            'PRODUCTION_RECORD_NOT_FOUND',
+            `No ProductionRecord exists for HaulageTransactionId ${sourceId}`,
+          )
+        }
+        if (targetSnapshot && targetId) {
+          const existingTarget = await this.db.productionRecords.get(targetId)
+          if (!existingTarget) {
+            raiseExpectedError(
+              'PRODUCTION_RECORD_NOT_FOUND',
+              `No ProductionRecord exists for HaulageTransactionId ${targetId}`,
+            )
+          }
+        }
+
+        const excludeIds = new Set([sourceId, ...(targetId ? [targetId] : [])])
+        await this.assertNoProductionSlotConflict(shiftId, pileId, sourceSnapshot, excludeIds)
+        if (targetSnapshot) {
+          await this.assertNoProductionSlotConflict(shiftId, pileId, targetSnapshot, excludeIds)
+        }
+
+        await this.db.productionRecords.put({ id: sourceId, shiftId, pileId, productionRecord: sourceSnapshot })
+        if (targetSnapshot && targetId) {
+          await this.db.productionRecords.put({ id: targetId, shiftId, pileId, productionRecord: targetSnapshot })
+        }
+      })
+      return ok(undefined)
     } catch (caught) {
       return err(mapCaughtError(caught))
     }

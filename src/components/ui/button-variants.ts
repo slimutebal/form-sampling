@@ -10,6 +10,7 @@ export const buttonVariants = cva(
         ghost: 'hover:bg-muted',
       },
       size: {
+        sm: 'h-9 px-3 text-sm min-w-9',
         default: 'h-11 px-4 min-w-11',
         lg: 'h-14 px-6 text-[15px] min-w-14',
       },

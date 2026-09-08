@@ -24,7 +24,7 @@ function buildReport(language: ReportLanguage): ShiftReport {
     language,
     shift: buildFixtureShift('SHIFT-1'),
     piles: [pile],
-    haulageTransactions: [],
+    productionRecords: [],
     samplePositions: [],
     masterData,
     manpowerAssignments: [],

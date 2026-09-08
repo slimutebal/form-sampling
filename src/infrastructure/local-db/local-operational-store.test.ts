@@ -16,6 +16,7 @@ import {
   buildFixtureFleetSetup,
   buildFixtureHaulageTransaction,
   buildFixtureMasterData,
+  buildFixtureProductionRecord,
   buildFixtureSamplePosition,
   buildFixtureLimPile,
   buildFixtureSapPile,
@@ -1294,5 +1295,362 @@ describe('LocalOperationalStore — sample positions', () => {
       dispatcherEmployeeId: FIXTURE_EMPLOYEE_ID,
     })
     store.close()
+  })
+})
+
+describe('LocalOperationalStore — production records', () => {
+  async function setupWorkspace(store: LocalOperationalStore, shiftIdValue: string, pileIdValues: string[]) {
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift(shiftIdValue)
+    const piles = pileIdValues.map((id) => buildFixtureSapPile(id))
+    const initResult = await store.initializeShiftWorkspace({ shift, piles, masterData, fleetSetup })
+    if (!initResult.ok) throw new Error('invalid test setup')
+    return { masterData, fleetSetup, piles }
+  }
+
+  it('A. adding then reading a ProductionRecord by id preserves every field', async () => {
+    const store = newStore()
+    const { masterData, fleetSetup, piles } = await setupWorkspace(store, 'SHIFT-1', ['PILE-1'])
+    const transaction = buildFixtureHaulageTransaction({
+      id: 'TX-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    expect((await store.addHaulageTransaction(transaction)).ok).toBe(true)
+
+    const productionRecord = buildFixtureProductionRecord({ transaction })
+    const addResult = await store.addProductionRecord(productionRecord)
+    expect(addResult.ok).toBe(true)
+
+    const getResult = await store.getProductionRecord(fixtureTransactionId('TX-1'))
+    expect(getResult.ok).toBe(true)
+    if (!getResult.ok) return
+    expect(getResult.value).toEqual(productionRecord)
+    store.close()
+  })
+
+  it('B. a ProductionRecord survives close/reopen of the same database', async () => {
+    const databaseName = uniqueDatabaseName()
+    const firstSession = new LocalOperationalStore(databaseName)
+    const { masterData, fleetSetup, piles } = await setupWorkspace(firstSession, 'SHIFT-1', ['PILE-1'])
+    const transaction = buildFixtureHaulageTransaction({
+      id: 'TX-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    expect((await firstSession.addHaulageTransaction(transaction)).ok).toBe(true)
+    const productionRecord = buildFixtureProductionRecord({ transaction })
+    expect((await firstSession.addProductionRecord(productionRecord)).ok).toBe(true)
+    firstSession.close()
+
+    const reopenedSession = new LocalOperationalStore(databaseName)
+    const reopened = await reopenedSession.getProductionRecord(fixtureTransactionId('TX-1'))
+    expect(reopened.ok).toBe(true)
+    if (!reopened.ok) return
+    expect(reopened.value).toEqual(productionRecord)
+    reopenedSession.close()
+  })
+
+  it('C. listProductionRecordsForShift returns only that shift’s records', async () => {
+    const store = newStore()
+    const shiftAContext = await setupWorkspace(store, 'SHIFT-A', ['PILE-A1'])
+    const shiftBContext = await setupWorkspace(store, 'SHIFT-B', ['PILE-B1'])
+
+    const txA = buildFixtureHaulageTransaction({
+      id: 'TX-A-1',
+      shiftId: 'SHIFT-A',
+      pile: shiftAContext.piles[0],
+      batch: 24,
+      rit: 2,
+      masterData: shiftAContext.masterData,
+      fleetSetup: shiftAContext.fleetSetup,
+    })
+    const txB = buildFixtureHaulageTransaction({
+      id: 'TX-B-1',
+      shiftId: 'SHIFT-B',
+      pile: shiftBContext.piles[0],
+      batch: 24,
+      rit: 2,
+      masterData: shiftBContext.masterData,
+      fleetSetup: shiftBContext.fleetSetup,
+    })
+    await store.addHaulageTransaction(txA)
+    await store.addHaulageTransaction(txB)
+    await store.addProductionRecord(buildFixtureProductionRecord({ transaction: txA }))
+    await store.addProductionRecord(buildFixtureProductionRecord({ transaction: txB }))
+
+    const shiftAResult = await store.listProductionRecordsForShift(fixtureShiftId('SHIFT-A'))
+    expect(shiftAResult.ok).toBe(true)
+    if (!shiftAResult.ok) return
+    expect(shiftAResult.value.map((record) => record.transaction.id)).toEqual(['TX-A-1'])
+    store.close()
+  })
+
+  it('D. listProductionRecordsForShiftPile returns only that shift/pile’s records', async () => {
+    const store = newStore()
+    const { masterData, fleetSetup, piles } = await setupWorkspace(store, 'SHIFT-1', ['PILE-1', 'PILE-2'])
+
+    const tx1 = buildFixtureHaulageTransaction({
+      id: 'TX-P1-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    const tx2 = buildFixtureHaulageTransaction({
+      id: 'TX-P2-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[1],
+      batch: 24,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    await store.addHaulageTransaction(tx1)
+    await store.addHaulageTransaction(tx2)
+    await store.addProductionRecord(buildFixtureProductionRecord({ transaction: tx1 }))
+    await store.addProductionRecord(buildFixtureProductionRecord({ transaction: tx2 }))
+
+    const pile1Result = await store.listProductionRecordsForShiftPile(
+      fixtureShiftId('SHIFT-1'),
+      fixturePileId('PILE-1'),
+    )
+    expect(pile1Result.ok).toBe(true)
+    if (!pile1Result.ok) return
+    expect(pile1Result.value.map((record) => record.transaction.id)).toEqual(['TX-P1-1'])
+    store.close()
+  })
+
+  it('E. adding the same ProductionRecord twice fails with DUPLICATE_PRODUCTION_RECORD_ID, keeping the original', async () => {
+    const store = newStore()
+    const { masterData, fleetSetup, piles } = await setupWorkspace(store, 'SHIFT-1', ['PILE-1'])
+    const transaction = buildFixtureHaulageTransaction({
+      id: 'TX-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    expect((await store.addHaulageTransaction(transaction)).ok).toBe(true)
+
+    const first = await store.addProductionRecord(buildFixtureProductionRecord({ transaction, remark: 'first' }))
+    expect(first.ok).toBe(true)
+
+    const second = await store.addProductionRecord(buildFixtureProductionRecord({ transaction, remark: 'second' }))
+    expect(second.ok).toBe(false)
+    if (second.ok) return
+    expect(second.error.code).toBe('DUPLICATE_PRODUCTION_RECORD_ID')
+
+    const getResult = await store.getProductionRecord(fixtureTransactionId('TX-1'))
+    expect(getResult.ok).toBe(true)
+    if (!getResult.ok) return
+    expect(getResult.value?.effective.remark).toBe('first')
+    store.close()
+  })
+
+  it('F. a ProductionRecord referencing a HaulageTransaction that was never added is rejected with HAULAGE_TRANSACTION_NOT_FOUND', async () => {
+    const store = newStore()
+    const { masterData, fleetSetup, piles } = await setupWorkspace(store, 'SHIFT-1', ['PILE-1'])
+    const transaction = buildFixtureHaulageTransaction({
+      id: 'TX-ORPHAN',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+
+    const result = await store.addProductionRecord(buildFixtureProductionRecord({ transaction }))
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('HAULAGE_TRANSACTION_NOT_FOUND')
+    store.close()
+  })
+})
+
+describe('LocalOperationalStore — addProductionTransaction (atomic pair save)', () => {
+  async function setupWorkspace(store: LocalOperationalStore, shiftIdValue: string, pileIdValues: string[]) {
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift(shiftIdValue)
+    const piles = pileIdValues.map((id) => buildFixtureSapPile(id))
+    const initResult = await store.initializeShiftWorkspace({ shift, piles, masterData, fleetSetup })
+    if (!initResult.ok) throw new Error('invalid test setup')
+    return { masterData, fleetSetup, piles }
+  }
+
+  it('A. saves the HaulageTransaction and ProductionRecord together, both readable afterward', async () => {
+    const store = newStore()
+    const { masterData, fleetSetup, piles } = await setupWorkspace(store, 'SHIFT-1', ['PILE-1'])
+    const transaction = buildFixtureHaulageTransaction({
+      id: 'TX-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    const productionRecord = buildFixtureProductionRecord({ transaction })
+
+    const result = await store.addProductionTransaction({ transaction, productionRecord })
+    expect(result.ok).toBe(true)
+
+    const storedTransaction = await store.getHaulageTransaction(fixtureTransactionId('TX-1'))
+    expect(storedTransaction.ok).toBe(true)
+    if (!storedTransaction.ok) return
+    expect(storedTransaction.value).toEqual(transaction)
+
+    const storedRecord = await store.getProductionRecord(fixtureTransactionId('TX-1'))
+    expect(storedRecord.ok).toBe(true)
+    if (!storedRecord.ok) return
+    expect(storedRecord.value).toEqual(productionRecord)
+    store.close()
+  })
+
+  it('B. a ProductionRecord.transaction that does not match the given transaction is rejected, nothing persisted', async () => {
+    const store = newStore()
+    const { masterData, fleetSetup, piles } = await setupWorkspace(store, 'SHIFT-1', ['PILE-1'])
+    const transaction = buildFixtureHaulageTransaction({
+      id: 'TX-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    const otherTransaction = buildFixtureHaulageTransaction({
+      id: 'TX-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      rit: 4,
+      masterData,
+      fleetSetup,
+    })
+    const mismatchedRecord = buildFixtureProductionRecord({ transaction: otherTransaction })
+
+    const result = await store.addProductionTransaction({ transaction, productionRecord: mismatchedRecord })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('PRODUCTION_TRANSACTION_MISMATCH')
+
+    expect((await store.getHaulageTransaction(fixtureTransactionId('TX-1'))).ok).toBe(true)
+    const storedTransaction = await store.getHaulageTransaction(fixtureTransactionId('TX-1'))
+    if (storedTransaction.ok) expect(storedTransaction.value).toBeUndefined()
+    const storedRecord = await store.getProductionRecord(fixtureTransactionId('TX-1'))
+    if (storedRecord.ok) expect(storedRecord.value).toBeUndefined()
+    store.close()
+  })
+
+  it('C. a repeated Transaction_ID is rejected, keeping the original pair untouched', async () => {
+    const store = newStore()
+    const { masterData, fleetSetup, piles } = await setupWorkspace(store, 'SHIFT-1', ['PILE-1'])
+    const transaction = buildFixtureHaulageTransaction({
+      id: 'TX-1',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    const productionRecord = buildFixtureProductionRecord({ transaction, remark: 'first' })
+    expect((await store.addProductionTransaction({ transaction, productionRecord })).ok).toBe(true)
+
+    const secondRecord = buildFixtureProductionRecord({ transaction, remark: 'second' })
+    const second = await store.addProductionTransaction({ transaction, productionRecord: secondRecord })
+    expect(second.ok).toBe(false)
+    if (second.ok) return
+    expect(second.error.code).toBe('DUPLICATE_HAULAGE_TRANSACTION_ID')
+
+    const storedRecord = await store.getProductionRecord(fixtureTransactionId('TX-1'))
+    expect(storedRecord.ok).toBe(true)
+    if (!storedRecord.ok) return
+    expect(storedRecord.value?.effective.remark).toBe('first')
+    store.close()
+  })
+
+  it('D. a save rejected for referential-integrity reasons persists neither row', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const pile = buildFixtureSapPile('PILE-NONE')
+    // 'SHIFT-NONE' is never initialized on this store — a genuine orphan.
+    const transaction = buildFixtureHaulageTransaction({
+      id: 'TX-ORPHAN',
+      shiftId: 'SHIFT-NONE',
+      pile,
+      batch: 24,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    const productionRecord = buildFixtureProductionRecord({ transaction })
+
+    const result = await store.addProductionTransaction({ transaction, productionRecord })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('SHIFT_WORKSPACE_NOT_FOUND')
+
+    const storedTransaction = await store.getHaulageTransaction(fixtureTransactionId('TX-ORPHAN'))
+    if (storedTransaction.ok) expect(storedTransaction.value).toBeUndefined()
+    const storedRecord = await store.getProductionRecord(fixtureTransactionId('TX-ORPHAN'))
+    if (storedRecord.ok) expect(storedRecord.value).toBeUndefined()
+    store.close()
+  })
+
+  it('E. an ACCEPT and a REJECT pair each survive close/reopen of the same database', async () => {
+    const databaseName = uniqueDatabaseName()
+    const firstSession = new LocalOperationalStore(databaseName)
+    const { masterData, fleetSetup, piles } = await setupWorkspace(firstSession, 'SHIFT-1', ['PILE-1'])
+    const acceptTransaction = buildFixtureHaulageTransaction({
+      id: 'TX-ACCEPT',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      rit: 2,
+      masterData,
+      fleetSetup,
+    })
+    const rejectTransaction = buildFixtureHaulageTransaction({
+      id: 'TX-REJECT',
+      shiftId: 'SHIFT-1',
+      pile: piles[0],
+      batch: 24,
+      rit: 3,
+      masterData,
+      fleetSetup,
+    })
+    const acceptRecord = buildFixtureProductionRecord({ transaction: acceptTransaction, disposition: 'ACCEPT' })
+    const rejectRecord = buildFixtureProductionRecord({ transaction: rejectTransaction, disposition: 'REJECT' })
+    expect((await firstSession.addProductionTransaction({ transaction: acceptTransaction, productionRecord: acceptRecord })).ok).toBe(true)
+    expect((await firstSession.addProductionTransaction({ transaction: rejectTransaction, productionRecord: rejectRecord })).ok).toBe(true)
+    firstSession.close()
+
+    const reopenedSession = new LocalOperationalStore(databaseName)
+    const reopenedAccept = await reopenedSession.getProductionRecord(fixtureTransactionId('TX-ACCEPT'))
+    const reopenedReject = await reopenedSession.getProductionRecord(fixtureTransactionId('TX-REJECT'))
+    expect(reopenedAccept.ok).toBe(true)
+    expect(reopenedReject.ok).toBe(true)
+    if (!reopenedAccept.ok || !reopenedReject.ok) return
+    expect(reopenedAccept.value?.effective.disposition).toBe('ACCEPT')
+    expect(reopenedReject.value?.effective.disposition).toBe('REJECT')
+    reopenedSession.close()
   })
 })

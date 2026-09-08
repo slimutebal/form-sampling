@@ -10,9 +10,14 @@ export const HANDOVER_FILE_TYPE = 'FORM_SAMPLING_SHIFT'
 /**
  * Schema versions this build knows how to read. Deliberately a short,
  * explicit allow-list — an unrecognized version (older or newer) is
- * rejected rather than guessed at (ARCHITECTURE.md §12).
+ * rejected rather than guessed at (ARCHITECTURE.md §12). Version 2 (Phase
+ * 22) extended `Haulage_Detail` with Original/Effective columns and added
+ * the `Production_Correction` sheet — neither is part of the required
+ * import contract (`REQUIRED_HANDOVER_SHEET_NAMES`/`_COLUMNS` below are
+ * unchanged), so version 1 archives remain fully importable; `[0]` is the
+ * version this build now exports (see `EXPORT_SCHEMA_VERSION`).
  */
-export const SUPPORTED_HANDOVER_SCHEMA_VERSIONS = [1] as const
+export const SUPPORTED_HANDOVER_SCHEMA_VERSIONS = [2, 1] as const
 
 export type HandoverSchemaVersion = (typeof SUPPORTED_HANDOVER_SCHEMA_VERSIONS)[number]
 

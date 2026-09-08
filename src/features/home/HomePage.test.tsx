@@ -63,6 +63,7 @@ describe('HomePage', () => {
 
   it('A. is not a placeholder — shows real shift/sector/sampling house and Piles/Home headings', async () => {
     vi.spyOn(localOperationalStore, 'listHaulageTransactionsForShift').mockResolvedValue({ ok: true, value: [] })
+    vi.spyOn(localOperationalStore, 'listProductionRecordsForShift').mockResolvedValue({ ok: true, value: [] })
     vi.spyOn(localOperationalStore, 'listSamplePositionsForShift').mockResolvedValue({ ok: true, value: [] })
 
     const workspace = buildWorkspace()
@@ -91,6 +92,7 @@ describe('HomePage', () => {
       ok: true,
       value: [wrongTruckTransaction],
     })
+    vi.spyOn(localOperationalStore, 'listProductionRecordsForShift').mockResolvedValue({ ok: true, value: [] })
     vi.spyOn(localOperationalStore, 'listSamplePositionsForShift').mockResolvedValue({ ok: true, value: [] })
 
     renderHome({
@@ -111,6 +113,7 @@ describe('HomePage', () => {
 
   it('C. shows Manpower and PIC counts (multiple PICs counted correctly) and the three quick actions', async () => {
     vi.spyOn(localOperationalStore, 'listHaulageTransactionsForShift').mockResolvedValue({ ok: true, value: [] })
+    vi.spyOn(localOperationalStore, 'listProductionRecordsForShift').mockResolvedValue({ ok: true, value: [] })
     vi.spyOn(localOperationalStore, 'listSamplePositionsForShift').mockResolvedValue({ ok: true, value: [] })
 
     const workspace = {
@@ -135,6 +138,7 @@ describe('HomePage', () => {
 
   it('D. shows a compact Manpower summary with an Edit action linking to the mid-shift edit screen', async () => {
     vi.spyOn(localOperationalStore, 'listHaulageTransactionsForShift').mockResolvedValue({ ok: true, value: [] })
+    vi.spyOn(localOperationalStore, 'listProductionRecordsForShift').mockResolvedValue({ ok: true, value: [] })
     vi.spyOn(localOperationalStore, 'listSamplePositionsForShift').mockResolvedValue({ ok: true, value: [] })
 
     const workspace = {

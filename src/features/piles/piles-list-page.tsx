@@ -154,7 +154,7 @@ export function PilesListPage({ workspace, store, onPileAdded, createNewPile }: 
                       {activeFrontIds.map((frontId) => (
                         <Link
                           key={frontId}
-                          to={`/piles/${pile.id}?front=${encodeURIComponent(frontId)}`}
+                          to={`/production/record/${pile.id}`}
                           className="rounded-full border border-primary/40 bg-primary/5 px-3 py-1 text-sm font-medium text-primary"
                         >
                           {frontId}

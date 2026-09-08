@@ -10,6 +10,7 @@ import { err, ok } from '@/domain/common/result'
 import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
 import { createMasterData, type MasterData } from '@/domain/master/master-data'
 import { createPile, type Pile } from '@/domain/pile/pile'
+import { createLegacyProductionRecord, type ProductionRecord } from '@/domain/production/production-record'
 import { createDeliveredDelivery } from '@/domain/sample-handling/delivery-status'
 import { parseDeliveryDestinationCode } from '@/domain/sample-handling/delivery-destination'
 import type { SamplePosition } from '@/domain/sample-handling/sample-position'
@@ -28,27 +29,51 @@ import i18n from '@/i18n'
 import { SampleHandlingPage, type SampleHandlingPageProps } from '@/features/samples/sample-handling-page'
 
 type ListHaulageResult = Result<readonly HaulageTransaction[], SampleHandlingStoreError>
+type ListProductionRecordsResult = Result<readonly ProductionRecord[], SampleHandlingStoreError>
 type ListSampleResult = Result<readonly SamplePosition[], SampleHandlingStoreError>
 type AddResult = Result<void, SampleHandlingStoreError>
 
+/**
+ * Defaults `listProductionRecordsForShift` to a legacy ACCEPT + ACTIVE
+ * ProductionRecord per haulage-result transaction (via
+ * `createLegacyProductionRecord`) so every existing pending-sample
+ * assertion in this suite — written against `haulageResult` alone,
+ * before Phase 2 introduced ProductionRecord-based eligibility — keeps
+ * working unchanged. Pass an explicit `productionRecordsResult` only for
+ * a test that needs REJECT/non-legacy disposition behavior.
+ */
 class FakeSampleHandlingStore implements SampleHandlingStore {
   readonly addCalls: SamplePosition[] = []
   private readonly haulageResult: ListHaulageResult | Promise<ListHaulageResult>
   private readonly sampleResult: ListSampleResult | Promise<ListSampleResult>
   private readonly addImpl: (position: SamplePosition) => Promise<AddResult>
+  private readonly productionRecordsResult?: ListProductionRecordsResult | Promise<ListProductionRecordsResult>
 
   constructor(
     haulageResult: ListHaulageResult | Promise<ListHaulageResult>,
     sampleResult: ListSampleResult | Promise<ListSampleResult>,
     addImpl: (position: SamplePosition) => Promise<AddResult> = async () => ok(undefined),
+    productionRecordsResult?: ListProductionRecordsResult | Promise<ListProductionRecordsResult>,
   ) {
     this.haulageResult = haulageResult
     this.sampleResult = sampleResult
     this.addImpl = addImpl
+    this.productionRecordsResult = productionRecordsResult
   }
 
   async listHaulageTransactionsForShift(): Promise<ListHaulageResult> {
     return this.haulageResult
+  }
+
+  async listProductionRecordsForShift(): Promise<ListProductionRecordsResult> {
+    if (this.productionRecordsResult) {
+      return this.productionRecordsResult
+    }
+    const haulage = await this.haulageResult
+    if (!haulage.ok) {
+      return haulage
+    }
+    return ok(haulage.value.map((transaction) => createLegacyProductionRecord(transaction)))
   }
 
   async listSamplePositionsForShift(): Promise<ListSampleResult> {

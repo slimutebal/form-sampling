@@ -1,6 +1,7 @@
 import type { Result } from '@/domain/common/result'
 import type { ShiftId } from '@/domain/common/identifiers'
 import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
+import type { ProductionRecord } from '@/domain/production/production-record'
 import type { SamplePosition } from '@/domain/sample-handling/sample-position'
 
 /**
@@ -26,6 +27,16 @@ export interface SampleHandlingStore {
   listHaulageTransactionsForShift(
     shiftId: ShiftId,
   ): Promise<Result<readonly HaulageTransaction[], SampleHandlingStoreError>>
+
+  /**
+   * Effective (ACCEPT + ACTIVE) production eligibility — Phase 2 —
+   * requires the ProductionRecord for each transaction, not just the raw
+   * transaction: a REJECT record's HaulageTransaction must never be
+   * counted toward pending sample requirements.
+   */
+  listProductionRecordsForShift(
+    shiftId: ShiftId,
+  ): Promise<Result<readonly ProductionRecord[], SampleHandlingStoreError>>
 
   listSamplePositionsForShift(
     shiftId: ShiftId,
