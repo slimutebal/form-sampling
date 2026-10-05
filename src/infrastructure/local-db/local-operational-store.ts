@@ -15,11 +15,12 @@ import type { ManpowerAssignment } from '../../domain/manpower/manpower-assignme
 import { createMasterData, type MasterData } from '../../domain/master/master-data'
 import type { PileAreaReference } from '../../domain/master/references'
 import type { FreshPileStartPosition } from '../../domain/pile/fresh-pile-start-position'
-import type { Pile } from '../../domain/pile/pile'
+import { createPile, type Pile } from '../../domain/pile/pile'
 import { createLegacyProductionRecord, type ProductionRecord } from '../../domain/production/production-record'
 import { validateNoSampleOverlap } from '../../domain/sample-handling/sample-overlap'
 import type { SamplePosition } from '../../domain/sample-handling/sample-position'
 import type { Shift } from '../../domain/shift/shift'
+import type { PileRegistrationDraft } from '../../application/pile-registration/pile-registration-draft'
 import { DEFAULT_LOCAL_DATABASE_NAME } from './database'
 import {
   CURRENT_MASTER_DATA_CACHE_KEY,
@@ -165,6 +166,8 @@ export interface LocalShiftWorkspace {
   readonly pendingSamples: readonly HandoverPendingSample[]
   /** Manpower assigned to this shift (Phase 18 §4) — `[]` for a row written before this field existed. Always a concrete array, never `undefined`. */
   readonly manpower: readonly ManpowerAssignment[]
+  /** Pre-shift registration rows, including inactive and repeated Pile IDs. */
+  readonly pileRegistrations: readonly PileRegistrationDraft[]
 }
 
 /** A cached master-data snapshot as returned to application code (Phase 16 §6/§7), distinct from any `LocalShiftWorkspace.masterData`. */
@@ -183,6 +186,8 @@ export interface InitializeShiftWorkspaceParams {
   readonly pendingSamples?: readonly HandoverPendingSample[]
   /** Manpower assigned to this shift (Phase 18 §4). Optional so every existing pre-Phase-18 call site keeps compiling unchanged — defaults to `[]`. */
   readonly manpower?: readonly ManpowerAssignment[]
+  /** Pre-shift registration rows; operational workspace `piles` remains unique by PileId. */
+  readonly pileRegistrations?: readonly PileRegistrationDraft[]
   /**
    * When this Shift is being created from a confirmed handover import
    * (Phase 12 critical fix), pass the import-history record to commit
@@ -245,6 +250,7 @@ function toWorkspace(record: ShiftWorkspaceRecord): LocalShiftWorkspace {
     pendingBatches: record.pendingBatches ?? [],
     pendingSamples: record.pendingSamples ?? [],
     manpower: record.manpower ?? [],
+    pileRegistrations: record.pileRegistrations ?? [],
   }
 }
 
@@ -344,6 +350,9 @@ export class LocalOperationalStore {
       params.pendingSamples ?? [],
     )
     const manpowerSnapshot: readonly ManpowerAssignment[] = structuredClone(params.manpower ?? [])
+    const pileRegistrationsSnapshot: readonly PileRegistrationDraft[] = structuredClone(
+      params.pileRegistrations ?? [],
+    )
     const handoverImportSnapshot: ImportHistoryRecord | undefined = params.handoverImport
       ? structuredClone(params.handoverImport)
       : undefined
@@ -450,6 +459,7 @@ export class LocalOperationalStore {
             pendingBatches: pendingBatchesSnapshot,
             pendingSamples: pendingSamplesSnapshot,
             manpower: manpowerSnapshot,
+            pileRegistrations: pileRegistrationsSnapshot,
           }
           await this.db.shiftWorkspaces.add(record)
           await this.db.metadata.put({ key: CURRENT_SHIFT_METADATA_KEY, value: shiftId })
@@ -507,6 +517,36 @@ export class LocalOperationalStore {
     try {
       const record = await this.db.shiftWorkspaces.get(shiftId)
       return ok(record ? toWorkspace(record) : undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Resolves a previously saved workspace from this device only.  The
+   * landing screen deliberately uses the visible shift identity plus its
+   * recorded Checker, never a server lookup or a cross-device recovery.
+   */
+  async resumeLocalWorkspace(
+    date: string,
+    shiftCode: string,
+    checkerPersonId: string,
+  ): Promise<StoreResult<LocalShiftWorkspace | undefined>> {
+    try {
+      return await this.db.transaction('rw', this.db.shiftWorkspaces, this.db.metadata, async () => {
+        const records = await this.db.shiftWorkspaces.toArray()
+        const record = records.find(
+          (candidate) =>
+            (candidate.shift.date as string) === date &&
+            (candidate.shift.shiftCode as string) === shiftCode &&
+            (candidate.manpower ?? []).some(
+              (assignment) => assignment.personId === checkerPersonId && assignment.jobDeskCode === 'Checker',
+            ),
+        )
+        if (!record) return ok(undefined)
+        await this.db.metadata.put({ key: CURRENT_SHIFT_METADATA_KEY, value: record.shiftId })
+        return ok(toWorkspace(record))
+      })
     } catch (caught) {
       return err(mapCaughtError(caught))
     }
@@ -773,6 +813,32 @@ export class LocalOperationalStore {
           ...existing,
           manpower: manpowerSnapshot,
         })
+      })
+      return ok(undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /** Replaces only the active shift's pre-shift/active registration rows. */
+  async updatePileRegistrations(
+    shiftId: ShiftId,
+    pileRegistrations: readonly PileRegistrationDraft[],
+  ): Promise<StoreResult<void>> {
+    const snapshot = structuredClone(pileRegistrations)
+    try {
+      await this.db.transaction('rw', this.db.shiftWorkspaces, async () => {
+        const existing = await this.db.shiftWorkspaces.get(shiftId)
+        if (!existing) {
+          raiseExpectedError('SHIFT_WORKSPACE_NOT_FOUND', `Shift workspace not found: ${shiftId}`)
+        }
+        const piles = [...existing.piles]
+        for (const registration of snapshot) {
+          if (!piles.some((pile) => pile.id === registration.pileId)) {
+            piles.push(createPile(registration.pileId, registration.oreCode))
+          }
+        }
+        await this.db.shiftWorkspaces.put({ ...existing, piles, pileRegistrations: snapshot })
       })
       return ok(undefined)
     } catch (caught) {

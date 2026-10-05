@@ -13,6 +13,7 @@ import {
 } from '@/domain/fleet/fleet-resolution'
 import { createFleetSetup, type FleetSetup } from '@/domain/fleet/fleet-setup'
 import { createFrontDefinition, createFrontId, type FrontDefinition } from '@/domain/fleet/front'
+import { parseExcaCode } from '@/domain/fleet/exca-code'
 import { findPileArea, type MasterData } from '@/domain/master/master-data'
 import { parseHaulerCode } from '@/domain/master/master-codes'
 import type { Shift } from '@/domain/shift/shift'
@@ -46,6 +47,14 @@ function buildEntry(
   if (!frontId.ok) return frontId
   const haulerCode = parseHaulerCode(entry.haulerCode)
   if (!haulerCode.ok) return haulerCode
+  // A missing property means a draft persisted before Exca was introduced;
+  // a blank property is a new draft and must be completed before saving.
+  let excaCode: FrontDefinition['excaCode']
+  if (entry.excaCode !== undefined) {
+    const parsedExcaCode = parseExcaCode(entry.excaCode)
+    if (!parsedExcaCode.ok) return parsedExcaCode
+    excaCode = parsedExcaCode.value
+  }
 
   let destinationPileId: FrontDefinition['destinationPileId']
   if (entry.destinationPileId.trim()) {
@@ -61,7 +70,13 @@ function buildEntry(
     destinationPileId = pileArea.pileId
   }
 
-  const front = createFrontDefinition(frontId.value, shift.sectorCode, haulerCode.value, destinationPileId)
+  const front = createFrontDefinition(
+    frontId.value,
+    shift.sectorCode,
+    haulerCode.value,
+    destinationPileId,
+    excaCode,
+  )
   if (entry.kind === 'BASE') {
     const truckIds = parseTruckIds(entry.truckIds)
     if (!truckIds.ok) return truckIds

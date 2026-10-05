@@ -12,8 +12,8 @@ import type { ReportLabelSet, ReportLanguage } from './report-types'
  */
 export function shiftCodeDisplayLabel(shiftCode: ShiftCode): string {
   const value = shiftCode as string
-  if (value === 'DS') return 'D'
-  if (value === 'NS') return 'N'
+  if (value === 'D') return 'D'
+  if (value === 'N') return 'N'
   return value
 }
 

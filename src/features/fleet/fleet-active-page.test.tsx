@@ -3,10 +3,20 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ok, type DomainError, type Result } from '@/domain/common/result'
 import type { ShiftId } from '@/domain/common/identifiers'
-import { parseOreCode, parseSamplingHouseCode, parseSectorCode, parseShiftCode } from '@/domain/common/codes'
+import {
+  parseOreCode,
+  parseSamplingHouseCode,
+  parseSectorCode,
+  parseShiftCode,
+} from '@/domain/common/codes'
 import { parseFleetId, parsePileId, parseShiftId, parseTruckId } from '@/domain/common/identifiers'
+import { parseBatchNumber } from '@/domain/batch/batch-number'
+import { parseRitNumber } from '@/domain/batch/rit-number'
 import { parseShiftDate } from '@/domain/common/shift-date'
-import { createBaseFleetDefinition, createDerivedFleetDefinition } from '@/domain/fleet/fleet-definition'
+import {
+  createBaseFleetDefinition,
+  createDerivedFleetDefinition,
+} from '@/domain/fleet/fleet-definition'
 import { createFleetSetup, type FleetSetup } from '@/domain/fleet/fleet-setup'
 import { createFrontDefinition, createFrontId } from '@/domain/fleet/front'
 import { createMasterData, type MasterData } from '@/domain/master/master-data'
@@ -17,8 +27,14 @@ import {
   createSectorReference,
   createTruckReference,
 } from '@/domain/master/references'
-import { createOreSamplingConfig, parseBatchSize, parsePackingConfigValue, parseSamplingInterval } from '@/domain/master/sampling-config'
+import {
+  createOreSamplingConfig,
+  parseBatchSize,
+  parsePackingConfigValue,
+  parseSamplingInterval,
+} from '@/domain/master/sampling-config'
 import type { Pile } from '@/domain/pile/pile'
+import type { PileRegistrationDraft } from '@/application/pile-registration/pile-registration-draft'
 import { createShift, type Shift } from '@/domain/shift/shift'
 import { FleetActivePage, type FleetActivePageStore } from '@/features/fleet/fleet-active-page'
 import type { LocalShiftWorkspace } from '@/infrastructure/local-db/local-operational-store'
@@ -46,8 +62,18 @@ function buildMasterData(): MasterData {
       locations: [],
       samplingHouses: [],
       pileAreas: [
-        createPileAreaReference(sector, value(parsePileAreaCode('STK-1')), value(parsePileId('PILE-1')), ore),
-        createPileAreaReference(sector, value(parsePileAreaCode('S27')), value(parsePileId('L9_27')), ore),
+        createPileAreaReference(
+          sector,
+          value(parsePileAreaCode('STK-1')),
+          value(parsePileId('PILE-1')),
+          ore,
+        ),
+        createPileAreaReference(
+          sector,
+          value(parsePileAreaCode('S27')),
+          value(parsePileId('L9_27')),
+          ore,
+        ),
       ],
       haulers: [createHaulerReference(hauler), createHaulerReference(hauler2)],
       trucks: [
@@ -81,9 +107,18 @@ function buildShift(): Shift {
 function buildSingleFrontFleetSetup(masterData: MasterData): FleetSetup {
   const sector = value(parseSectorCode(SECTOR))
   const hauler = value(parseHaulerCode(HAULER))
-  const front = createFrontDefinition(value(createFrontId(sector, 1)), sector, hauler, value(parsePileId('PILE-1')))
+  const front = createFrontDefinition(
+    value(createFrontId(sector, 1)),
+    sector,
+    hauler,
+    value(parsePileId('PILE-1')),
+  )
   const fleet = value(
-    createBaseFleetDefinition({ fleetId: value(parseFleetId('FLEET-01')), frontId: front.frontId, truckIds: [value(parseTruckId('T1'))] }),
+    createBaseFleetDefinition({
+      fleetId: value(parseFleetId('FLEET-01')),
+      frontId: front.frontId,
+      truckIds: [value(parseTruckId('T1'))],
+    }),
   )
   return value(createFleetSetup({ fronts: [front], fleets: [fleet] }, masterData))
 }
@@ -91,9 +126,25 @@ function buildSingleFrontFleetSetup(masterData: MasterData): FleetSetup {
 function buildContinuedFleetSetup(masterData: MasterData): FleetSetup {
   const sector = value(parseSectorCode(SECTOR))
   const hauler = value(parseHaulerCode(HAULER))
-  const front1 = createFrontDefinition(value(createFrontId(sector, 1)), sector, hauler, value(parsePileId('PILE-1')))
-  const front2 = createFrontDefinition(value(createFrontId(sector, 2)), sector, hauler, value(parsePileId('PILE-1')))
-  const fleet1 = value(createBaseFleetDefinition({ fleetId: value(parseFleetId('FLEET-01')), frontId: front1.frontId, truckIds: [] }))
+  const front1 = createFrontDefinition(
+    value(createFrontId(sector, 1)),
+    sector,
+    hauler,
+    value(parsePileId('PILE-1')),
+  )
+  const front2 = createFrontDefinition(
+    value(createFrontId(sector, 2)),
+    sector,
+    hauler,
+    value(parsePileId('PILE-1')),
+  )
+  const fleet1 = value(
+    createBaseFleetDefinition({
+      fleetId: value(parseFleetId('FLEET-01')),
+      frontId: front1.frontId,
+      truckIds: [],
+    }),
+  )
   const fleet2 = value(
     createDerivedFleetDefinition({
       fleetId: value(parseFleetId('FLEET-02')),
@@ -106,7 +157,12 @@ function buildContinuedFleetSetup(masterData: MasterData): FleetSetup {
   return value(createFleetSetup({ fronts: [front1, front2], fleets: [fleet1, fleet2] }, masterData))
 }
 
-function buildWorkspace(fleetSetup: FleetSetup, masterData: MasterData, piles: readonly Pile[] = []): LocalShiftWorkspace {
+function buildWorkspace(
+  fleetSetup: FleetSetup,
+  masterData: MasterData,
+  piles: readonly Pile[] = [],
+  pileRegistrations: readonly PileRegistrationDraft[] = [],
+): LocalShiftWorkspace {
   const shift = buildShift()
   return {
     shiftId: shift.id,
@@ -117,12 +173,14 @@ function buildWorkspace(fleetSetup: FleetSetup, masterData: MasterData, piles: r
     pendingBatches: [],
     pendingSamples: [],
     manpower: [],
+    pileRegistrations,
   }
 }
 
-function fakeStore(
-  result: Result<void, DomainError> = ok(undefined),
-): FleetActivePageStore & { appendFrontContinuation: ReturnType<typeof vi.fn>; updateActiveFrontFleet: ReturnType<typeof vi.fn> } {
+function fakeStore(result: Result<void, DomainError> = ok(undefined)): FleetActivePageStore & {
+  appendFrontContinuation: ReturnType<typeof vi.fn>
+  updateActiveFrontFleet: ReturnType<typeof vi.fn>
+} {
   return {
     appendFrontContinuation: vi.fn(async () => result),
     updateActiveFrontFleet: vi.fn(async () => result),
@@ -168,7 +226,14 @@ describe('FleetActivePage', () => {
     const store = fakeStore()
     const onFleetUpdated = vi.fn()
 
-    render(<FleetActivePage workspace={workspace} store={store} onFleetUpdated={onFleetUpdated} generateFleetId={() => 'FLEET-02'} />)
+    render(
+      <FleetActivePage
+        workspace={workspace}
+        store={store}
+        onFleetUpdated={onFleetUpdated}
+        generateFleetId={() => 'FLEET-02'}
+      />,
+    )
 
     await user.click(screen.getByRole('button', { name: '+ Add Front' }))
     expect(screen.getByText('S1/02')).toBeInTheDocument() // auto-derived new Front No preview
@@ -176,8 +241,14 @@ describe('FleetActivePage', () => {
     await user.click(screen.getByRole('button', { name: 'Save Front' }))
 
     expect(store.appendFrontContinuation).toHaveBeenCalledTimes(1)
-    const [, params] = store.appendFrontContinuation.mock.calls[0] as [ShiftId, { fleetSetup: FleetSetup }]
-    expect(params.fleetSetup.fronts.map((front) => front.frontId).sort()).toEqual(['S1/01', 'S1/02'])
+    const [, params] = store.appendFrontContinuation.mock.calls[0] as [
+      ShiftId,
+      { fleetSetup: FleetSetup },
+    ]
+    expect(params.fleetSetup.fronts.map((front) => front.frontId).sort()).toEqual([
+      'S1/01',
+      'S1/02',
+    ])
     expect(onFleetUpdated).toHaveBeenCalledTimes(1)
   })
 
@@ -187,10 +258,20 @@ describe('FleetActivePage', () => {
     const masterData = buildMasterData()
     const fleetSetup = buildSingleFrontFleetSetup(masterData)
     const workspace = buildWorkspace(fleetSetup, masterData)
-    const store = fakeStore({ ok: false, error: { code: 'SHIFT_WORKSPACE_NOT_FOUND', message: 'x' } })
+    const store = fakeStore({
+      ok: false,
+      error: { code: 'SHIFT_WORKSPACE_NOT_FOUND', message: 'x' },
+    })
     const onFleetUpdated = vi.fn()
 
-    render(<FleetActivePage workspace={workspace} store={store} onFleetUpdated={onFleetUpdated} generateFleetId={() => 'FLEET-02'} />)
+    render(
+      <FleetActivePage
+        workspace={workspace}
+        store={store}
+        onFleetUpdated={onFleetUpdated}
+        generateFleetId={() => 'FLEET-02'}
+      />,
+    )
 
     await user.click(screen.getByRole('button', { name: '+ Add Front' }))
     await user.click(screen.getByRole('button', { name: 'Save Front' }))
@@ -208,7 +289,14 @@ describe('FleetActivePage — new independent BASE Front (Phase 18 §2, Fleet Re
     const emptyFleetSetup = value(createFleetSetup({ fronts: [], fleets: [] }, masterData))
     const workspace = buildWorkspace(emptyFleetSetup, masterData)
 
-    render(<FleetActivePage workspace={workspace} store={fakeStore()} onFleetUpdated={vi.fn()} generateFleetId={() => 'FLEET-01'} />)
+    render(
+      <FleetActivePage
+        workspace={workspace}
+        store={fakeStore()}
+        onFleetUpdated={vi.fn()}
+        generateFleetId={() => 'FLEET-01'}
+      />,
+    )
 
     expect(screen.getByRole('button', { name: '+ Add Front' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: '+ Add Front' }))
@@ -223,7 +311,14 @@ describe('FleetActivePage — new independent BASE Front (Phase 18 §2, Fleet Re
     const fleetSetup = buildSingleFrontFleetSetup(masterData)
     const workspace = buildWorkspace(fleetSetup, masterData)
 
-    render(<FleetActivePage workspace={workspace} store={fakeStore()} onFleetUpdated={vi.fn()} generateFleetId={() => 'FLEET-02'} />)
+    render(
+      <FleetActivePage
+        workspace={workspace}
+        store={fakeStore()}
+        onFleetUpdated={vi.fn()}
+        generateFleetId={() => 'FLEET-02'}
+      />,
+    )
 
     await user.click(screen.getByRole('button', { name: '+ Add Front' }))
     await user.selectOptions(screen.getByLabelText('Fleet Reference'), '')
@@ -241,7 +336,14 @@ describe('FleetActivePage — new independent BASE Front (Phase 18 §2, Fleet Re
     const fleetSetup = buildSingleFrontFleetSetup(masterData)
     const workspace = buildWorkspace(fleetSetup, masterData)
 
-    render(<FleetActivePage workspace={workspace} store={fakeStore()} onFleetUpdated={vi.fn()} generateFleetId={() => 'FLEET-02'} />)
+    render(
+      <FleetActivePage
+        workspace={workspace}
+        store={fakeStore()}
+        onFleetUpdated={vi.fn()}
+        generateFleetId={() => 'FLEET-02'}
+      />,
+    )
 
     await user.click(screen.getByRole('button', { name: '+ Add Front' }))
     await user.selectOptions(screen.getByLabelText('Fleet Reference'), '')
@@ -255,11 +357,31 @@ describe('FleetActivePage — new independent BASE Front (Phase 18 §2, Fleet Re
     const user = userEvent.setup()
     const masterData = buildMasterData()
     const fleetSetup = buildSingleFrontFleetSetup(masterData)
-    const workspace = buildWorkspace(fleetSetup, masterData)
+    const workspace = buildWorkspace(
+      fleetSetup,
+      masterData,
+      [],
+      [
+        {
+          pileId: value(parsePileId('L9_27')),
+          oreCode: value(parseOreCode('SAP')),
+          batch: value(parseBatchNumber(1)),
+          rit: value(parseRitNumber(1)),
+          status: 'ACTIVE',
+        },
+      ],
+    )
     const store = fakeStore()
     const onFleetUpdated = vi.fn()
 
-    render(<FleetActivePage workspace={workspace} store={store} onFleetUpdated={onFleetUpdated} generateFleetId={() => 'FLEET-02'} />)
+    render(
+      <FleetActivePage
+        workspace={workspace}
+        store={store}
+        onFleetUpdated={onFleetUpdated}
+        generateFleetId={() => 'FLEET-02'}
+      />,
+    )
 
     await user.click(screen.getByRole('button', { name: '+ Add Front' }))
     await user.selectOptions(screen.getByLabelText('Fleet Reference'), '')
@@ -273,8 +395,14 @@ describe('FleetActivePage — new independent BASE Front (Phase 18 §2, Fleet Re
     await user.click(screen.getByRole('button', { name: 'Save Front' }))
 
     expect(store.appendFrontContinuation).toHaveBeenCalledTimes(1)
-    const [, params] = store.appendFrontContinuation.mock.calls[0] as [ShiftId, { fleetSetup: FleetSetup }]
-    expect(params.fleetSetup.fronts.map((front) => front.frontId).sort()).toEqual(['S1/01', 'S1/02'])
+    const [, params] = store.appendFrontContinuation.mock.calls[0] as [
+      ShiftId,
+      { fleetSetup: FleetSetup },
+    ]
+    expect(params.fleetSetup.fronts.map((front) => front.frontId).sort()).toEqual([
+      'S1/01',
+      'S1/02',
+    ])
     const newFleet = params.fleetSetup.fleets.find((fleet) => fleet.frontId === 'S1/02')
     expect(newFleet).toMatchObject({ kind: 'BASE', truckIds: ['STM-A40_0001'] })
     // No DERIVED fleet was created for the new Front, so BR1/01 is never retired.
@@ -283,6 +411,27 @@ describe('FleetActivePage — new independent BASE Front (Phase 18 §2, Fleet Re
 })
 
 describe('FleetActivePage — persistent unit adjustment (Field Finding 2, "Atur Unit")', () => {
+  it('returns to the active Setup callback when its initial adjustment is cancelled', async () => {
+    await i18n.changeLanguage('en')
+    const user = userEvent.setup()
+    const masterData = buildMasterData()
+    const workspace = buildWorkspace(buildSingleFrontFleetSetup(masterData), masterData)
+    const onCancelInitialAdjustment = vi.fn()
+
+    render(
+      <FleetActivePage
+        workspace={workspace}
+        store={fakeStore()}
+        onFleetUpdated={vi.fn()}
+        initialAdjustingFrontId="S1/01"
+        onCancelInitialAdjustment={onCancelInitialAdjustment}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onCancelInitialAdjustment).toHaveBeenCalledOnce()
+  })
+
   it('offers Atur Unit only for ACTIVE fronts, never for a HISTORICAL one', async () => {
     await i18n.changeLanguage('en')
     const masterData = buildMasterData()
@@ -357,7 +506,9 @@ describe('FleetActivePage — persistent unit adjustment (Field Finding 2, "Atur
     await user.click(screen.getByRole('button', { name: 'Remove T1' }))
     await user.click(screen.getByRole('button', { name: 'Save Units' }))
 
-    expect(await screen.findByText('Front aktif harus memiliki minimal 1 unit.')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Front aktif harus memiliki minimal 1 unit.'),
+    ).toBeInTheDocument()
     expect(store.updateActiveFrontFleet).not.toHaveBeenCalled()
   })
 
@@ -382,7 +533,11 @@ describe('FleetActivePage — persistent unit adjustment (Field Finding 2, "Atur
     expect(savedFleet?.kind).toBe('DERIVED')
     if (savedFleet?.kind === 'DERIVED') {
       const originalFleet = fleetSetup.fleets.find((fleet) => fleet.frontId === 'S1/02')
-      expect(savedFleet.referenceFleetId).toBe(originalFleet && originalFleet.kind === 'DERIVED' ? originalFleet.referenceFleetId : undefined)
+      expect(savedFleet.referenceFleetId).toBe(
+        originalFleet && originalFleet.kind === 'DERIVED'
+          ? originalFleet.referenceFleetId
+          : undefined,
+      )
     }
     // The predecessor Front's own fleet is never mutated by this adjustment.
     const predecessorFleet = savedFleetSetup.fleets.find((fleet) => fleet.frontId === 'S1/01')
@@ -395,7 +550,10 @@ describe('FleetActivePage — persistent unit adjustment (Field Finding 2, "Atur
     const masterData = buildMasterData()
     const fleetSetup = buildSingleFrontFleetSetup(masterData)
     const workspace = buildWorkspace(fleetSetup, masterData)
-    const store = fakeStore({ ok: false, error: { code: 'SHIFT_WORKSPACE_NOT_FOUND', message: 'x' } })
+    const store = fakeStore({
+      ok: false,
+      error: { code: 'SHIFT_WORKSPACE_NOT_FOUND', message: 'x' },
+    })
     const onFleetUpdated = vi.fn()
 
     render(<FleetActivePage workspace={workspace} store={store} onFleetUpdated={onFleetUpdated} />)

@@ -1,5 +1,8 @@
 import { useTranslation } from 'react-i18next'
-import { formatFrontId, type FleetSetupDraftEntry } from '@/application/fleet-setup/fleet-setup-draft'
+import {
+  formatFrontId,
+  type FleetSetupDraftEntry,
+} from '@/application/fleet-setup/fleet-setup-draft'
 import type { EffectiveFleet } from '@/domain/fleet/fleet-resolution'
 import type { SectorCode } from '@/domain/common/codes'
 import { Button } from '@/components/ui/button'
@@ -37,7 +40,9 @@ export function FleetSetupSummary({
             )
             return (
               <li key={entry.fleetId} className="rounded-lg border border-border p-3">
-                <p className="break-all font-semibold">{formatFrontId(sectorCode, entry.frontNumber)}</p>
+                <p className="break-all font-semibold">
+                  {formatFrontId(sectorCode, entry.frontNumber)}
+                </p>
                 <p className="break-all text-sm text-muted-foreground">{entry.haulerCode}</p>
                 {entry.destinationPileId ? (
                   <p className="mt-1 break-all text-sm text-muted-foreground">
@@ -47,7 +52,9 @@ export function FleetSetupSummary({
                 <p className="mt-1 text-sm">
                   {entry.kind === 'DERIVED'
                     ? t('fleetSetup.frontReference', {
-                        frontId: reference ? formatFrontId(sectorCode, reference.frontNumber) : entry.referenceFleetId,
+                        frontId: reference
+                          ? formatFrontId(sectorCode, reference.frontNumber)
+                          : entry.referenceFleetId,
                       })
                     : t('fleetSetup.noReference')}
                 </p>

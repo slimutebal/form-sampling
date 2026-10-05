@@ -14,6 +14,28 @@
     "subtitle": "Sampling ore lapangan dan pelaporan shift.",
     "continue": "Lanjutkan"
   },
+  "landing": {
+    "title": "Ore Quality Assurance",
+    "subtitle": "Production & Sampling Record System",
+    "newRecord": "Catatan Baru",
+    "resumeRecord": "Lanjut Catatan",
+    "searchChecker": "Cari / Pilih Checker…",
+    "date": "Tanggal",
+    "shift": "Shift",
+    "continue": "Lanjut",
+    "resumeNotFound": "Catatan tidak ditemukan di perangkat ini."
+    ,"eyebrow": "Platform kendali mutu"
+    ,"productTitle": "Sistem Catatan Produksi & Sampling"
+    ,"greeting": "Selamat pagi,"
+    ,"user": "Pengguna"
+    ,"tagline": "Peningkatan kerja dengan sistem pencatatan lapangan yang cerdas."
+    ,"resumeDescription": "Lanjutkan pengisian data yang sedang berjalan."
+    ,"newDescription": "Buat catatan produksi atau sampling baru."
+    ,"quality": "Kendali Mutu"
+    ,"production": "Catatan Produksi"
+    ,"sampling": "Catatan Sampling"
+    ,"monitoring": "Monitoring & Laporan"
+  },
   "placeholder": {
     "screenNotice": "Layar ini adalah placeholder navigasi untuk Fase 1. Belum ada fitur operasional."
   },
@@ -33,8 +55,8 @@
   "shiftStart": {
     "loading": "Memuat status shift…",
     "fields": {
-      "date": "Tanggal Shift",
-      "shiftCode": "Kode Shift",
+      "date": "Tanggal",
+      "shiftCode": "Shift",
       "sectorCode": "Sektor",
       "samplingHouseCode": "Sampling House",
       "status": "Status",
@@ -43,8 +65,8 @@
       "selectSamplingHouseCode": "Pilih Sampling House"
     },
     "shiftCodeOptions": {
-      "DS": "DS — Shift Siang",
-      "NS": "NS — Shift Malam"
+      "D": "D",
+      "N": "N"
     },
     "status": {
       "NEW": "Baru",
@@ -61,9 +83,9 @@
       "startNewAction": "Mulai Shift Baru"
     },
     "form": {
-      "pageTitle": "Registrasi Shift",
-      "title": "Registrasi Shift",
-      "submit": "Tinjau Registrasi"
+      "pageTitle": "WORK SETUP",
+      "title": "WORK SETUP",
+      "submit": "Lanjut"
     },
     "review": {
       "title": "Registrasi Siap",
@@ -82,7 +104,7 @@
       }
     },
     "errors": {
-      "required": "Bagian ini wajib diisi.",
+      "required": "Wajib diisi.",
       "invalidDate": "Masukkan tanggal yang valid.",
       "loadFailed": "Gagal memuat data shift lokal.",
       "corruptedState": "Data shift lokal tidak konsisten.",
@@ -104,13 +126,24 @@
       "initializeFailed": "Gagal memulai workspace shift ini. Silakan coba lagi."
     }
   },
+  "workSetup": {
+    "timeLocation": "Waktu & Lokasi",
+    "manpower": "Manpower"
+  },
   "manpower": {
-    "title": "Manpower Shift",
+    "title": "Atur Manpower",
     "search": "Cari NIK / Nama",
     "searchPlaceholder": "Cari NIK / Nama…",
     "noResults": "Tidak ada personel yang cocok.",
     "add": "+ Tambah",
     "selectedPersonnel": "Personel Terpilih",
+    "supervisors": "Pengawas",
+    "crew": "Crew",
+    "checker": "Checker",
+    "checkerNamed": "Jadikan {{name}} sebagai Checker",
+    "picCount": "{{count}} PIC",
+    "supervisorCount": "{{count}} Pengawas",
+    "crewCount": "{{count}} Crew",
     "noPersonnel": "Belum ada personel yang ditambahkan.",
     "jobDesk": "Job Desk",
     "picLabel": "Penanggung Jawab",
@@ -121,6 +154,9 @@
     "save": "Simpan",
     "cancel": "Batal",
     "errors": {
+      "checkerRequired": "Pilih tepat satu Checker sebelum melanjutkan.",
+      "supervisorRequired": "Minimal 1 Pengawas wajib dipilih.",
+      "checkerMustBeStaff": "Checker yang dipilih harus merupakan Staff/PIC.",
       "duplicatePerson": "Personel ini sudah ditambahkan.",
       "jobDeskRequired": "Job Desk wajib diisi.",
       "personNotFound": "Personel ini tidak ditemukan pada master Employee/Crew.",
@@ -220,7 +256,18 @@
     }
   },
   "fleetSetup": {
-    "title": "Setup Fleet",
+    "title": "FLEET SETUP",
+    "registeredFleet": "Fleet Terdaftar",
+    "fleetCount": "{{count}} Fleet",
+    "addFleet": "+ Fleet",
+    "addFleetTitle": "TAMBAH FLEET",
+    "noFleets": "Belum ada Fleet terdaftar.",
+    "frontCode": "Kode Front",
+    "company": "Company",
+    "excaNumber": "Nomor Lambung Exca",
+    "operatingTruckUnits": "Unit Truck Operasi",
+    "saveFleet": "Simpan Fleet",
+    "destinationRequired": "Pilih Destination/Pile.",
     "fronts": "Front",
     "addFront": "Tambah Front",
     "editFront": "Ubah Front",
@@ -238,6 +285,9 @@
     "noReference": "Tidak Ada",
     "frontReference": "Front {{frontId}}",
     "allowedTrucks": "Truck Diizinkan",
+    "searchTruck": "Cari Truck / Nomor Unit",
+    "searchTruckPlaceholder": "Cari Truck / Nomor Unit",
+    "truckNotFound": "Truck yang cocok tidak ditemukan.",
     "addTruck": "Tambah Truck",
     "removeTruck": "Keluarkan Truck",
     "removeTruckNamed": "Keluarkan {{truckId}}",
@@ -260,9 +310,9 @@
     "continue": "Lanjutkan",
     "noFronts": "Belum ada front yang dikonfigurasi.",
     "errors": {
-      "empty": "Tambahkan minimal satu front sebelum meninjau setup fleet.",
+      "empty": "Tambahkan minimal satu Fleet sebelum melanjutkan.",
       "frontRequired": "Pilih Front No (1–25).",
-      "haulerRequired": "Pilih Hauler.",
+      "haulerRequired": "Pilih Company.",
       "truckRequired": "Pilih ID Truck yang valid.",
       "referenceRequired": "Pilih fleet acuan.",
       "duplicateFront": "Front No harus unik.",
@@ -278,6 +328,9 @@
       "haulerMismatch": "Setiap truck efektif harus berasal dari Hauler yang dipilih.",
       "dependency": "Front ini tidak dapat dihapus karena masih menjadi acuan fleet lain.",
       "destinationNotFound": "Pile tujuan ini tidak ditemukan di master data Sektor ini.",
+      "destinationRequired": "Pilih Destination/Pile.",
+      "excaRequired": "Masukkan nomor lambung Exca.",
+      "excaInvalid": "Nomor lambung Exca harus terdiri dari 1 sampai 4 digit.",
       "generic": "Setup Fleet tidak dapat divalidasi. Periksa konfigurasi lalu coba lagi."
     }
   },
@@ -311,9 +364,9 @@
     "title": "Operasi Pile",
     "ore": "Ore",
     "batch": "Batch",
-    "nextRit": "Rit Berikutnya",
+    "nextRit": "Trip Berikutnya",
     "sampleCount": "Sampel",
-    "rit": "Rit",
+    "rit": "Trip",
     "sampleRequired": "Perlu Sampel",
     "noSample": "Tidak Ada Sampel",
     "increment": "Increment",
@@ -326,7 +379,7 @@
     "recording": "Menyimpan…",
     "recorded": "Tercatat",
     "sampled": "Tersampel",
-    "recordedFeedback": "Rit {{rit}} tercatat",
+    "recordedFeedback": "Trip {{rit}} tercatat",
     "skipped": "Terlewat",
     "recordedPositions": "Posisi Tercatat",
     "skippedPositions": "Posisi Terlewat",
@@ -336,7 +389,7 @@
     "initialPosition": {
       "title": "Posisi Awal",
       "batchAwal": "Batch Awal",
-      "ritAwal": "Rit Awal",
+      "ritAwal": "Trip Awal",
       "confirm": "Konfirmasi",
       "confirming": "Mengonfirmasi…",
       "change": "Ubah Posisi Awal",
@@ -351,7 +404,7 @@
       "operationalContextInvalid": "Pilihan Truck sudah tidak valid untuk Front ini. Pilih ulang Front dan Truck lalu coba lagi.",
       "storeContextInvalid": "Pile ini bukan bagian dari workspace shift aktif.",
       "duplicateTransaction": "Entri haulage ini sudah pernah tercatat.",
-      "startPositionInvalid": "Masukkan Batch dan Rit yang valid (bilangan bulat, 1 atau lebih).",
+      "startPositionInvalid": "Masukkan Batch dan Trip yang valid (bilangan bulat, 1 atau lebih).",
       "startPositionLocked": "Posisi awal terkunci karena haulage sudah tercatat untuk Pile ini.",
       "generic": "Terjadi kesalahan. Silakan coba lagi."
     }
@@ -366,12 +419,12 @@
     "pile": "Pile",
     "ore": "Ore",
     "batch": "Batch",
-    "ritFrom": "Rit Dari",
-    "ritTo": "Rit Sampai",
+    "ritFrom": "Trip Dari",
+    "ritTo": "Trip Sampai",
     "selectPile": "Pilih Pile",
     "selectBatch": "Pilih Batch",
-    "selectRitFrom": "Pilih Rit Dari",
-    "selectRitTo": "Pilih Rit Sampai",
+    "selectRitFrom": "Pilih Trip Dari",
+    "selectRitTo": "Pilih Trip Sampai",
     "sampleRange": "Rentang Sampel",
     "totalBag": "Total Karung",
     "deliveryStatus": "Status Pengiriman",
@@ -385,7 +438,7 @@
     "saveSamplePosition": "Simpan Sample Position",
     "saving": "Menyimpan…",
     "saved": "Sample position tersimpan",
-    "noPendingSamples": "Belum ada sample untuk ditangani. Sample akan muncul otomatis setelah rit sampling tercatat pada Pile.",
+    "noPendingSamples": "Belum ada sample untuk ditangani. Sample akan muncul otomatis setelah Trip sampling tercatat pada Pile.",
     "noHandledSamples": "Tidak Ada Sampel Selesai",
     "loading": "Memuat Sampel…",
     "retry": "Coba Lagi",
@@ -404,16 +457,20 @@
     }
   },
   "handover": {
-    "title": "Shift Sebelumnya",
+    "title": "SERAH TERIMA SHIFT",
     "description": "Impor arsip shift sebelumnya untuk melanjutkan pekerjaan tertunda.",
-    "selectFile": "Pilih File Excel",
+    "selectFile": "Pilih File",
+    "importFile": "Import File",
+    "pasteTextReport": "Tempel teks laporan di sini...",
+    "newSetup": "Setup Baru",
+    "continueSetup": "Lanjutkan Setup",
     "startWithoutPreviousShift": "Mulai Tanpa File Sebelumnya",
     "checkingFile": "Memeriksa file…",
     "previewTitle": "Pratinjau Handover",
     "previousShift": "Shift Sebelumnya",
     "pendingPiles": "Pile Tertunda",
     "pendingSamples": "Sampel Tertunda",
-    "batchLastRit": "Batch {{batch}} → Rit terakhir {{rit}}",
+    "batchLastRit": "Batch {{batch}} → Trip terakhir {{rit}}",
     "continueStatus": "LANJUTKAN",
     "holdStatus": "TAHAN",
     "holdPreserved": "Disimpan (tidak aktif)",

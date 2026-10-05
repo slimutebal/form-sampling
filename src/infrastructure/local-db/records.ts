@@ -12,6 +12,7 @@ import type { Pile } from '../../domain/pile/pile'
 import type { ProductionRecord } from '../../domain/production/production-record'
 import type { SamplePosition } from '../../domain/sample-handling/sample-position'
 import type { Shift } from '../../domain/shift/shift'
+import type { PileRegistrationDraft } from '../../application/pile-registration/pile-registration-draft'
 
 /**
  * IndexedDB row for the `shiftWorkspaces` table (primary key: shiftId).
@@ -33,6 +34,10 @@ import type { Shift } from '../../domain/shift/shift'
  * here, for the same reason: an existing pre-Phase-18 row genuinely has
  * no such field on disk. `LocalOperationalStore` defaults it to `[]`
  * when reading a record back.
+ *
+ * `pileRegistrations` is a separate pre-shift registration history. It is
+ * optional so workspaces created before it existed restore safely; it must
+ * never be conflated with the unique operational `piles` collection.
  */
 export interface ShiftWorkspaceRecord {
   readonly shiftId: ShiftId
@@ -43,6 +48,7 @@ export interface ShiftWorkspaceRecord {
   readonly pendingBatches?: readonly PendingBatchCarryOver[]
   readonly pendingSamples?: readonly HandoverPendingSample[]
   readonly manpower?: readonly ManpowerAssignment[]
+  readonly pileRegistrations?: readonly PileRegistrationDraft[]
 }
 
 /**

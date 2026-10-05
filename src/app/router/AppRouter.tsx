@@ -37,7 +37,7 @@ export function AppRouter() {
     <Routes>
       <Route path="/" element={<WelcomePage />} />
       <Route
-        path="/start"
+        path="/start/*"
         element={
           <PreShiftShell>
             <StartPage />

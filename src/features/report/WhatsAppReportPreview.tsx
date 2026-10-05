@@ -19,6 +19,8 @@ export interface WhatsAppReportPreviewProps {
   reports: Record<ReportLanguage, ShiftReport>
   /** Which report language is selected first. Independent of the app's own i18n language. */
   initialReportLanguage?: ReportLanguage
+  /** Report workspace supplies its own header and fixes English output. */
+  embedded?: boolean
   /** Injectable clipboard adapter — defaults to the real device adapter; tests supply a fake. */
   copyToClipboard?: (text: string) => Promise<Result<ClipboardCopyResult, DomainError>>
   /** Injectable share adapter — defaults to the real device adapter; tests supply a fake. */
@@ -59,6 +61,7 @@ function feedbackTranslationKey(feedback: Feedback | undefined): string | undefi
 export function WhatsAppReportPreview({
   reports,
   initialReportLanguage = 'id',
+  embedded = false,
   copyToClipboard = copyTextToClipboard,
   shareReportText = shareText,
   isClipboardSupported = isClipboardCopySupported,
@@ -114,10 +117,10 @@ export function WhatsAppReportPreview({
   const feedbackKey = feedbackTranslationKey(feedback)
 
   return (
-    <div>
-      <PageHeader title={t('whatsAppReport.title')} />
-      <div className="flex flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-        <Card>
+    <div className={embedded ? 'flex h-full min-h-0 flex-col overflow-hidden' : ''}>
+      {!embedded ? <PageHeader title={t('whatsAppReport.title')} /> : null}
+      <div className={embedded ? 'flex min-h-0 flex-1 flex-col gap-2' : 'flex flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]'}>
+        {!embedded ? <Card>
           <CardContent className="flex flex-col gap-2">
             <p className="text-sm font-medium">{t('whatsAppReport.reportLanguage')}</p>
             <div className="flex flex-row gap-2">
@@ -139,10 +142,10 @@ export function WhatsAppReportPreview({
               </Button>
             </div>
           </CardContent>
-        </Card>
+        </Card> : null}
 
-        <Card className="overflow-x-hidden">
-          <CardContent>
+        <Card className={embedded ? 'min-h-0 flex-1 overflow-hidden' : 'overflow-x-hidden'}>
+          <CardContent className={embedded ? 'scrollbar-none h-full overflow-y-auto' : undefined}>
             <pre
               data-testid="whatsapp-report-preview"
               className="w-full max-w-full overflow-x-hidden whitespace-pre-wrap break-words text-sm"
@@ -162,7 +165,7 @@ export function WhatsAppReportPreview({
           </p>
         ) : null}
 
-        <div className="flex flex-col gap-2">
+        <div className="shrink-0 grid grid-cols-2 gap-2">
           <Button type="button" size="lg" onClick={() => void handleCopy()} disabled={!clipboardSupported || copying}>
             {t('whatsAppReport.copyReport')}
           </Button>

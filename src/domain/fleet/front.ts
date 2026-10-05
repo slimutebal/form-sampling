@@ -4,6 +4,7 @@ import type { DomainError, Result } from '../common/result'
 import { err, ok } from '../common/result'
 import type { FrontId, PileId } from '../common/identifiers'
 import { parseFrontId } from '../common/identifiers'
+import type { ExcaCode } from './exca-code'
 
 const MIN_FRONT_NUMBER = 1
 const MAX_FRONT_NUMBER = 25
@@ -44,6 +45,8 @@ export interface FrontDefinition {
   readonly sectorCode: SectorCode
   readonly haulerCode: HaulerCode
   readonly destinationPileId?: PileId
+  /** Optional only for legacy workspaces created before Exca was recorded. */
+  readonly excaCode?: ExcaCode
 }
 
 export function createFrontDefinition(
@@ -51,8 +54,11 @@ export function createFrontDefinition(
   sectorCode: SectorCode,
   haulerCode: HaulerCode,
   destinationPileId?: PileId,
+  excaCode?: ExcaCode,
 ): FrontDefinition {
-  return { frontId, sectorCode, haulerCode, destinationPileId }
+  return excaCode
+    ? { frontId, sectorCode, haulerCode, destinationPileId, excaCode }
+    : { frontId, sectorCode, haulerCode, destinationPileId }
 }
 
 /**

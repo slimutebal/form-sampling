@@ -1,5 +1,8 @@
 import { useTranslation } from 'react-i18next'
-import { formatFrontId, type FleetSetupDraftEntry } from '@/application/fleet-setup/fleet-setup-draft'
+import {
+  formatFrontId,
+  type FleetSetupDraftEntry,
+} from '@/application/fleet-setup/fleet-setup-draft'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EffectiveFleetPreview } from '@/features/fleet-setup/effective-fleet-preview'

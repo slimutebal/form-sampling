@@ -1,4 +1,6 @@
-import { useId, useState, type FormEvent } from 'react'
+import { Calendar } from 'lucide-react'
+import { useId, useState, type FormEvent, type ReactNode } from 'react'
+import { cn } from '@/components/ui/cn'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { ALLOWED_SHIFT_CODES } from '@/application/shift-registration/allowed-shift-codes'
@@ -16,24 +18,63 @@ interface DateFieldProps {
   value: string
   error?: string
   onChange: (value: string) => void
+  placeholder: string
 }
 
-function DateField({ id, label, value, error, onChange }: DateFieldProps) {
+function formatDateForInputDisplay(value: string): string {
+  if (!value) return ''
+
+  const [year, month, day] = value.split('-').map(Number)
+
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ]
+
+  return `${String(day).padStart(2, '0')}-${months[month - 1]}-${year}`
+}
+
+function DateField({ id, label, value, error, onChange, placeholder }: DateFieldProps) {
   const errorId = `${id}-error`
+
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium">
+    <div className="min-w-0 w-full">
+      <label htmlFor={id} className="sr-only">
         {label}
       </label>
-      <input
-        id={id}
-        type="date"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
-        className="h-11 rounded-md border border-border bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-      />
+
+      <div className="relative">
+        <div
+          className={`flex h-11 items-center justify-between rounded-md border bg-background px-3 text-base ${
+            error ? 'border-red-500' : 'border-border'
+          }`}
+          aria-hidden="true"
+        >
+          <span>{value ? formatDateForInputDisplay(value) : placeholder}</span>
+          <Calendar aria-hidden="true" size={18} className="text-muted-foreground" />
+        </div>
+
+        <input
+          id={id}
+          type="date"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        />
+      </div>
+
       {error ? (
         <p id={errorId} role="alert" className="text-sm text-red-600">
           {error}
@@ -57,8 +98,8 @@ interface SelectFieldProps {
 function SelectField({ id, label, value, error, disabled, placeholder, options, onChange }: SelectFieldProps) {
   const errorId = `${id}-error`
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium">
+    <div className="min-w-0 w-full">
+      <label htmlFor={id} className="sr-only">
         {label}
       </label>
       <select
@@ -68,7 +109,7 @@ function SelectField({ id, label, value, error, disabled, placeholder, options, 
         onChange={(event) => onChange(event.target.value)}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
-        className="h-11 rounded-md border border-border bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
+        className="h-11 w-full rounded-md border border-border bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
       >
         <option value="">{placeholder}</option>
         {options.map((option) => (
@@ -91,6 +132,10 @@ interface ShiftRegistrationFormProps {
   masterData: MasterData
   onValuesChange: (values: ShiftRegistrationFormValues) => void
   onSubmit: (values: ShiftRegistrationFormValues) => void
+  children?: ReactNode
+  submitLabel?: string
+  showSubmitButton?: boolean
+  className?: string
 }
 
 /**
@@ -104,7 +149,16 @@ interface ShiftRegistrationFormProps {
  * already-selected Sampling House that is no longer valid under the new
  * Sector, rather than silently keeping a cross-sector selection.
  */
-export function ShiftRegistrationForm({ values, masterData, onValuesChange, onSubmit }: ShiftRegistrationFormProps) {
+export function ShiftRegistrationForm({
+  values,
+  masterData,
+  onValuesChange,
+  onSubmit,
+  children,
+  submitLabel,
+  showSubmitButton = true,
+  className,
+}: ShiftRegistrationFormProps) {
   const { t } = useTranslation()
   const [fieldErrors, setFieldErrors] = useState<ShiftRegistrationFieldErrors>({})
   const dateId = useId()
@@ -151,49 +205,59 @@ export function ShiftRegistrationForm({ values, masterData, onValuesChange, onSu
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-      <DateField
-        id={dateId}
-        label={t('shiftStart.fields.date')}
-        value={values.shiftDate}
-        error={translatedError(fieldErrors.shiftDate)}
-        onChange={(value) => updateField('shiftDate', value)}
-      />
-      <SelectField
-        id={shiftCodeId}
-        label={t('shiftStart.fields.shiftCode')}
-        value={values.shiftCode}
-        error={translatedError(fieldErrors.shiftCode)}
-        placeholder={t('shiftStart.fields.selectShiftCode')}
-        options={ALLOWED_SHIFT_CODES.map((code) => ({
-          value: code,
-          label: t(`shiftStart.shiftCodeOptions.${code}`),
-        }))}
-        onChange={(value) => updateField('shiftCode', value)}
-      />
-      <SelectField
-        id={sectorCodeId}
-        label={t('shiftStart.fields.sectorCode')}
-        value={values.sectorCode}
-        error={translatedError(fieldErrors.sectorCode)}
-        placeholder={t('shiftStart.fields.selectSectorCode')}
-        options={masterData.sectors.map((sector) => ({ value: sector.code as string, label: sector.code as string }))}
-        onChange={(value) => updateField('sectorCode', value)}
-      />
-      <SelectField
-        id={samplingHouseCodeId}
-        label={t('shiftStart.fields.samplingHouseCode')}
-        value={values.samplingHouseCode}
-        error={translatedError(fieldErrors.samplingHouseCode)}
-        disabled={!values.sectorCode}
-        placeholder={t('shiftStart.fields.selectSamplingHouseCode')}
-        options={samplingHouseOptions}
-        onChange={(value) => updateField('samplingHouseCode', value)}
-      />
+    <form id="work-setup-form" onSubmit={handleSubmit} noValidate className={cn('flex flex-col gap-4', className)}>
+      <section className="flex flex-col gap-2" aria-labelledby="time-location-title">
+        <h2 id="time-location-title" className="text-base font-semibold">
+          {t('workSetup.timeLocation')}
+        </h2>
+        <div className="grid grid-cols-[3fr_2fr] gap-2" data-testid="time-location-row-1">
+          <DateField
+            id={dateId}
+            label={t('shiftStart.fields.date')}
+            placeholder={t('shiftStart.fields.date')}
+            value={values.shiftDate}
+            error={translatedError(fieldErrors.shiftDate)}
+            onChange={(value) => updateField('shiftDate', value)}
+          />
+          <SelectField
+            id={shiftCodeId}
+            label={t('shiftStart.fields.shiftCode')}
+            value={values.shiftCode}
+            error={translatedError(fieldErrors.shiftCode)}
+            placeholder={t('shiftStart.fields.selectShiftCode')}
+            options={ALLOWED_SHIFT_CODES.map((code) => ({
+              value: code,
+              label: t(`shiftStart.shiftCodeOptions.${code}`),
+            }))}
+            onChange={(value) => updateField('shiftCode', value)}
+          />
+        </div>
+        <div className="flex flex-col gap-2" data-testid="time-location-row-2">
+          <SelectField
+            id={sectorCodeId}
+            label={t('shiftStart.fields.sectorCode')}
+            value={values.sectorCode}
+            error={translatedError(fieldErrors.sectorCode)}
+            placeholder={t('shiftStart.fields.selectSectorCode')}
+            options={masterData.sectors.map((sector) => ({ value: sector.code as string, label: sector.code as string }))}
+            onChange={(value) => updateField('sectorCode', value)}
+          />
+          <SelectField
+            id={samplingHouseCodeId}
+            label={t('shiftStart.fields.samplingHouseCode')}
+            value={values.samplingHouseCode}
+            error={translatedError(fieldErrors.samplingHouseCode)}
+            disabled={!values.sectorCode}
+            placeholder={t('shiftStart.fields.selectSamplingHouseCode')}
+            options={samplingHouseOptions}
+            onChange={(value) => updateField('samplingHouseCode', value)}
+          />
+        </div>
+      </section>
 
-      <Button type="submit" size="lg" className="mt-2 w-full">
-        {t('shiftStart.form.submit')}
-      </Button>
+      {children}
+
+      {showSubmitButton ? <Button type="submit" size="lg" className="w-full">{submitLabel ?? t('shiftStart.form.submit')}</Button> : null}
     </form>
   )
 }

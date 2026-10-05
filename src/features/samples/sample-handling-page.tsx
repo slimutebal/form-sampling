@@ -42,6 +42,10 @@ export interface SampleHandlingPageProps {
   store: SampleHandlingStore
   /** Injectable so tests can supply a fixed id instead of a random UUID. */
   generateSamplePositionId?: SamplePositionIdGenerator
+  /** Record workspace supplies its own mode switch/header. */
+  embedded?: boolean
+  /** Incremented by Record's contextual Add button to bring the existing form into view. */
+  addRequest?: number
 }
 
 type LoadPhase =
@@ -71,6 +75,8 @@ export function SampleHandlingPage({
   deliveryDestinations,
   store,
   generateSamplePositionId = defaultGenerateSamplePositionId,
+  embedded = false,
+  addRequest = 0,
 }: SampleHandlingPageProps) {
   const { t } = useTranslation()
 
@@ -89,6 +95,11 @@ export function SampleHandlingPage({
   const [saveErrorCode, setSaveErrorCode] = useState<string>()
   const [successMessage, setSuccessMessage] = useState<string>()
   const isSubmittingRef = useRef(false)
+  const formRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (addRequest > 0) formRef.current?.scrollIntoView({ block: 'start' })
+  }, [addRequest])
 
   useEffect(() => {
     let cancelled = false
@@ -378,7 +389,7 @@ export function SampleHandlingPage({
   if (phase.kind === 'loading') {
     return (
       <div>
-        <PageHeader title={t('sampleHandling.title')} />
+        {!embedded ? <PageHeader title={t('sampleHandling.title')} /> : null}
         <div className="px-5 py-4" aria-live="polite">
           <p className="text-sm text-muted-foreground">{t('sampleHandling.loading')}</p>
         </div>
@@ -389,7 +400,7 @@ export function SampleHandlingPage({
   if (phase.kind === 'error') {
     return (
       <div>
-        <PageHeader title={t('sampleHandling.title')} />
+        {!embedded ? <PageHeader title={t('sampleHandling.title')} /> : null}
         <div className="px-5 py-4">
           <Card>
             <CardContent role="alert" className="flex flex-col gap-3">
@@ -420,7 +431,7 @@ export function SampleHandlingPage({
 
   return (
     <div>
-      <PageHeader title={t('sampleHandling.title')} />
+      {!embedded ? <PageHeader title={t('sampleHandling.title')} /> : null}
       <div className="flex flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <Card>
           <CardContent className="flex flex-row justify-between gap-4">
@@ -450,6 +461,7 @@ export function SampleHandlingPage({
           <PendingSampleList pendingSamplePiles={pendingSamplePiles} onHandleSample={handleHandleSample} />
         </div>
 
+        <div ref={formRef}>
         <SampleHandlingForm
           pileOptions={pileOptions}
           selectedPile={selectedPile}
@@ -478,6 +490,7 @@ export function SampleHandlingPage({
           saving={saving}
           canSubmit={canSubmit}
         />
+        </div>
 
         {saveErrorCode ? (
           <p role="alert" className="text-sm text-red-600">

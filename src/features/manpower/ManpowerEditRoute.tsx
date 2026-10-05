@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useOutletContext, useNavigate } from 'react-router'
+import { useLocation, useOutletContext, useNavigate } from 'react-router'
 import type { ActiveWorkspaceContext } from '@/app/router/AppLayout'
 import { localOperationalStore } from '@/app/local-operational-store'
 import type { ManpowerAssignment } from '@/domain/manpower/manpower-assignment'
@@ -20,6 +20,8 @@ import { ManpowerEditPage } from '@/features/manpower/manpower-edit-page'
 export function ManpowerEditRoute() {
   const { workspace, refreshWorkspace } = useOutletContext<ActiveWorkspaceContext>()
   const navigate = useNavigate()
+  const location = useLocation()
+  const returnTo = (location.state as { readonly returnTo?: string } | null)?.returnTo === '/regist' ? '/regist' : '/home'
   const [saving, setSaving] = useState(false)
   const [saveErrorKey, setSaveErrorKey] = useState<string>()
 
@@ -34,7 +36,7 @@ export function ManpowerEditRoute() {
         return
       }
       refreshWorkspace()
-      navigate('/home')
+      navigate(returnTo)
     } finally {
       setSaving(false)
     }
@@ -45,7 +47,7 @@ export function ManpowerEditRoute() {
       masterData={workspace.masterData}
       initialAssignments={workspace.manpower}
       onSave={(manpower) => void handleSave(manpower)}
-      onCancel={() => navigate('/home')}
+      onCancel={() => navigate(returnTo)}
       saving={saving}
       saveErrorKey={saveErrorKey}
     />

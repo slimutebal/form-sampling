@@ -7,6 +7,8 @@ export interface FleetSetupDraftEntry {
   /** Blank Pile_ID means "no destination configured" (Phase 18 §5). */
   readonly destinationPileId: string
   readonly haulerCode: string
+  /** Canonical `COMP-Exc_NNNN`; undefined is accepted only for legacy draft data. */
+  readonly excaCode?: string
   readonly kind: FleetSetupDraftKind
   readonly referenceFleetId: string
   readonly truckIds: readonly string[]
@@ -20,6 +22,7 @@ export function createEmptyFleetSetupDraftEntry(fleetId: string): FleetSetupDraf
     frontNumber: '',
     destinationPileId: '',
     haulerCode: '',
+    excaCode: '',
     kind: 'BASE',
     referenceFleetId: '',
     truckIds: [],

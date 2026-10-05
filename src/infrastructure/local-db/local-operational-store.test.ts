@@ -29,6 +29,7 @@ import {
 } from './local-db-test-fixtures'
 import { CURRENT_SHIFT_METADATA_KEY } from './records'
 import { LocalOperationalStore } from './local-operational-store'
+import type { PileRegistrationDraft } from '../../application/pile-registration/pile-registration-draft'
 
 function must<T>(result: { ok: boolean; value?: T }): T {
   if (!result.ok) throw new Error('invalid test fixture')
@@ -127,6 +128,65 @@ describe('LocalOperationalStore — shift workspace', () => {
     // constraint anywhere in this persistence path.
     expect(loaded.value?.manpower).toEqual(manpower)
     reopenedStore.close()
+  })
+
+  it('B4. pile registrations persist separately from unique operational Piles and retain repeated Pile IDs', async () => {
+    const databaseName = uniqueDatabaseName()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    const pileRegistrations: readonly PileRegistrationDraft[] = [
+      { pileId: fixturePileId('PILE-1'), oreCode: must(parseOreCode('SAP')), batch: must(parseBatchNumber(2)), rit: must(parseRitNumber(2)), status: 'ACTIVE' },
+      { pileId: fixturePileId('PILE-1'), oreCode: must(parseOreCode('SAP')), batch: must(parseBatchNumber(6)), rit: must(parseRitNumber(6)), status: 'ACTIVE' },
+      { pileId: fixturePileId('PILE-2'), oreCode: must(parseOreCode('SAP')), batch: must(parseBatchNumber(5)), rit: must(parseRitNumber(5)), status: 'INACTIVE' },
+    ]
+
+    const firstStore = new LocalOperationalStore(databaseName)
+    const initialized = await firstStore.initializeShiftWorkspace({
+      shift,
+      piles: [buildFixtureSapPile('PILE-1')],
+      masterData,
+      fleetSetup,
+      pileRegistrations,
+    })
+    expect(initialized.ok).toBe(true)
+    firstStore.close()
+
+    const reopenedStore = new LocalOperationalStore(databaseName)
+    const loaded = await reopenedStore.loadCurrentShiftWorkspace()
+    expect(loaded.ok).toBe(true)
+    if (!loaded.ok) return
+    expect(loaded.value?.piles).toHaveLength(1)
+    expect(loaded.value?.pileRegistrations).toEqual(pileRegistrations)
+    reopenedStore.close()
+  })
+
+  it('B5. a workspace record written before pile registrations existed restores an empty registration list', async () => {
+    const databaseName = uniqueDatabaseName()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-LEGACY')
+    const legacyDb = new Dexie(databaseName)
+    legacyDb.version(5).stores({
+      shiftWorkspaces: 'shiftId',
+      haulageTransactions: 'id, shiftId, pileId, [shiftId+pileId]',
+      metadata: 'key',
+      samplePositions: 'id, shiftId, pileId, [shiftId+pileId]',
+      importHistory: 'fingerprint',
+      masterDataCache: 'key',
+      shiftSummarySync: 'shiftId',
+      productionRecords: 'id, shiftId, pileId, [shiftId+pileId]',
+    })
+    await legacyDb.table('shiftWorkspaces').put({ shiftId: shift.id, shift, piles: [], masterData, fleetSetup })
+    await legacyDb.table('metadata').put({ key: CURRENT_SHIFT_METADATA_KEY, value: shift.id })
+    legacyDb.close()
+
+    const store = new LocalOperationalStore(databaseName)
+    const loaded = await store.loadCurrentShiftWorkspace()
+    expect(loaded.ok).toBe(true)
+    if (!loaded.ok) return
+    expect(loaded.value?.pileRegistrations).toEqual([])
+    store.close()
   })
 
   it('C. workspace and current-shift pointer survive close/reopen of the same database', async () => {

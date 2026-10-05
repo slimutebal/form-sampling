@@ -128,6 +128,15 @@ describe('derivePileHaulagePlan', () => {
     ])
   })
 
+  it('uses an active registration as a per-Batch seed after its registered Rit', () => {
+    const result = derivePileHaulagePlan(PILE, buildMasterData(), [], undefined, {
+      pileId: PILE.id, oreCode: PILE.oreCode, batch: must(parseBatchNumber(59)), rit: must(parseRitNumber(16)), status: 'ACTIVE',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value[0]).toEqual({ batchNumber: 59, ritNumber: 17 })
+  })
+
   it('E. a Pile whose Ore has no OreSamplingConfig fails explicitly', () => {
     const unconfiguredPile = createPile(must(parsePileId('PILE-2')), must(parseOreCode('LIM')))
 

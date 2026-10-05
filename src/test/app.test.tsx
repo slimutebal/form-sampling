@@ -22,7 +22,7 @@ describe('application shell', () => {
 
   it('renders the welcome screen at the root route', () => {
     renderApp(['/'])
-    expect(screen.getByRole('heading', { name: 'Form Sampling' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Quality Assurance' })).toBeInTheDocument()
   })
 
   it('does not render bottom navigation on the pre-operational start route', () => {
@@ -37,7 +37,7 @@ describe('application shell', () => {
 
   it('an active route without a workspace redirects to /start rather than rendering a broken active screen', async () => {
     renderApp(['/piles'])
-    expect(await screen.findByRole('heading', { name: 'Registrasi Shift' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'WORK SETUP' })).toBeInTheDocument()
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
 })

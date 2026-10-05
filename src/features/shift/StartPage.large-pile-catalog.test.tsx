@@ -5,11 +5,12 @@ import { I18nextProvider } from 'react-i18next'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { localOperationalStore } from '@/app/local-operational-store'
 import { parseOreCode, parseSamplingHouseCode, parseSectorCode } from '@/domain/common/codes'
-import { parsePileId, parseTruckId } from '@/domain/common/identifiers'
+import { parseEmployeeId, parsePileId, parseTruckId } from '@/domain/common/identifiers'
 import { parseHaulerCode, parsePileAreaCode } from '@/domain/master/master-codes'
 import { createMasterData, type MasterData } from '@/domain/master/master-data'
 import {
   createHaulerReference,
+  createEmployeeReference,
   createPileAreaReference,
   createSamplingHouseReference,
   createSectorReference,
@@ -34,7 +35,7 @@ function buildLargeCatalogMasterData(): MasterData {
   )
   return must(
     createMasterData({
-      employees: [],
+      employees: [createEmployeeReference(must(parseEmployeeId('RAHARJO-1')), 'Raharjo Rahman')],
       crews: [],
       sectors: [createSectorReference(br1)],
       locations: [],
@@ -59,7 +60,7 @@ function renderStartPage() {
     <I18nextProvider i18n={i18n}>
       <MemoryRouter initialEntries={['/start']}>
         <Routes>
-          <Route path="/start" element={<StartPage />} />
+          <Route path="/start/*" element={<StartPage />} />
           <Route path="/home" element={<div>HOME_PAGE_MARKER</div>} />
         </Routes>
       </MemoryRouter>
@@ -82,20 +83,19 @@ describe('StartPage setup orchestration — large master pile catalog', () => {
     fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'DS' } })
     fireEvent.change(screen.getByLabelText('Sector'), { target: { value: 'BR1' } })
     fireEvent.change(screen.getByLabelText('Sampling House'), { target: { value: 'SH_01' } })
-    await user.click(screen.getByRole('button', { name: 'Review Registration' }))
-    await screen.findByText('Registration is ready for setup.')
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.type(screen.getByLabelText('Search NIK / Name'), 'Raharjo')
+    await user.click(await screen.findByRole('button', { name: /Raharjo Rahman/ }))
+    await user.click(screen.getByRole('checkbox', { name: 'Set Raharjo Rahman as Checker' }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
 
-    await user.click(await screen.findByRole('button', { name: 'Start Without Previous File' }))
-
-    await screen.findByRole('heading', { name: 'Shift Manpower' })
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(await screen.findByRole('button', { name: 'New Setup' }))
+    await user.click(await screen.findByRole('button', { name: 'Lanjut' }))
 
     await user.click(await screen.findByRole('button', { name: 'Add Front' }))
     await user.selectOptions(screen.getByLabelText('Front No'), '01')
     await user.selectOptions(screen.getByLabelText('Hauler'), 'H1')
-    await user.selectOptions(screen.getByLabelText('Add Truck'), 'T1')
-    await user.click(screen.getByRole('button', { name: 'Add Truck' }))
+    await user.type(screen.getByLabelText('Search Truck / Unit Number'), 'T1')
+    await user.click(screen.getByRole('button', { name: 'T1' }))
     await user.click(screen.getByRole('button', { name: 'Save Front' }))
     await user.click(screen.getByRole('button', { name: 'Review Fleet Setup' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
@@ -106,5 +106,5 @@ describe('StartPage setup orchestration — large master pile catalog', () => {
     if (!workspace.ok || !workspace.value) throw new Error('expected an initialized workspace')
     expect(workspace.value.piles).toHaveLength(0)
     expect(workspace.value.masterData.pileAreas).toHaveLength(500)
-  })
+  }, 15_000)
 })

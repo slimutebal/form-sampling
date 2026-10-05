@@ -21,6 +21,9 @@ const FLEET_ERROR_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   FLEET_TRUCK_HAULER_MISMATCH: 'fleetSetup.errors.haulerMismatch',
   FLEET_DEPENDENCY_EXISTS: 'fleetSetup.errors.dependency',
   FLEET_DESTINATION_PILE_NOT_FOUND: 'fleetSetup.errors.destinationNotFound',
+  INVALID_EXCA_CODE: 'fleetSetup.errors.excaRequired',
+  INVALID_EXCA_NUMBER: 'fleetSetup.errors.excaInvalid',
+  EXCA_COMPANY_REQUIRED: 'fleetSetup.errors.haulerRequired',
 }
 
 export function fleetErrorTranslationKey(code: string): string {

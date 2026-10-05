@@ -5,6 +5,7 @@ import { createFrontDefinition, createFrontId } from '@/domain/fleet/front'
 import {
   operationalFleetOptionForFront,
   operationalFleetOptions,
+  operationalFleetOptionsForDestinationPile,
   operationalFleetOptionsForPile,
 } from './operational-fleet-options'
 import {
@@ -134,6 +135,30 @@ describe('operationalFleetOptionsForPile', () => {
     expect(resultForDestA.ok).toBe(true)
     if (!resultForDestA.ok) return
     expect(resultForDestA.value).toHaveLength(1)
+  })
+})
+
+describe('operationalFleetOptionsForDestinationPile', () => {
+  it('requires an explicit matching destination and keeps only ACTIVE Fronts', () => {
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildScopedFleetSetup(masterData)
+
+    const result = operationalFleetOptionsForDestinationPile(masterData, fleetSetup, fixturePileId('DEST-A'))
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.map((option) => option.frontId)).toEqual([must(createFrontId(masterData.sectors[0]!.code, 2))])
+  })
+
+  it('does not admit a legacy Front with no destination into truck-first Production', () => {
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+
+    const result = operationalFleetOptionsForDestinationPile(masterData, fleetSetup, fixturePileId('ANY_PILE'))
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toEqual([])
   })
 })
 

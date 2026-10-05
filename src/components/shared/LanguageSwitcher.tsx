@@ -1,10 +1,26 @@
 import { useTranslation } from 'react-i18next'
 import { type SupportedLanguage, supportedLanguages } from '@/i18n'
 
-export function LanguageSwitcher() {
+interface LanguageSwitcherProps {
+  compact?: boolean
+}
+
+export function LanguageSwitcher({ compact = false }: LanguageSwitcherProps) {
   const { t, i18n } = useTranslation()
   const current = i18n.language as SupportedLanguage
 
+  if (compact) {
+    return (
+      <select
+        value={current}
+        onChange={(event) => void i18n.changeLanguage(event.target.value)}
+        aria-label={t('settings.language')}
+        className="h-11 rounded-md border border-border bg-background px-2 text-sm font-medium"
+      >
+        {supportedLanguages.map((lang) => <option key={lang} value={lang}>{lang.toUpperCase()}</option>)}
+      </select>
+    )
+  }
   return (
     <div className="flex items-center gap-2" role="group" aria-label={t('settings.language')}>
       {supportedLanguages.map((lang) => (

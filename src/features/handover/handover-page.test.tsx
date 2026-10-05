@@ -60,7 +60,7 @@ function createDeferred<T>() {
 }
 
 async function selectAnyFile() {
-  const input: HTMLInputElement = screen.getByLabelText('Select Excel File')
+  const input: HTMLInputElement = screen.getByLabelText('Select File')
   const file = new File(['irrelevant'], 'previous-shift.xlsx', {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
@@ -87,8 +87,27 @@ describe('HandoverPage', () => {
     const onStartWithoutPreviousShift = vi.fn()
     renderPage({ readFile: fakeReadFile(baseWorkbook()), onStartWithoutPreviousShift })
 
-    expect(screen.getByRole('button', { name: 'Select Excel File' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Start Without Previous File' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Import File' })).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Paste text report here...')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New Setup' })).toBeInTheDocument()
+  })
+
+  it('only offers Continue Setup when an in-session setup choice exists', async () => {
+    const onContinueExistingChoice = vi.fn()
+    const { rerender, props } = renderPage({ readFile: fakeReadFile(baseWorkbook()) })
+    expect(screen.queryByRole('button', { name: 'Continue Setup' })).not.toBeInTheDocument()
+
+    rerender(<HandoverPage {...props} hasExistingChoice onContinueExistingChoice={onContinueExistingChoice} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Continue Setup' }))
+    expect(onContinueExistingChoice).toHaveBeenCalledOnce()
+  })
+
+  it('keeps pasted report text as local UI only', async () => {
+    const onImportReady = vi.fn()
+    renderPage({ readFile: fakeReadFile(baseWorkbook()), onImportReady })
+    await userEvent.type(screen.getByPlaceholderText('Paste text report here...'), 'unparsed report text')
+    expect(screen.getByPlaceholderText('Paste text report here...')).toHaveValue('unparsed report text')
+    expect(onImportReady).not.toHaveBeenCalled()
   })
 
   it('imports a valid archive: previews multiple CONTINUE pending batches and pending samples, confirm succeeds', async () => {
@@ -240,7 +259,7 @@ describe('HandoverPage', () => {
   it('calls onStartWithoutPreviousShift when chosen', async () => {
     const onStartWithoutPreviousShift = vi.fn()
     renderPage({ readFile: fakeReadFile(baseWorkbook()), onStartWithoutPreviousShift })
-    await userEvent.click(screen.getByRole('button', { name: 'Start Without Previous File' }))
+    await userEvent.click(screen.getByRole('button', { name: 'New Setup' }))
     expect(onStartWithoutPreviousShift).toHaveBeenCalledTimes(1)
   })
 
@@ -300,8 +319,8 @@ describe('HandoverPage', () => {
     // The idle→checking transition reorders sibling elements, so React
     // mounts a fresh <input> node rather than reusing the old one — it must
     // be re-queried after the first dispatch rather than reused.
-    fireEvent.change(screen.getByLabelText('Select Excel File'), { target: { files: [fileA] } })
-    fireEvent.change(screen.getByLabelText('Select Excel File'), { target: { files: [fileB] } })
+    fireEvent.change(screen.getByLabelText('Select File'), { target: { files: [fileA] } })
+    fireEvent.change(screen.getByLabelText('Select File'), { target: { files: [fileB] } })
 
     await waitFor(() => expect(screen.getByText('No pending work in this archive.')).toBeInTheDocument())
 

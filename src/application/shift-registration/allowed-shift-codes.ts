@@ -8,7 +8,7 @@
  * 'D'/'N' shorthand) and this closed set is not yet a confirmed
  * domain-wide rule — only a confirmed registration-form rule.
  */
-export const ALLOWED_SHIFT_CODES = ['DS', 'NS'] as const
+export const ALLOWED_SHIFT_CODES = ['D', 'N'] as const
 
 export type AllowedShiftCode = (typeof ALLOWED_SHIFT_CODES)[number]
 

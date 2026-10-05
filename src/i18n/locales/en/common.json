@@ -14,6 +14,28 @@
     "subtitle": "Field ore sampling and shift reporting.",
     "continue": "Continue"
   },
+  "landing": {
+    "title": "Ore Quality Assurance",
+    "subtitle": "Production & Sampling Record System",
+    "newRecord": "New Record",
+    "resumeRecord": "Continue Record",
+    "searchChecker": "Search / Select Checker…",
+    "date": "Date",
+    "shift": "Shift",
+    "continue": "Continue",
+    "resumeNotFound": "Record was not found on this device."
+    ,"eyebrow": "Quality control platform"
+    ,"productTitle": "Production & Sampling Record System"
+    ,"greeting": "Good morning,"
+    ,"user": "User"
+    ,"tagline": "Elevate workflow with an intelligent field recording system."
+    ,"resumeDescription": "Continue your ongoing data entry."
+    ,"newDescription": "Create a new production or sampling record."
+    ,"quality": "Quality Control"
+    ,"production": "Production Record"
+    ,"sampling": "Sampling Record"
+    ,"monitoring": "Monitoring & Report"
+  },
   "placeholder": {
     "screenNotice": "This screen is a navigation placeholder for Phase 1. No operational features yet."
   },
@@ -43,8 +65,8 @@
       "selectSamplingHouseCode": "Select Sampling House"
     },
     "shiftCodeOptions": {
-      "DS": "DS — Day Shift",
-      "NS": "NS — Night Shift"
+      "D": "D",
+      "N": "N"
     },
     "status": {
       "NEW": "New",
@@ -61,9 +83,9 @@
       "startNewAction": "Start New Shift"
     },
     "form": {
-      "pageTitle": "Shift Registration",
-      "title": "Shift Registration",
-      "submit": "Review Registration"
+      "pageTitle": "WORK SETUP",
+      "title": "WORK SETUP",
+      "submit": "Next"
     },
     "review": {
       "title": "Registration Ready",
@@ -104,13 +126,24 @@
       "initializeFailed": "Unable to start this shift workspace. Please try again."
     }
   },
+  "workSetup": {
+    "timeLocation": "Time & Location",
+    "manpower": "Manpower"
+  },
   "manpower": {
-    "title": "Shift Manpower",
+    "title": "Manpower Setup",
     "search": "Search NIK / Name",
     "searchPlaceholder": "Search NIK / Name…",
     "noResults": "No matching personnel.",
     "add": "+ Add",
     "selectedPersonnel": "Selected Personnel",
+    "supervisors": "Supervisors",
+    "crew": "Crew",
+    "checker": "Checker",
+    "checkerNamed": "Set {{name}} as Checker",
+    "picCount": "{{count}} PIC",
+    "supervisorCount": "{{count}} Pengawas",
+    "crewCount": "{{count}} Crew",
     "noPersonnel": "No personnel added yet.",
     "jobDesk": "Job Desk",
     "picLabel": "Penanggung Jawab",
@@ -121,6 +154,9 @@
     "save": "Save",
     "cancel": "Cancel",
     "errors": {
+      "checkerRequired": "Select exactly one Checker before continuing.",
+      "supervisorRequired": "At least 1 Supervisor is required.",
+      "checkerMustBeStaff": "The selected Checker must be a Staff/PIC person.",
       "duplicatePerson": "This person has already been added.",
       "jobDeskRequired": "Job Desk is required.",
       "personNotFound": "This person was not found in the Employee/Crew master.",
@@ -220,7 +256,18 @@
     }
   },
   "fleetSetup": {
-    "title": "Fleet Setup",
+    "title": "FLEET SETUP",
+    "registeredFleet": "Registered Fleet",
+    "fleetCount": "{{count}} Fleet",
+    "addFleet": "+ Fleet",
+    "addFleetTitle": "TAMBAH FLEET",
+    "noFleets": "No Fleet registered yet.",
+    "frontCode": "Front Code",
+    "company": "Company",
+    "excaNumber": "Exca Hull Number",
+    "operatingTruckUnits": "Operating Truck Units",
+    "saveFleet": "Save Fleet",
+    "destinationRequired": "Select a Destination/Pile.",
     "fronts": "Fronts",
     "addFront": "Add Front",
     "editFront": "Edit Front",
@@ -238,6 +285,9 @@
     "noReference": "None",
     "frontReference": "Front {{frontId}}",
     "allowedTrucks": "Allowed Trucks",
+    "searchTruck": "Search Truck / Unit Number",
+    "searchTruckPlaceholder": "Search Truck / Unit Number",
+    "truckNotFound": "No matching truck found.",
     "addTruck": "Add Truck",
     "removeTruck": "Remove Truck",
     "removeTruckNamed": "Remove {{truckId}}",
@@ -260,9 +310,9 @@
     "continue": "Continue",
     "noFronts": "No fronts configured yet.",
     "errors": {
-      "empty": "Add at least one front before reviewing the fleet setup.",
+      "empty": "Add at least one Fleet before continuing.",
       "frontRequired": "Select a Front No (1–25).",
-      "haulerRequired": "Select a Hauler.",
+      "haulerRequired": "Select a Company.",
       "truckRequired": "Select a valid Truck ID.",
       "referenceRequired": "Select a reference fleet.",
       "duplicateFront": "Front No must be unique.",
@@ -278,6 +328,9 @@
       "haulerMismatch": "Every effective truck must belong to the selected Hauler.",
       "dependency": "This front cannot be removed because another fleet references it.",
       "destinationNotFound": "This destination Pile was not found in this Sector's master data.",
+      "destinationRequired": "Select a Destination/Pile.",
+      "excaRequired": "Enter an Exca hull number.",
+      "excaInvalid": "Exca hull number must contain 1 to 4 digits.",
       "generic": "Fleet Setup could not be validated. Review the configuration and try again."
     }
   },
@@ -311,9 +364,9 @@
     "title": "Pile Operation",
     "ore": "Ore",
     "batch": "Batch",
-    "nextRit": "Next Rit",
+    "nextRit": "Next Trip",
     "sampleCount": "Sample",
-    "rit": "Rit",
+    "rit": "Trip",
     "sampleRequired": "Sample Required",
     "noSample": "No Sample",
     "increment": "Increment",
@@ -326,7 +379,7 @@
     "recording": "Recording…",
     "recorded": "Recorded",
     "sampled": "Sampled",
-    "recordedFeedback": "Rit {{rit}} recorded",
+    "recordedFeedback": "Trip {{rit}} recorded",
     "skipped": "Skipped",
     "recordedPositions": "Recorded Positions",
     "skippedPositions": "Skipped Positions",
@@ -336,7 +389,7 @@
     "initialPosition": {
       "title": "Initial Position",
       "batchAwal": "Batch Awal",
-      "ritAwal": "Rit Awal",
+      "ritAwal": "Trip Awal",
       "confirm": "Confirm",
       "confirming": "Confirming…",
       "change": "Change Starting Position",
@@ -351,7 +404,7 @@
       "operationalContextInvalid": "Truck selection is no longer valid for this Front. Reselect Front and Truck and try again.",
       "storeContextInvalid": "This Pile is not part of the active shift workspace.",
       "duplicateTransaction": "This haulage entry was already recorded.",
-      "startPositionInvalid": "Enter a valid Batch and Rit (whole numbers, 1 or higher).",
+      "startPositionInvalid": "Enter a valid Batch and Trip (whole numbers, 1 or higher).",
       "startPositionLocked": "The starting position is locked because haulage has already been recorded for this Pile.",
       "generic": "Something went wrong. Please try again."
     }
@@ -366,12 +419,12 @@
     "pile": "Pile",
     "ore": "Ore",
     "batch": "Batch",
-    "ritFrom": "Rit From",
-    "ritTo": "Rit To",
+    "ritFrom": "Trip From",
+    "ritTo": "Trip To",
     "selectPile": "Select Pile",
     "selectBatch": "Select Batch",
-    "selectRitFrom": "Select Rit From",
-    "selectRitTo": "Select Rit To",
+    "selectRitFrom": "Select Trip From",
+    "selectRitTo": "Select Trip To",
     "sampleRange": "Sample Range",
     "totalBag": "Total Bag",
     "deliveryStatus": "Delivery Status",
@@ -385,7 +438,7 @@
     "saveSamplePosition": "Save Sample Position",
     "saving": "Saving…",
     "saved": "Sample position saved",
-    "noPendingSamples": "No samples to handle yet. Samples appear automatically once a sampling rit is recorded on a Pile.",
+    "noPendingSamples": "No samples to handle yet. Samples appear automatically once a sampling Trip is recorded on a Pile.",
     "noHandledSamples": "No Handled Samples",
     "loading": "Loading Samples…",
     "retry": "Retry",
@@ -404,16 +457,20 @@
     }
   },
   "handover": {
-    "title": "Previous Shift",
+    "title": "SHIFT HANDOVER",
     "description": "Import previous shift archive to continue pending work.",
-    "selectFile": "Select Excel File",
+    "selectFile": "Select File",
+    "importFile": "Import File",
+    "pasteTextReport": "Paste text report here...",
+    "newSetup": "New Setup",
+    "continueSetup": "Continue Setup",
     "startWithoutPreviousShift": "Start Without Previous File",
     "checkingFile": "Checking file…",
     "previewTitle": "Handover Preview",
     "previousShift": "Previous Shift",
     "pendingPiles": "Pending Piles",
     "pendingSamples": "Pending Samples",
-    "batchLastRit": "Batch {{batch}} → last Rit {{rit}}",
+    "batchLastRit": "Batch {{batch}} → last Trip {{rit}}",
     "continueStatus": "CONTINUE",
     "holdStatus": "HOLD",
     "holdPreserved": "Preserved (not active)",

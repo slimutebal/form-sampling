@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Navigate, Outlet } from 'react-router'
+import { Navigate, Outlet, useLocation } from 'react-router'
 import { localOperationalStore } from '@/app/local-operational-store'
 import { useCurrentWorkspace } from '@/app/hooks/useCurrentWorkspace'
 import { BottomNav } from '@/components/shared/BottomNav'
@@ -30,12 +30,14 @@ export interface ActiveWorkspaceContext {
 export function AppLayout() {
   const { t } = useTranslation()
   const [phase, handleRetry] = useCurrentWorkspace(localOperationalStore)
+  const { pathname } = useLocation()
+  const setupRoute = pathname === '/regist'
 
   return (
-    <div className="safe-x mx-auto flex min-h-dvh w-full max-w-md flex-col">
+    <div className="safe-x mx-auto flex h-dvh min-h-0 w-full max-w-md flex-col overflow-hidden">
       <SafeAreaTopCap />
-      <GlobalStatusBar syncReader={localOperationalStore} activeShiftReader={localOperationalStore} />
-      <main className="flex-1 pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
+      {!setupRoute ? <GlobalStatusBar syncReader={localOperationalStore} activeShiftReader={localOperationalStore} /> : null}
+      <main className="min-h-0 flex-1 overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
         {phase.kind === 'loading' ? (
           <div className="px-5 py-4" aria-live="polite">
             <p className="text-sm text-muted-foreground">{t('activeShell.loading')}</p>

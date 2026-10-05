@@ -1,44 +1,29 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
-import { deriveExpectedRitsForBatch, derivePileHaulagePlan } from '@/application/haulage-operation/derive-pile-haulage-plan'
-import { deriveHaulageProgress } from '@/application/haulage-operation/derive-haulage-progress'
-import {
-  generateHaulageTransactionId as defaultGenerateHaulageTransactionId,
-  type HaulageTransactionIdGenerator,
-} from '@/application/haulage-operation/haulage-id-generator'
-import { previewNextSampling } from '@/application/haulage-operation/next-sampling-preview'
-import { operationalFleetOptionsForPile } from '@/application/haulage-operation/operational-fleet-options'
-import { selectEffectiveTransactions } from '@/application/production/effective-production'
+import { adjustFrontFleet } from '@/application/fleet-setup/adjust-front-fleet'
+import { deriveExpectedRitsForBatch } from '@/application/haulage-operation/derive-pile-haulage-plan'
+import { generateHaulageTransactionId as defaultGenerateHaulageTransactionId, type HaulageTransactionIdGenerator } from '@/application/haulage-operation/haulage-id-generator'
+import { operationalFleetOptionsForDestinationPile, type OperationalFleetOption } from '@/application/haulage-operation/operational-fleet-options'
 import { deriveMissedRits } from '@/application/production/missed-rit'
+import { currentPositionForRegistration, deriveOperationalBatchStates, formatBatchCode, formatTripWithinBatch, hasEffectiveProductionForRegistration, nextPositionForRegistration } from '@/application/production/production-record-presentation'
 import type { ProductionRecordStore } from '@/application/production/production-record-store'
 import { recordProduction } from '@/application/production/record-production'
 import { resolveProductionRecorder } from '@/application/production/resolve-production-recorder'
-import { PageHeader } from '@/components/shared/PageHeader'
-import { SearchableCombobox } from '@/components/shared/SearchableCombobox'
+import type { PileRegistrationDraft } from '@/application/pile-registration/pile-registration-draft'
+import { parseBatchNumber } from '@/domain/batch/batch-number'
+import { parseRitNumber } from '@/domain/batch/rit-number'
+import type { BatchPosition } from '@/domain/batch/batch-position'
+import type { FleetSetup } from '@/domain/fleet/fleet-setup'
+import { displayExcaCode } from '@/domain/fleet/exca-code'
+import type { PendingBatchCarryOver } from '@/domain/handover/carry-over-pending-batch'
+import type { ManpowerAssignment } from '@/domain/manpower/manpower-assignment'
+import { findOreSamplingConfig, findPileArea, type MasterData } from '@/domain/master/master-data'
+import type { Pile } from '@/domain/pile/pile'
+import { CONTAMINATIONS, DISPOSITIONS, PHYSICAL_CONDITIONS, type Contamination, type Disposition, type PhysicalCondition, type ProductionRecord } from '@/domain/production/production-record'
+import type { Shift } from '@/domain/shift/shift'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/components/ui/cn'
-import type { BatchPosition } from '@/domain/batch/batch-position'
-import type { PendingBatchCarryOver } from '@/domain/handover/carry-over-pending-batch'
-import { findOreSamplingConfig, type MasterData } from '@/domain/master/master-data'
-import type { FleetSetup } from '@/domain/fleet/fleet-setup'
-import type { ManpowerAssignment } from '@/domain/manpower/manpower-assignment'
-import type { Pile } from '@/domain/pile/pile'
-import {
-  CONTAMINATIONS,
-  DISPOSITIONS,
-  PHYSICAL_CONDITIONS,
-  type Contamination,
-  type Disposition,
-  type PhysicalCondition,
-  type ProductionRecord,
-} from '@/domain/production/production-record'
-import type { Shift } from '@/domain/shift/shift'
-import {
-  productionRecordErrorTranslationKey,
-  productionRecordLoadErrorTranslationKey,
-} from '@/features/production/production-record-error-messages'
 
 export interface ProductionRecordEntryProps {
   shift: Shift
@@ -47,576 +32,263 @@ export interface ProductionRecordEntryProps {
   fleetSetup: FleetSetup
   manpower: readonly ManpowerAssignment[]
   pendingBatches: readonly PendingBatchCarryOver[]
-  /**
-   * Missed-Rit correction target (Phase 3 §9): when set, this exact
-   * Batch/Rit is recorded instead of the auto-derived next position, and
-   * the normal "plan exhausted" gating is skipped — a past gap may still
-   * need filling even once the forward plan is otherwise exhausted. The
-   * target is re-validated as still MISSED (from the freshly loaded
-   * ProductionRecord history) before it may be saved; if it is no longer
-   * missed (e.g. already corrected elsewhere), saving is blocked with an
-   * explicit message rather than silently falling back to the
-   * auto-derived next position. This is never a manual Rit input — the
-   * caller (route/query context) supplies it, the operator never types
-   * it.
-   */
+  /** Direct-route compatibility: one preselected active registration. */
+  registration?: PileRegistrationDraft
+  /** Record workspace uses this list to make the Batch selection explicit. */
+  registrations?: readonly PileRegistrationDraft[]
+  /** Full workspace rows are needed to persist an explicit successor link. */
+  allPileRegistrations?: readonly PileRegistrationDraft[]
   targetPosition?: BatchPosition
-  /** Production callers pass the app-wide LocalOperationalStore singleton (it structurally satisfies this port); tests pass a lightweight fake. */
   store: ProductionRecordStore
-  /** Injectable so tests can supply a fixed id instead of a random UUID. */
   generateTransactionId?: HaulageTransactionIdGenerator
-  /** Injectable so tests can supply a fixed clock instead of `new Date()`. */
   now?: () => Date
+  onFleetUpdated?: () => void
+  onPileRegistrationsUpdated?: (registrations: readonly PileRegistrationDraft[]) => Promise<boolean>
+  onRecorded?: () => void
+  onClose?: () => void
+  /** The Record workspace already renders the selected Pile context. */
+  showPileContext?: boolean
 }
 
 type LoadPhase =
   | { readonly kind: 'loading' }
   | { readonly kind: 'error'; readonly code: string }
-  | { readonly kind: 'loaded'; readonly productionRecords: readonly ProductionRecord[] }
+  | { readonly kind: 'loaded'; readonly records: readonly ProductionRecord[] }
 
-/**
- * The Production Record entry screen (Phase 2 — Production Record final
- * UI + write flow): a single screen for one Pile that lets the operator
- * pick Front No/Truck, record Physical Condition/Contamination/
- * Disposition/Keterangan, and save. Batch/Rit are never manual input —
- * they are derived automatically from the effective (ACCEPT + ACTIVE)
- * ProductionRecord history via `derivePileHaulagePlan`/
- * `deriveHaulageProgress` (the same engines the Pile Haulage checker
- * used, now filtered through `selectEffectiveTransactions` so a REJECT
- * never advances the position). ACCEPT saves immediately; REJECT always
- * requires an explicit confirmation step before anything is persisted.
- * Both dispositions persist through the single atomic
- * `store.addProductionTransaction` write path — this screen never calls
- * a HaulageTransaction-only save.
- */
+/** Production entry order is Pile context, Batch, Fleet, Truck, then observation fields. */
 export function ProductionRecordEntry({
-  shift,
-  pile,
-  masterData,
-  fleetSetup,
-  manpower,
-  pendingBatches,
-  targetPosition,
-  store,
-  generateTransactionId = defaultGenerateHaulageTransactionId,
-  now = () => new Date(),
+  shift, pile, masterData, fleetSetup, manpower, pendingBatches, registration, registrations, allPileRegistrations,
+  targetPosition, store, generateTransactionId = defaultGenerateHaulageTransactionId,
+  now = () => new Date(), onFleetUpdated, onPileRegistrationsUpdated, onRecorded, onClose, showPileContext = true,
 }: ProductionRecordEntryProps) {
-  const { t } = useTranslation('production')
   const navigate = useNavigate()
-
   const [phase, setPhase] = useState<LoadPhase>({ kind: 'loading' })
   const [reloadToken, setReloadToken] = useState(0)
-  const [selectedFrontId, setSelectedFrontId] = useState('')
+  const [activeFleetSetup, setActiveFleetSetup] = useState(fleetSetup)
+  const registeredRegistrations = registrations ?? (registration ? [registration] : [])
+  const [selectedBatch, setSelectedBatch] = useState(registration ? String(Number(registration.batch)) : '')
+  const [selectedSuccessorBatch, setSelectedSuccessorBatch] = useState('')
+  const [selectedFleetId, setSelectedFleetId] = useState('')
+  const [fleetOpen, setFleetOpen] = useState(false)
   const [selectedTruckId, setSelectedTruckId] = useState('')
   const [truckQuery, setTruckQuery] = useState('')
-  const [physicalCondition, setPhysicalCondition] = useState<PhysicalCondition | ''>('')
+  const [condition, setCondition] = useState<PhysicalCondition | ''>('')
   const [contamination, setContamination] = useState<Contamination | ''>('')
   const [disposition, setDisposition] = useState<Disposition>('ACCEPT')
   const [remark, setRemark] = useState('')
-  const [confirmingReject, setConfirmingReject] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [errorCode, setErrorCode] = useState<string>()
-  const [successMessage, setSuccessMessage] = useState<string>()
-  const isSubmittingRef = useRef(false)
+  const [error, setError] = useState('')
+  const [quickOpen, setQuickOpen] = useState(false)
+  const [quickQuery, setQuickQuery] = useState('')
+  const [quickTruckId, setQuickTruckId] = useState('')
+  const [quickSaving, setQuickSaving] = useState(false)
+  const [confirmingReject, setConfirmingReject] = useState(false)
+  const submitting = useRef(false)
 
+  useEffect(() => setActiveFleetSetup(fleetSetup), [fleetSetup])
   useEffect(() => {
     let cancelled = false
     setPhase({ kind: 'loading' })
-
     void store.listProductionRecordsForShiftPile(shift.id, pile.id).then((result) => {
-      if (cancelled) return
-      setPhase(result.ok ? { kind: 'loaded', productionRecords: result.value } : { kind: 'error', code: result.error.code })
+      if (!cancelled) setPhase(result.ok ? { kind: 'loaded', records: result.value } : { kind: 'error', code: result.error.code })
     })
-
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [store, shift.id, pile.id, reloadToken])
 
-  const handleRetry = useCallback(() => setReloadToken((token) => token + 1), [])
-
-  const checkerResult = useMemo(() => resolveProductionRecorder(manpower), [manpower])
-
-  const frontOptionsResult = useMemo(
-    () => operationalFleetOptionsForPile(masterData, fleetSetup, pile.id),
-    [masterData, fleetSetup, pile.id],
-  )
-  const frontOptions = frontOptionsResult.ok ? frontOptionsResult.value : []
-  const selectedFrontOption = frontOptions.find((option) => (option.frontId as string) === selectedFrontId)
-
-  const planResult = useMemo(
-    () => derivePileHaulagePlan(pile, masterData, pendingBatches, pile.freshPileStartPosition),
-    [pile, masterData, pendingBatches],
-  )
-
-  const progressResult = useMemo(() => {
-    if (phase.kind !== 'loaded' || !planResult.ok) {
-      return undefined
+  const operationalBatches = useMemo(() => phase.kind === 'loaded'
+    ? deriveOperationalBatchStates(masterData, pile, phase.records, registeredRegistrations)
+    : undefined, [phase, masterData, pile, registeredRegistrations])
+  const availableEndpoints = operationalBatches?.ok
+    ? operationalBatches.value
+      .filter((batch) => batch.operationalStatus === 'DIRECT_ACTIVE' || batch.operationalStatus === 'NEEDS_CONTINUATION')
+      .map((batch) => ({ ...batch, batch: batch.registration.batch }))
+    : []
+  useEffect(() => {
+    if (!registration && availableEndpoints.length === 1 && !selectedBatch) {
+      setSelectedBatch(String(availableEndpoints[0]!.batchNumber))
     }
-    return deriveHaulageProgress({
-      shiftId: shift.id,
-      pileId: pile.id,
-      expectedPositions: planResult.value,
-      transactions: selectEffectiveTransactions(phase.productionRecords),
+  }, [registration, availableEndpoints, selectedBatch])
+  const selectedEndpoint = availableEndpoints.find((candidate) => candidate.batchNumber === Number(selectedBatch))
+  const selectedSuccessor = useMemo(() => {
+    if (selectedEndpoint?.operationalStatus !== 'NEEDS_CONTINUATION' || !selectedSuccessorBatch) return undefined
+    const parsedBatch = parseBatchNumber(Number(selectedSuccessorBatch))
+    const seedRit = parseRitNumber(1)
+    if (!parsedBatch.ok || !seedRit.ok) return undefined
+    if (Number(parsedBatch.value) === selectedEndpoint.batchNumber) return undefined
+    return registeredRegistrations.find((candidate) => candidate.pileId === pile.id && Number(candidate.batch) === Number(parsedBatch.value))
+      ?? {
+        pileId: pile.id,
+        oreCode: pile.oreCode,
+        batch: parsedBatch.value,
+        rit: seedRit.value,
+        status: 'ACTIVE' as const,
+        continuationFromBatch: selectedEndpoint.registration.batch,
+      }
+  }, [selectedEndpoint, selectedSuccessorBatch, registeredRegistrations, pile])
+  const selectedRegistration = selectedEndpoint?.operationalStatus === 'NEEDS_CONTINUATION'
+    ? selectedSuccessor && { ...selectedSuccessor, continuationFromBatch: selectedEndpoint.registration.batch }
+    : selectedEndpoint?.registration
+  const fleetOptionsResult = useMemo(() => operationalFleetOptionsForDestinationPile(masterData, activeFleetSetup, pile.id), [masterData, activeFleetSetup, pile.id])
+  const fleetOptions = fleetOptionsResult.ok ? fleetOptionsResult.value : []
+  const selectedFleet = fleetOptions.find((candidate) => (candidate.fleetId as string) === selectedFleetId)
+  const checker = useMemo(() => resolveProductionRecorder(manpower), [manpower])
+  const targetStillMissed = useMemo(() => {
+    if (!targetPosition || phase.kind !== 'loaded') return true
+    const config = findOreSamplingConfig(masterData, pile.oreCode)
+    if (!config) return false
+    const expected = deriveExpectedRitsForBatch(pile, config.batchSize, pendingBatches, targetPosition.batchNumber, pile.freshPileStartPosition)
+    return expected.ok && deriveMissedRits(phase.records, pile.id, targetPosition.batchNumber, expected.value).some((trip) => Number(trip) === Number(targetPosition.ritNumber))
+  }, [targetPosition, phase, masterData, pile, pendingBatches])
+  const nextPosition = useMemo(() => {
+    if (targetPosition) return targetStillMissed ? targetPosition : undefined
+    if (phase.kind !== 'loaded' || !selectedRegistration) return undefined
+    const next = nextPositionForRegistration(masterData, pile, phase.records, selectedRegistration)
+    return next.ok ? next.value : undefined
+  }, [targetPosition, targetStillMissed, phase, selectedRegistration, masterData, pile])
+  const currentPosition = useMemo(() => selectedRegistration && phase.kind === 'loaded' ? currentPositionForRegistration(phase.records, selectedRegistration) : undefined, [phase, selectedRegistration])
+  const fleetTruckIds = selectedFleet?.effectiveTruckIds.map((truck) => truck as string) ?? []
+  const normalTruckOptions = fleetTruckIds.filter((truck) => truck.toLowerCase().includes(truckQuery.trim().toLowerCase()))
+  const quickCandidates = selectedFleet
+    ? masterData.trucks.filter((truck) => truck.haulerCode === selectedFleet.haulerCode && !fleetTruckIds.includes(truck.id as string) && (quickQuery.trim() === '' || (truck.id as string).toLowerCase().includes(quickQuery.trim().toLowerCase())))
+    : []
+  const canSave = Boolean(selectedRegistration && selectedFleet && selectedTruckId && nextPosition && condition && contamination && checker.ok && !saving)
+  const sapTheme = pile.oreCode === 'SAP'
+  const selectedTheme = sapTheme ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-amber-800 bg-amber-800 text-white'
+
+  function chooseBatch(batch: string) {
+    setSelectedBatch(batch); setSelectedSuccessorBatch(''); setSelectedFleetId(''); setSelectedTruckId(''); setTruckQuery(''); setError('')
+  }
+  function chooseFleet(fleetId: string) {
+    setSelectedFleetId(fleetId); setFleetOpen(false); setSelectedTruckId(''); setTruckQuery(''); setError('')
+  }
+  async function saveQuickTruck() {
+    if (!selectedFleet || !quickTruckId || !store.updateActiveFrontFleet) return
+    setQuickSaving(true); setError('')
+    const adjusted = adjustFrontFleet({
+      fleetSetup: activeFleetSetup, masterData, frontId: selectedFleet.frontId as string,
+      truckIds: [...fleetTruckIds, quickTruckId],
     })
-  }, [phase, planResult, shift.id, pile.id])
-
-  const nextPosition = progressResult && progressResult.ok ? progressResult.value.nextPosition : undefined
-
-  const missedRitsForTargetBatch = useMemo(() => {
-    if (!targetPosition || phase.kind !== 'loaded') return []
-    const oreSamplingConfig = findOreSamplingConfig(masterData, pile.oreCode)
-    if (!oreSamplingConfig) return []
-    // Bounded to this Batch's own authoritative expected Rits (carry-
-    // over/fresh-start-aware), never an invented `1..maxAccepted` range
-    // — see `deriveExpectedRitsForBatch`.
-    const expectedRitsResult = deriveExpectedRitsForBatch(
-      pile,
-      oreSamplingConfig.batchSize,
-      pendingBatches,
-      targetPosition.batchNumber,
-      pile.freshPileStartPosition,
-    )
-    if (!expectedRitsResult.ok) return []
-    return deriveMissedRits(phase.productionRecords, pile.id, targetPosition.batchNumber, expectedRitsResult.value)
-  }, [targetPosition, phase, pile, masterData, pendingBatches])
-
-  const targetStillMissed = targetPosition
-    ? missedRitsForTargetBatch.some((rit) => Number(rit) === Number(targetPosition.ritNumber))
-    : false
-
-  // In missed-correction mode, this exact target replaces the
-  // auto-derived next position — never a manual Rit input, and re-
-  // validated as still MISSED on every render from the freshly loaded
-  // ProductionRecord history.
-  const recordingPosition = targetPosition ? (targetStillMissed ? targetPosition : undefined) : nextPosition
-
-  const samplingPreviewResult = useMemo(() => {
-    if (!recordingPosition) return undefined
-    return previewNextSampling(pile, masterData, recordingPosition)
-  }, [recordingPosition, pile, masterData])
-
-  const allTruckIds = useMemo(() => masterData.trucks.map((truck) => truck.id as string), [masterData])
-  const effectiveTruckIds = useMemo(
-    () => (selectedFrontOption?.effectiveTruckIds ?? []).map((truckId) => truckId as string),
-    [selectedFrontOption],
-  )
-
-  const truckSearchOptions = useMemo(() => {
-    const normalized = truckQuery.trim().toLowerCase()
-    if (!normalized) return []
-    const effectiveSet = new Set(effectiveTruckIds)
-    const matches = allTruckIds.filter((truckId) => truckId.toLowerCase().includes(normalized))
-    const ranked = [...matches].sort((a, b) => Number(effectiveSet.has(b)) - Number(effectiveSet.has(a)))
-    return ranked.map((truckId) => ({ value: truckId, label: truckId }))
-  }, [allTruckIds, effectiveTruckIds, truckQuery])
-
-  function resetFormFields() {
-    setSelectedTruckId('')
-    setTruckQuery('')
-    setPhysicalCondition('')
-    setContamination('')
-    setDisposition('ACCEPT')
-    setRemark('')
-    setConfirmingReject(false)
+    if (!adjusted.ok) { setError(adjusted.error.code); setQuickSaving(false); return }
+    const saved = await store.updateActiveFrontFleet(shift.id, adjusted.value.fleetSetup)
+    setQuickSaving(false)
+    if (!saved.ok) { setError(saved.error.code); return }
+    setActiveFleetSetup(adjusted.value.fleetSetup)
+    setSelectedTruckId(quickTruckId)
+    setQuickOpen(false); setQuickQuery(''); setQuickTruckId('')
+    onFleetUpdated?.()
   }
-
-  const canSubmit =
-    !saving &&
-    !!recordingPosition &&
-    !!selectedFrontOption &&
-    selectedTruckId.length > 0 &&
-    physicalCondition !== '' &&
-    contamination !== '' &&
-    checkerResult.ok
-
   async function handleSave() {
-    if (isSubmittingRef.current) {
-      return
-    }
-    if (!recordingPosition || !selectedFrontOption || !selectedTruckId || !physicalCondition || !contamination) {
-      return
-    }
-    if (!checkerResult.ok) {
-      setErrorCode(checkerResult.error.code)
-      return
-    }
-
-    isSubmittingRef.current = true
-    setSaving(true)
-    setErrorCode(undefined)
-    setSuccessMessage(undefined)
-
+    if (!canSave || !selectedRegistration || !selectedFleet || !nextPosition || !condition || !contamination || !checker.ok || submitting.current) return
+    submitting.current = true; setSaving(true); setError('')
     try {
+      if (selectedEndpoint?.operationalStatus === 'NEEDS_CONTINUATION') {
+        if (!selectedSuccessor) {
+          setError('CONTINUATION_PERSISTENCE_UNAVAILABLE')
+          return
+        }
+        const source = allPileRegistrations ?? registeredRegistrations
+        const existing = source.find((candidate) => candidate.pileId === pile.id && Number(candidate.batch) === Number(selectedSuccessor.batch))
+        if (existing?.status === 'INACTIVE') {
+          setError('SUCCESSOR_BATCH_INACTIVE')
+          return
+        }
+        if (existing && hasEffectiveProductionForRegistration(phase.records, existing)) {
+          setError('SUCCESSOR_ALREADY_STARTED')
+          return
+        }
+        if (existing?.continuationFromBatch !== undefined && Number(existing.continuationFromBatch) !== Number(selectedEndpoint.registration.batch)) {
+          setError('SUCCESSOR_ALREADY_LINKED')
+          return
+        }
+        const successor: PileRegistrationDraft = {
+          ...(existing ?? selectedSuccessor),
+          continuationFromBatch: selectedEndpoint.registration.batch,
+        }
+        const nextRegistrations = existing
+          ? source.map((candidate) => candidate === existing ? successor : candidate)
+          : [...source, successor]
+        const persisted = onPileRegistrationsUpdated
+          ? await onPileRegistrationsUpdated(nextRegistrations)
+          : store.updatePileRegistrations
+            ? (await store.updatePileRegistrations(shift.id, nextRegistrations)).ok
+            : false
+        if (!persisted) {
+          setError('PILE_REGISTRATION_SAVE_FAILED')
+          return
+        }
+        onFleetUpdated?.()
+      }
+      if (selectedEndpoint?.operationalStatus === 'DIRECT_ACTIVE') {
+        const source = allPileRegistrations ?? registeredRegistrations
+        const exists = source.some((candidate) => candidate.pileId === pile.id && Number(candidate.batch) === Number(selectedRegistration.batch))
+        if (!exists) {
+          const persisted = onPileRegistrationsUpdated
+            ? await onPileRegistrationsUpdated([...source, selectedRegistration])
+            : store.updatePileRegistrations
+              ? (await store.updatePileRegistrations(shift.id, [...source, selectedRegistration])).ok
+              : false
+          if (!persisted) {
+            setError('PILE_REGISTRATION_SAVE_FAILED')
+            return
+          }
+          onFleetUpdated?.()
+        }
+      }
       const built = recordProduction({
-        generatedTransactionId: generateTransactionId(),
-        shift,
-        pile,
-        nextPosition: recordingPosition,
-        selectedFleetId: selectedFrontOption.fleetId as string,
-        selectedTruckId,
-        masterData,
-        fleetSetup,
-        physicalCondition,
-        contamination,
-        disposition,
-        remark,
-        createdAt: now(),
-        createdBy: checkerResult.value,
+        generatedTransactionId: generateTransactionId(), shift, pile, nextPosition,
+        selectedFleetId: selectedFleet.fleetId as string, selectedTruckId, masterData, fleetSetup: activeFleetSetup,
+        physicalCondition: condition, contamination, disposition, remark, createdAt: now(), createdBy: checker.value,
       })
-      if (!built.ok) {
-        setErrorCode(built.error.code)
-        return
-      }
-
+      if (!built.ok) { setError(built.error.code); return }
       const saved = await store.addProductionTransaction(built.value)
-      if (!saved.ok) {
-        setErrorCode(saved.error.code)
-        return
-      }
-
-      const savedDisposition = disposition
-      const batch = Number(recordingPosition.batchNumber)
-      const rit = Number(recordingPosition.ritNumber)
-      const savedRecord = built.value.productionRecord
-      setPhase((current) =>
-        current.kind === 'loaded'
-          ? { kind: 'loaded', productionRecords: [...current.productionRecords, savedRecord] }
-          : current,
-      )
-      resetFormFields()
-      setSuccessMessage(
-        savedDisposition === 'ACCEPT'
-          ? t('record.acceptedFeedback', { batch, rit })
-          : t('record.rejectedFeedback', { batch, rit }),
-      )
-    } finally {
-      isSubmittingRef.current = false
-      setSaving(false)
-    }
+      if (!saved.ok) { setError(saved.error.code); return }
+      setPhase((current) => current.kind === 'loaded' ? { kind: 'loaded', records: [...current.records, built.value.productionRecord] } : current)
+      setSelectedTruckId(''); setTruckQuery(''); setCondition(''); setContamination(''); setDisposition('ACCEPT'); setRemark('')
+      onRecorded?.()
+    } finally { submitting.current = false; setSaving(false) }
   }
-
-  function handleSubmit(event: FormEvent) {
+  function submit(event: FormEvent) {
     event.preventDefault()
-    if (!canSubmit) {
-      return
-    }
-    if (disposition === 'REJECT') {
-      setConfirmingReject(true)
-      return
-    }
+    if (!canSave) return
+    if (disposition === 'REJECT') { setConfirmingReject(true); return }
     void handleSave()
   }
-
-  function handleDispositionChange(next: Disposition) {
-    setDisposition(next)
-    setConfirmingReject(false)
+  function fleetLabel(option: OperationalFleetOption): string {
+    const front = activeFleetSetup.fronts.find((candidate) => candidate.frontId === option.frontId)
+    return (option.frontId as string) + ' · ' + option.haulerCode + ' · ' + displayExcaCode(front?.excaCode)
   }
 
-  if (phase.kind === 'loading') {
-    return (
-      <div>
-        <PageHeader title={t('record.title', { pileId: pile.id })} />
-        <div className="px-5 py-4" aria-live="polite">
-          <p className="text-sm text-muted-foreground">{t('record.loading')}</p>
-        </div>
-      </div>
-    )
-  }
+  if (phase.kind === 'loading') return <div className="px-5 py-4 text-sm text-muted-foreground">Loading Production…</div>
+  if (phase.kind === 'error') return <div className="px-5 py-4" role="alert">Unable to load Production records.</div>
 
-  if (phase.kind === 'error') {
-    return (
-      <div>
-        <PageHeader title={t('record.title', { pileId: pile.id })} />
-        <div className="px-5 py-4">
-          <Card>
-            <CardContent role="alert" className="flex flex-col gap-3">
-              <p>{t(productionRecordLoadErrorTranslationKey(phase.code))}</p>
-              <Button type="button" onClick={handleRetry}>
-                {t('record.retry')}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
-  }
-
-  // In missed-correction mode the forward plan/progress is irrelevant —
-  // a past gap may still need filling even once the forward plan is
-  // otherwise exhausted or invalid — so only a genuine sampling-config
-  // failure (which would block any save regardless of mode) surfaces
-  // here; "no longer missed" is handled as its own explicit message
-  // below, never folded into this generic plan-error banner.
-  const planErrorCode = targetPosition
-    ? samplingPreviewResult && !samplingPreviewResult.ok
-      ? samplingPreviewResult.error.code
-      : undefined
-    : !planResult.ok
-      ? planResult.error.code
-      : progressResult && !progressResult.ok
-        ? progressResult.error.code
-        : samplingPreviewResult && !samplingPreviewResult.ok
-          ? samplingPreviewResult.error.code
-          : undefined
-
-  const batch = recordingPosition ? Number(recordingPosition.batchNumber) : undefined
-  const rit = recordingPosition ? Number(recordingPosition.ritNumber) : undefined
-
-  return (
-    <div>
-      <PageHeader title={t('record.title', { pileId: pile.id })} />
-      <div className="flex flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-        <div className="flex items-center justify-between">
-          <span className="font-semibold">{pile.id}</span>
-          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">{pile.oreCode}</span>
-        </div>
-
-        {planErrorCode ? (
-          <Card>
-            <CardContent role="alert">
-              <p>{t(productionRecordErrorTranslationKey(planErrorCode))}</p>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {!planErrorCode && !recordingPosition && !targetPosition ? (
-          <Card>
-            <CardContent>
-              <p>{t('record.planExhausted')}</p>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {!planErrorCode && !recordingPosition && targetPosition ? (
-          <Card>
-            <CardContent role="alert">
-              <p>{t('record.missedCorrection.noLongerMissed')}</p>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {!planErrorCode && recordingPosition && targetPosition ? (
-          <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
-            {t('record.missedCorrection.banner', { batch, rit })}
-          </p>
-        ) : null}
-
-        {!checkerResult.ok ? (
-          <Card>
-            <CardContent role="alert">
-              <p>{t(productionRecordErrorTranslationKey(checkerResult.error.code))}</p>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {!planErrorCode && recordingPosition && confirmingReject ? (
-          <Card role="alertdialog" aria-labelledby="confirm-reject-title">
-            <CardContent className="flex flex-col gap-3">
-              <h2 id="confirm-reject-title" className="text-lg font-bold">
-                {t('record.confirmReject.title')}
-              </h2>
-              <div>
-                <p className="font-semibold">{pile.id}</p>
-                <p className="text-sm text-muted-foreground">
-                  {t('record.batch')} {batch} • {t('record.rit')} {rit}
-                </p>
-                <p className="text-sm text-muted-foreground">{selectedTruckId}</p>
-              </div>
-              <p className="text-sm">{t('record.confirmReject.notice')}</p>
-              <div className="grid grid-cols-2 gap-3">
-                <Button type="button" variant="secondary" onClick={() => setConfirmingReject(false)} disabled={saving}>
-                  {t('record.confirmReject.cancel')}
-                </Button>
-                <Button type="button" onClick={() => void handleSave()} disabled={saving}>
-                  {saving ? t('record.saving') : t('record.confirmReject.confirm')}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {!planErrorCode && recordingPosition && !confirmingReject ? (
-          <>
-            <Card>
-              <CardContent className="grid grid-cols-3 gap-4">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('record.batch')}</p>
-                  <p className="text-2xl font-bold">{batch}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('record.rit')}</p>
-                  <p className="text-2xl font-bold">{rit}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('record.sample')}</p>
-                  <p className="text-2xl font-bold">
-                    {samplingPreviewResult?.ok && samplingPreviewResult.value.samplingEvaluation.sampleRequired ? '✓' : '—'}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {successMessage ? (
-              <p role="status" aria-live="polite" className="text-sm font-medium text-emerald-700">
-                {successMessage}
-              </p>
-            ) : null}
-
-            {errorCode ? (
-              <p role="alert" className="text-sm text-red-600">
-                {t(productionRecordErrorTranslationKey(errorCode))}
-              </p>
-            ) : null}
-
-            <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-              <label className="flex flex-col gap-1.5 text-sm font-medium">
-                {t('record.selectFront')}
-                <select
-                  value={selectedFrontId}
-                  onChange={(event) => setSelectedFrontId(event.target.value)}
-                  className="h-12 rounded-lg border border-input bg-background px-3 text-sm"
-                >
-                  <option value="">{t('record.selectFrontPlaceholder')}</option>
-                  {frontOptions.map((option) => (
-                    <option key={option.frontId} value={option.frontId as string}>
-                      {option.frontId}
-                    </option>
-                  ))}
-                </select>
-                {frontOptions.length === 0 ? <p className="text-sm text-muted-foreground">{t('record.noFront')}</p> : null}
-              </label>
-
-              <div className="flex flex-col gap-1.5">
-                {!selectedTruckId && effectiveTruckIds.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {effectiveTruckIds.map((truckId) => (
-                      <button
-                        key={truckId}
-                        type="button"
-                        onClick={() => setSelectedTruckId(truckId)}
-                        className="rounded-full border border-primary/40 bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary"
-                      >
-                        {truckId}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                <SearchableCombobox
-                  label={t('record.truck')}
-                  query={truckQuery}
-                  onQueryChange={setTruckQuery}
-                  options={truckSearchOptions}
-                  onSelect={(option) => {
-                    setSelectedTruckId(option.value)
-                    setTruckQuery('')
-                  }}
-                  selectedLabel={selectedTruckId || undefined}
-                  clearLabel={t('record.changeTruck')}
-                  onClearSelection={() => setSelectedTruckId('')}
-                  placeholder={t('record.searchTruckPlaceholder')}
-                  noResultsContent={<p className="text-sm text-muted-foreground">{t('record.noTruckFound')}</p>}
-                />
-              </div>
-
-              <fieldset className="flex flex-col gap-1.5">
-                <legend className="text-sm font-medium">{t('record.physicalCondition')}</legend>
-                <div className="grid grid-cols-2 gap-2">
-                  {PHYSICAL_CONDITIONS.map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-pressed={physicalCondition === value}
-                      onClick={() => setPhysicalCondition(value)}
-                      className={cn(
-                        'h-11 rounded-lg border text-sm font-medium',
-                        physicalCondition === value
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-border bg-background text-foreground',
-                      )}
-                    >
-                      {t(`record.physicalConditionOptions.${value}`)}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-
-              <fieldset className="flex flex-col gap-1.5">
-                <legend className="text-sm font-medium">{t('record.contamination')}</legend>
-                <div className="grid grid-cols-2 gap-2">
-                  {CONTAMINATIONS.map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-pressed={contamination === value}
-                      onClick={() => setContamination(value)}
-                      className={cn(
-                        'h-11 rounded-lg border text-sm font-medium',
-                        contamination === value
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-border bg-background text-foreground',
-                      )}
-                    >
-                      {t(`record.contaminationOptions.${value}`)}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-
-              <fieldset className="flex flex-col gap-1.5">
-                <legend className="text-sm font-medium">{t('record.disposition')}</legend>
-                <div className="grid grid-cols-2 gap-2">
-                  {DISPOSITIONS.map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-pressed={disposition === value}
-                      onClick={() => handleDispositionChange(value)}
-                      className={cn(
-                        'h-11 rounded-lg border text-sm font-semibold',
-                        disposition === value
-                          ? value === 'ACCEPT'
-                            ? 'border-emerald-600 bg-emerald-600 text-white'
-                            : 'border-red-600 bg-red-600 text-white'
-                          : 'border-border bg-background text-foreground',
-                      )}
-                    >
-                      {t(`record.dispositionOptions.${value}`)}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-
-              <label className="flex flex-col gap-1.5 text-sm font-medium">
-                {t('record.remark')}
-                <textarea
-                  value={remark}
-                  onChange={(event) => setRemark(event.target.value)}
-                  placeholder={t('record.remarkPlaceholder')}
-                  rows={2}
-                  className="rounded-lg border border-input bg-background px-3 py-2 text-sm"
-                />
-              </label>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="lg"
-                  className="h-14"
-                  onClick={() => navigate('/production?tab=record')}
-                  disabled={saving}
-                >
-                  {t('record.cancel')}
-                </Button>
-                <Button type="submit" size="lg" className="h-14" disabled={!canSubmit}>
-                  {saving ? t('record.saving') : t('record.save')}
-                </Button>
-              </div>
-            </form>
-          </>
-        ) : null}
-      </div>
-    </div>
-  )
+  return <div className="flex min-h-0 flex-col gap-3 px-5 py-4">
+    {showPileContext ? <div className="flex items-center justify-between gap-3"><strong>{pile.id}</strong><Button type="button" size="sm" variant="secondary" onClick={() => onClose ? onClose() : navigate('/production')}>Close</Button></div> : null}
+    {!showPileContext ? <div className="flex items-center justify-between gap-2 text-sm"><div className="flex min-w-0 items-baseline gap-2"><strong className="shrink-0 text-base">{pile.id}</strong>{nextPosition ? <strong className="truncate">Batch {formatBatchCode(Number(nextPosition.batchNumber))} / {formatTripWithinBatch(Number(nextPosition.ritNumber))}</strong> : null}</div><span className="shrink-0 text-xs text-muted-foreground">{findPileArea(masterData, pile.id)?.stockpileCode ?? '—'} <span className={cn('rounded px-1.5 py-0.5 font-semibold', sapTheme ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900')}>{pile.oreCode}</span></span></div> : null}
+    <form onSubmit={submit} className="flex flex-col gap-4">
+      <section><p className="mb-2 text-sm font-semibold">Select Batch</p><div className="grid gap-2">{availableEndpoints.map((candidate) => {
+        const current = { batch: candidate.batchNumber, trip: candidate.currentTripWithinBatch }
+        const active = candidate.batchNumber === selectedEndpoint?.batchNumber
+        if (candidate.operationalStatus === 'NEEDS_CONTINUATION') {
+          return <button key={candidate.batchNumber} type="button" onClick={() => chooseBatch(String(candidate.batchNumber))} className={cn('rounded-lg border px-3 py-2 text-left text-sm font-semibold', active ? selectedTheme : 'border-border')}>Batch {formatBatchCode(candidate.batchNumber)} · Complete</button>
+        }
+        return <button key={Number(candidate.batch)} type="button" onClick={() => chooseBatch(String(Number(candidate.batch)))} className={cn('rounded-lg border px-3 py-2 text-left text-sm font-semibold', active ? selectedTheme : 'border-border')}>Batch {formatBatchCode(current.batch)} · Current Trip {formatTripWithinBatch(current.trip)}</button>
+      })}</div></section>
+      {selectedEndpoint?.operationalStatus === 'NEEDS_CONTINUATION' ? <label className="flex flex-col gap-1 text-sm font-semibold">Select Next Batch<input aria-label="Select Next Batch" inputMode="numeric" value={selectedSuccessorBatch} onChange={(event) => { setSelectedSuccessorBatch(event.target.value); setSelectedFleetId(''); setSelectedTruckId(''); setTruckQuery('') }} placeholder="Batch number" className="h-11 rounded-lg border border-input bg-background px-3" /></label> : null}
+      {selectedRegistration ? <div className="rounded bg-muted px-3 py-2 text-sm"><p>Current: <strong>Batch {formatBatchCode(Number(currentPosition?.batch ?? selectedRegistration.batch))} · Trip {formatTripWithinBatch(Number(currentPosition?.trip ?? selectedRegistration.rit))}</strong></p><p className="mt-1">Next: <strong>Batch {formatBatchCode(Number(nextPosition?.batchNumber ?? currentPosition?.batch ?? selectedRegistration.batch))} · Trip {formatTripWithinBatch(Number(nextPosition?.ritNumber ?? currentPosition?.trip ?? selectedRegistration.rit))}</strong></p></div> : null}
+      {targetPosition && !targetStillMissed ? <p role="alert" className="text-sm text-red-700">This position is no longer missed.</p> : null}
+      <section className="min-w-0 text-sm font-semibold"><p className="mb-1">Select Fleet</p><div className="relative"><button type="button" aria-label="Select Fleet" aria-expanded={fleetOpen} disabled={!selectedRegistration} onClick={() => setFleetOpen((open) => !open)} className="flex h-11 w-full items-center justify-between rounded-lg border border-input bg-background px-3 text-left font-normal disabled:opacity-50"><span className="truncate">{selectedFleet ? fleetLabel(selectedFleet) : 'Select Fleet'}</span><span aria-hidden="true">⌃</span></button>{fleetOpen ? <div role="listbox" aria-label="Fleet options" className="scrollbar-none absolute bottom-[calc(100%+0.25rem)] z-20 max-h-52 w-full overflow-y-auto rounded-lg border border-border bg-background p-1 shadow-lg">{fleetOptions.map((option) => <button key={option.fleetId as string} type="button" role="option" aria-selected={(option.fleetId as string) === selectedFleetId} onClick={() => chooseFleet(option.fleetId as string)} className={cn('block w-full rounded px-3 py-2 text-left text-sm font-normal', (option.fleetId as string) === selectedFleetId && 'bg-primary/10')}>{fleetLabel(option)}</button>)}</div> : null}</div></section>
+      {selectedFleet ? <p className="text-sm text-muted-foreground">Front: <strong>{selectedFleet.frontId}</strong></p> : null}
+      {selectedFleet ? <section><p className="mb-1 text-sm font-semibold">Truck</p><div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2"><Button type="button" variant="secondary" onClick={() => setQuickOpen(true)}>+ Truck</Button><div className="relative min-w-0"><input aria-label="Search Truck" value={truckQuery} onChange={(event) => { setTruckQuery(event.target.value); setSelectedTruckId('') }} placeholder="Select Truck..." className="h-11 w-full min-w-0 rounded-lg border border-input px-3" />{truckQuery.trim() ? <div role="listbox" aria-label="Truck options" className="absolute bottom-[calc(100%+0.25rem)] z-20 max-h-52 w-full overflow-y-auto rounded-lg border border-border bg-background p-1 shadow-lg">{normalTruckOptions.map((truck) => <button key={truck} type="button" role="option" aria-selected={selectedTruckId === truck} onClick={() => { setSelectedTruckId(truck); setTruckQuery(truck) }} className={cn('block w-full rounded px-3 py-2 text-left text-sm', selectedTruckId === truck && 'bg-primary/10')}>{truck}</button>)}{normalTruckOptions.length === 0 ? <p className="px-3 py-2 text-sm text-muted-foreground">No Fleet truck found.</p> : null}</div> : null}</div></div></section> : null}
+      <fieldset><legend className="mb-1 text-sm font-semibold">Condition</legend><div className="grid grid-cols-2 gap-2">{PHYSICAL_CONDITIONS.map((value) => <button key={value} type="button" aria-pressed={condition === value} onClick={() => setCondition(value)} className={cn('h-10 rounded border text-sm font-semibold', condition === value ? selectedTheme : 'border-border')}>{value}</button>)}</div></fieldset>
+      <fieldset><legend className="mb-1 text-sm font-semibold">Contam.</legend><div className="grid grid-cols-2 gap-2">{CONTAMINATIONS.map((value) => <button key={value} type="button" aria-pressed={contamination === value} onClick={() => setContamination(value)} className={cn('h-10 rounded border text-sm font-semibold', contamination === value ? selectedTheme : 'border-border')}>{value}</button>)}</div></fieldset>
+      <fieldset><legend className="mb-1 text-sm font-semibold">Disposition</legend><div className="grid grid-cols-2 gap-2">{DISPOSITIONS.map((value) => <button key={value} type="button" aria-pressed={disposition === value} onClick={() => { setDisposition(value); setConfirmingReject(false) }} className={cn('h-10 rounded border text-sm font-semibold', disposition === value ? selectedTheme : 'border-border')}>{value}</button>)}</div></fieldset>
+      <label className="flex flex-col gap-1 text-sm font-semibold">Remark<textarea value={remark} onChange={(event) => setRemark(event.target.value)} rows={2} className="rounded-lg border border-input px-3 py-2" /></label>
+      {!checker.ok ? <p role="alert" className="text-sm text-red-700">{checker.error.code}</p> : null}
+      {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
+      {selectedFleet && selectedTruckId && nextPosition ? <p className="rounded bg-muted px-3 py-2 text-sm"><strong>{pile.id}</strong> · Batch {formatBatchCode(Number(nextPosition.batchNumber))}/{formatTripWithinBatch(Number(nextPosition.ritNumber))} · Front {selectedFleet.frontId} · Truck {selectedTruckId}</p> : null}
+      <div className="grid grid-cols-2 gap-2"><Button type="button" variant="secondary" size="lg" onClick={() => onClose ? onClose() : navigate('/production')}>Cancel</Button><Button type="submit" size="lg" disabled={!canSave}>{saving ? 'Saving…' : 'Record Production'}</Button></div>
+    </form>
+    {confirmingReject ? <div role="dialog" aria-modal="true" aria-label="Confirm Reject" className="fixed inset-0 z-40 flex items-end bg-black/30"><Card className="w-full rounded-b-none"><CardContent className="flex flex-col gap-3"><h2 className="font-bold">Confirm Reject</h2><p className="text-sm text-muted-foreground">This Production record will be saved with the Reject disposition.</p><div className="grid grid-cols-2 gap-2"><Button type="button" variant="secondary" onClick={() => setConfirmingReject(false)}>Cancel</Button><Button type="button" className="bg-red-700 text-white hover:bg-red-800" disabled={saving} onClick={() => void handleSave()}>{saving ? 'Saving…' : 'Confirm Reject'}</Button></div></CardContent></Card></div> : null}
+    {quickOpen ? <div role="dialog" aria-modal="true" aria-label="Quick Add Truck" className="fixed inset-0 z-40 flex items-end bg-black/30"><Card className="w-full rounded-b-none"><CardContent className="flex flex-col gap-3"><div className="flex items-center justify-between"><h2 className="font-bold">Quick Add Truck</h2><Button type="button" size="sm" variant="secondary" onClick={() => setQuickOpen(false)}>Close</Button></div><input aria-label="Quick Add Truck search" value={quickQuery} onChange={(event) => setQuickQuery(event.target.value)} placeholder="Search company Truck..." className="h-11 rounded-lg border border-input px-3" /><div className="max-h-48 overflow-y-auto rounded border border-border">{quickCandidates.map((truck) => <button key={truck.id} type="button" onClick={() => setQuickTruckId(truck.id as string)} className={cn('block w-full px-3 py-2 text-left text-sm', quickTruckId === (truck.id as string) && 'bg-primary/10')}>{truck.id}</button>)}{quickCandidates.length === 0 ? <p className="p-3 text-sm text-muted-foreground">No eligible company Truck.</p> : null}</div><Button type="button" disabled={!quickTruckId || quickSaving || !store.updateActiveFrontFleet} onClick={() => void saveQuickTruck()}>{quickSaving ? 'Adding…' : 'Add to Fleet'}</Button></CardContent></Card></div> : null}
+  </div>
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Pencil, ArrowLeftRight, Trash2 } from 'lucide-react'
+import { FilePenLine, ArrowLeftRight, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, useOutletContext, useParams } from 'react-router'
 import type { ActiveWorkspaceContext } from '@/app/router/AppLayout'
@@ -84,7 +84,9 @@ function CorrectionIndicator({
   if (record.audit.corrections.length === 0) return null
   return (
     <div className="flex items-center justify-between">
-      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800">{correctedLabel}</span>
+      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800">
+        {correctedLabel}
+      </span>
       <Link to={correctionsHref} className="text-xs font-semibold text-primary underline">
         {viewCorrectionsLabel}
       </Link>
@@ -129,7 +131,11 @@ function VoidConfirmCard({
   onConfirm,
 }: VoidConfirmCardProps) {
   return (
-    <Card role="alertdialog" aria-labelledby="void-record-title" className="border-red-300 bg-red-50">
+    <Card
+      role="alertdialog"
+      aria-labelledby="void-record-title"
+      className="border-red-300 bg-red-50"
+    >
       <CardContent className="flex flex-col gap-3">
         <h2 id="void-record-title" className="text-lg font-bold">
           {title}
@@ -158,7 +164,11 @@ function VoidConfirmCard({
           <Button type="button" variant="secondary" onClick={onCancel} disabled={voidSaving}>
             {cancelLabel}
           </Button>
-          <Button type="button" onClick={onConfirm} disabled={voidSaving || voidReason.trim().length === 0}>
+          <Button
+            type="button"
+            onClick={onConfirm}
+            disabled={voidSaving || voidReason.trim().length === 0}
+          >
             {voidSaving ? savingLabel : confirmLabel}
           </Button>
         </div>
@@ -186,7 +196,11 @@ function VoidConfirmCard({
 export function ProductionRitDetailPage() {
   const { t } = useTranslation('production')
   const { workspace } = useOutletContext<ActiveWorkspaceContext>()
-  const { pileId, batchNumber: batchNumberParam, ritNumber: ritNumberParam } = useParams<{
+  const {
+    pileId,
+    batchNumber: batchNumberParam,
+    ritNumber: ritNumberParam,
+  } = useParams<{
     pileId: string
     batchNumber: string
     ritNumber: string
@@ -230,12 +244,18 @@ export function ProductionRitDetailPage() {
       pile.freshPileStartPosition,
     )
     if (!expectedRitsResult.ok) return undefined
-    return deriveProductionRitViews(phase.productionRecords, pile.id, batchNumber, expectedRitsResult.value).find(
-      (view) => Number(view.ritNumber) === Number(ritNumber),
-    )
+    return deriveProductionRitViews(
+      phase.productionRecords,
+      pile.id,
+      batchNumber,
+      expectedRitsResult.value,
+    ).find((view) => Number(view.ritNumber) === Number(ritNumber))
   }, [phase, pile, batchNumber, ritNumber, workspace.masterData, workspace.pendingBatches])
 
-  const checkerResult = useMemo(() => resolveProductionRecorder(workspace.manpower), [workspace.manpower])
+  const checkerResult = useMemo(
+    () => resolveProductionRecorder(workspace.manpower),
+    [workspace.manpower],
+  )
 
   if (!pile || !batchNumberResult.ok || !ritNumberResult.ok) {
     return (
@@ -261,7 +281,10 @@ export function ProductionRitDetailPage() {
       <div>
         <PageHeader title={headerTitle} />
         <div className="px-5 py-4">
-          <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <p
+            role="alert"
+            className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+          >
             {t('batch.errors.loadFailed')}
           </p>
         </div>
@@ -348,7 +371,9 @@ export function ProductionRitDetailPage() {
             cancelLabel={t('voidRecord.cancel')}
             confirmLabel={t('voidRecord.confirm')}
             savingLabel={t('editRecord.saving')}
-            errorMessage={voidErrorCode ? t(productionCorrectionErrorTranslationKey(voidErrorCode)) : undefined}
+            errorMessage={
+              voidErrorCode ? t(productionCorrectionErrorTranslationKey(voidErrorCode)) : undefined
+            }
             voidReason={voidReason}
             onVoidReasonChange={setVoidReason}
             voidSaving={voidSaving}
@@ -373,7 +398,9 @@ export function ProductionRitDetailPage() {
       ? `${record.effective.contamination} — ${t(`record.contaminationOptions.${record.effective.contamination}`)}`
       : t('rit.remarkEmpty')
     const samplingValue = record.transaction.samplingEvaluation.sampleRequired
-      ? t('rit.samplingRequired', { increment: Number(record.transaction.samplingEvaluation.incrementNumber) })
+      ? t('rit.samplingRequired', {
+          increment: Number(record.transaction.samplingEvaluation.incrementNumber),
+        })
       : t('rit.samplingNotRequired')
     const truckValidationValue =
       record.effective.truckValidation.status === 'VALID'
@@ -396,17 +423,31 @@ export function ProductionRitDetailPage() {
               <LabelValue label={t('rit.front')} value={record.effective.frontId as string} />
               <LabelValue label={t('rit.physicalCondition')} value={physicalConditionValue} />
               <LabelValue label={t('rit.contamination')} value={contaminationValue} />
-              <LabelValue label={t('rit.disposition')} value={t(`record.dispositionOptions.${record.effective.disposition}`)} />
+              <LabelValue
+                label={t('rit.disposition')}
+                value={t(`record.dispositionOptions.${record.effective.disposition}`)}
+              />
               <LabelValue label={t('rit.sampling')} value={samplingValue} />
               <LabelValue label={t('rit.truckValidation')} value={truckValidationValue} />
-              <LabelValue label={t('rit.remark')} value={record.effective.remark ?? t('rit.remarkEmpty')} />
+              <LabelValue
+                label={t('rit.remark')}
+                value={record.effective.remark ?? t('rit.remarkEmpty')}
+              />
               <LabelValue
                 label={t('rit.recordedBy')}
-                value={record.audit.createdBy ? (record.audit.createdBy as string) : t('rit.recordedUnknown')}
+                value={
+                  record.audit.createdBy
+                    ? (record.audit.createdBy as string)
+                    : t('rit.recordedUnknown')
+                }
               />
               <LabelValue
                 label={t('rit.recordedAt')}
-                value={record.audit.createdAt ? formatRecordedAt(record.audit.createdAt) : t('rit.recordedUnknown')}
+                value={
+                  record.audit.createdAt
+                    ? formatRecordedAt(record.audit.createdAt)
+                    : t('rit.recordedUnknown')
+                }
               />
             </CardContent>
           </Card>
@@ -414,7 +455,7 @@ export function ProductionRitDetailPage() {
           <div className="flex items-center gap-2">
             <Button asChild type="button" variant="secondary" size="sm" className="flex-1 gap-1.5">
               <Link to={editHref(record)}>
-                <Pencil aria-hidden="true" size={16} />
+                <FilePenLine aria-hidden="true" size={16} strokeWidth={1.8} />
                 {t('rit.actions.edit')}
               </Link>
             </Button>
@@ -465,7 +506,10 @@ export function ProductionRitDetailPage() {
                 <p className="text-sm text-muted-foreground">{t('rit.missed.noAttempts')}</p>
               ) : (
                 ritView.rejectAttempts.map((attempt) => (
-                  <div key={attempt.transaction.id as string} className="flex items-center justify-between gap-2">
+                  <div
+                    key={attempt.transaction.id as string}
+                    className="flex items-center justify-between gap-2"
+                  >
                     <p className="text-sm text-muted-foreground">
                       {t('rit.missed.attemptLine', {
                         truckId: attempt.effective.truckId,
@@ -481,7 +525,7 @@ export function ProductionRitDetailPage() {
                           aria-label={t('rit.actions.edit')}
                           className="rounded-md border border-border p-1.5 text-muted-foreground"
                         >
-                          <Pencil aria-hidden="true" size={14} />
+                          <FilePenLine aria-hidden="true" size={14} strokeWidth={1.8} />
                         </Link>
                         <button
                           type="button"
@@ -502,11 +546,17 @@ export function ProductionRitDetailPage() {
               <div className="flex flex-col gap-1 border-t border-dashed border-border pt-2">
                 <p className="text-sm font-semibold">{t('rit.voidedTitle')}</p>
                 {ritView.voidedRecords.map((voided) => (
-                  <div key={voided.transaction.id as string} className="flex items-center justify-between gap-2">
+                  <div
+                    key={voided.transaction.id as string}
+                    className="flex items-center justify-between gap-2"
+                  >
                     <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
                       {t('rit.voidedBadge')}
                     </span>
-                    <Link to={correctionsHref(voided)} className="text-xs font-semibold text-primary underline">
+                    <Link
+                      to={correctionsHref(voided)}
+                      className="text-xs font-semibold text-primary underline"
+                    >
                       {t('rit.viewCorrections')}
                     </Link>
                   </div>

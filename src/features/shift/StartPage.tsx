@@ -1,27 +1,32 @@
 import { useCallback, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router'
+import { Navigate, useLocation, useNavigate } from 'react-router'
 import { localOperationalStore } from '@/app/local-operational-store'
 import { createAppsScriptPileAreaForSetup } from '@/app/pile-master/create-apps-script-pile-area-for-setup'
 import { deriveExpectedPreviousShift } from '@/application/handover/derive-expected-previous-shift'
 import type { HandoverCarryOverState } from '@/application/handover/handover-carry-over'
 import { deriveActivePiles } from '@/application/pile-workspace/derive-active-piles'
+import {
+  activeRegistrationPileIds,
+  deriveActiveRegistrationPiles,
+  type PileRegistrationDraft,
+} from '@/application/pile-registration/pile-registration-draft'
 import { deriveShiftWorkspacePiles } from '@/application/shift-registration/derive-shift-workspace-piles'
-import { PageHeader } from '@/components/shared/PageHeader'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import type { FleetSetupDraftEntry } from '@/application/fleet-setup/fleet-setup-draft'
+import type { ShiftRegistrationFormValues } from '@/application/shift-registration/shift-registration-form-values'
 import type { ExpectedPreviousShift } from '@/domain/handover/expected-previous-shift'
 import type { PendingBatchCarryOver } from '@/domain/handover/carry-over-pending-batch'
-import type { HandoverPendingSample } from '@/domain/handover/carry-over-pending-sample'
+import type { HandoverPendingSample } from '@/domain/handover/handover-pending-sample'
 import type { FleetSetup } from '@/domain/fleet/fleet-setup'
 import type { ManpowerAssignment } from '@/domain/manpower/manpower-assignment'
 import type { MasterData } from '@/domain/master/master-data'
 import type { Shift } from '@/domain/shift/shift'
 import { FleetSetupPage } from '@/features/fleet-setup/fleet-setup-page'
 import { HandoverPage } from '@/features/handover/handover-page'
-import { ManpowerSetupPage } from '@/features/manpower/manpower-setup-page'
 import type { ImportHistoryRecord } from '@/infrastructure/local-db/records'
-import { ShiftStartPage } from '@/features/shift-registration/shift-start-page'
+import { ShiftStartPage, type SetupChecker } from '@/features/shift-registration/shift-start-page'
+import type { WorkSetupManpowerSelection } from '@/features/manpower/work-setup-manpower'
+import { PileRegistrationPage } from '@/features/shift/pile-registration-page'
+import { clearWorkSetupDraft } from '@/infrastructure/device/work-setup-draft-store'
 
 interface HandoverOutcome {
   readonly pendingBatches: readonly PendingBatchCarryOver[]
@@ -29,268 +34,134 @@ interface HandoverOutcome {
   readonly handoverImport?: ImportHistoryRecord
 }
 
-/** `HandoverOutcome` plus the Manpower step's result (Phase 18 §4) — kept as a separate type so `HandoverOutcome` itself stays exactly what Handover produces. */
 interface SetupOutcome extends HandoverOutcome {
   readonly manpower: readonly ManpowerAssignment[]
+  readonly pileRegistrations: readonly PileRegistrationDraft[]
 }
 
-type SetupPhase =
-  | { readonly kind: 'registration' }
-  | {
-      readonly kind: 'handover'
-      readonly shift: Shift
-      readonly masterData: MasterData
-      readonly expectedPreviousShift: ExpectedPreviousShift
-    }
-  | {
-      readonly kind: 'handover-unavailable'
-      readonly shift: Shift
-      readonly masterData: MasterData
-    }
-  | {
-      readonly kind: 'manpower'
-      readonly shift: Shift
-      readonly masterData: MasterData
-      readonly outcome: HandoverOutcome
-    }
-  | {
-      readonly kind: 'fleet-setup'
-      readonly shift: Shift
-      readonly masterData: MasterData
-      readonly outcome: SetupOutcome
-    }
-  | {
-      readonly kind: 'initializing'
-      readonly shift: Shift
-      readonly masterData: MasterData
-      readonly outcome: SetupOutcome
-      readonly fleetSetup: FleetSetup
-    }
-  | {
-      readonly kind: 'initialize-error'
-      readonly code: string
-      readonly shift: Shift
-      readonly masterData: MasterData
-      readonly outcome: SetupOutcome
-      readonly fleetSetup: FleetSetup
-    }
+interface WorkSetupDraft {
+  readonly values: ShiftRegistrationFormValues
+  readonly manpower: WorkSetupManpowerSelection
+}
 
-/**
- * The Start Shift setup orchestrator (Phase 18 §2): Registration →
- * Handover → Manpower → Fleet Setup → `initializeShiftWorkspace` →
- * `/home`. Every step reuses its existing screen unchanged — this
- * component only sequences them and performs the one atomic workspace
- * write at the end, via `LocalOperationalStore.initializeShiftWorkspace`
- * (never a manual Dexie write), which never runs before every step above
- * it has been reviewed.
- */
+/** State shared by the real setup routes. The URL is the authoritative step. */
+interface SetupSession {
+  readonly workSetupDraft?: WorkSetupDraft
+  readonly shift?: Shift
+  readonly masterData?: MasterData
+  readonly manpower?: readonly ManpowerAssignment[]
+  readonly expectedPreviousShift?: ExpectedPreviousShift
+  readonly outcome?: SetupOutcome
+  readonly fleetDraft?: readonly FleetSetupDraftEntry[]
+}
+
+function workSetupDraftFrom(shift: Shift, masterData: MasterData, manpower: readonly ManpowerAssignment[]): WorkSetupDraft {
+  return {
+    values: { shiftDate: shift.date, shiftCode: shift.shiftCode, sectorCode: shift.sectorCode, samplingHouseCode: shift.samplingHouseCode },
+    manpower: {
+      checkerPersonId: manpower.find((person) => person.jobDeskCode === 'Checker')?.personId,
+      selected: manpower.map((person) => ({
+        personId: person.personId,
+        name: person.name,
+        source: masterData.employees.some((employee) => employee.id === person.personId) ? 'EMPLOYEE' : 'CREW',
+        jobDeskCode: person.jobDeskCode,
+      })),
+    },
+  }
+}
+
 export function StartPage() {
-  const { t } = useTranslation()
   const navigate = useNavigate()
-  const [phase, setPhase] = useState<SetupPhase>({ kind: 'registration' })
+  const location = useLocation()
+  const landingState = location.state as { readonly setupChecker?: SetupChecker; readonly forceNew?: boolean; readonly setupDraft?: WorkSetupDraft } | null
+  const [session, setSession] = useState<SetupSession>(() => ({ workSetupDraft: landingState?.setupDraft }))
+  const goBack = useCallback(() => navigate(-1), [navigate])
 
-  const handleContinueFromRegistration = useCallback((shift: Shift, masterData: MasterData) => {
+  const handleContinueFromRegistration = useCallback((shift: Shift, masterData: MasterData, manpower: readonly ManpowerAssignment[]) => {
     const expected = deriveExpectedPreviousShift(shift)
-    if (!expected.ok) {
-      setPhase({ kind: 'handover-unavailable', shift, masterData })
-      return
+    if (!expected.ok) return
+    setSession((current) => ({
+      ...current,
+      workSetupDraft: workSetupDraftFrom(shift, masterData, manpower),
+      shift,
+      masterData,
+      manpower,
+      expectedPreviousShift: expected.value,
+    }))
+    navigate('/start/import')
+  }, [navigate])
+
+  const continueToPiles = useCallback((outcome: SetupOutcome) => {
+    setSession((current) => ({ ...current, outcome }))
+    navigate('/start/piles')
+  }, [navigate])
+
+  const handleImportReady = useCallback((carryOver: HandoverCarryOverState) => {
+    if (!session.manpower) return
+    continueToPiles({
+      pendingBatches: carryOver.pendingBatches,
+      pendingSamples: carryOver.pendingSamples,
+      handoverImport: { fingerprint: carryOver.fingerprint, sourceShiftId: carryOver.sourceShiftId, schemaVersion: carryOver.schemaVersion },
+      manpower: session.manpower,
+      pileRegistrations: [],
+    })
+  }, [continueToPiles, session.manpower])
+
+  const handleStartWithoutPreviousShift = useCallback(() => {
+    if (!session.manpower) return
+    setSession((current) => ({
+      ...current,
+      outcome: { pendingBatches: [], pendingSamples: [], manpower: session.manpower!, pileRegistrations: [] },
+      fleetDraft: undefined,
+    }))
+    navigate('/start/piles')
+  }, [navigate, session.manpower])
+
+  const runInitialize = useCallback(async (shift: Shift, masterData: MasterData, outcome: SetupOutcome, fleetSetup: FleetSetup) => {
+    const carryOverPiles = deriveShiftWorkspacePiles(outcome.pendingBatches, outcome.pendingSamples)
+    const registeredPiles = deriveActiveRegistrationPiles(outcome.pileRegistrations)
+    const piles = deriveActivePiles({ carryOverPiles: [...carryOverPiles, ...registeredPiles], fleetSetup, masterData })
+    const result = await localOperationalStore.initializeShiftWorkspace({
+      shift, piles, masterData, fleetSetup, pendingBatches: outcome.pendingBatches, pendingSamples: outcome.pendingSamples,
+      manpower: outcome.manpower, handoverImport: outcome.handoverImport, pileRegistrations: outcome.pileRegistrations,
+    })
+    if (result.ok) {
+      clearWorkSetupDraft()
+      navigate('/home')
     }
-    setPhase({ kind: 'handover', shift, masterData, expectedPreviousShift: expected.value })
-  }, [])
+  }, [navigate])
 
-  const handleImportReady = useCallback(
-    (shift: Shift, masterData: MasterData) =>
-      (carryOver: HandoverCarryOverState) => {
-        const handoverImport: ImportHistoryRecord = {
-          fingerprint: carryOver.fingerprint,
-          sourceShiftId: carryOver.sourceShiftId,
-          schemaVersion: carryOver.schemaVersion,
-        }
-        setPhase({
-          kind: 'manpower',
-          shift,
-          masterData,
-          outcome: {
-            pendingBatches: carryOver.pendingBatches,
-            pendingSamples: carryOver.pendingSamples,
-            handoverImport,
-          },
-        })
-      },
-    [],
-  )
-
-  const handleStartWithoutPreviousShift = useCallback(
-    (shift: Shift, masterData: MasterData) => () => {
-      setPhase({
-        kind: 'manpower',
-        shift,
-        masterData,
-        outcome: { pendingBatches: [], pendingSamples: [] },
-      })
-    },
-    [],
-  )
-
-  const handleManpowerReady = useCallback(
-    (shift: Shift, masterData: MasterData, outcome: HandoverOutcome) =>
-      (manpower: readonly ManpowerAssignment[]) => {
-        setPhase({ kind: 'fleet-setup', shift, masterData, outcome: { ...outcome, manpower } })
-      },
-    [],
-  )
-
-  const runInitialize = useCallback(
-    async (shift: Shift, masterData: MasterData, outcome: SetupOutcome, fleetSetup: FleetSetup) => {
-      setPhase({ kind: 'initializing', shift, masterData, outcome, fleetSetup })
-      const carryOverPiles = deriveShiftWorkspacePiles(outcome.pendingBatches, outcome.pendingSamples)
-      const piles = deriveActivePiles({ carryOverPiles, fleetSetup, masterData })
-      const result = await localOperationalStore.initializeShiftWorkspace({
-        shift,
-        piles,
-        masterData,
-        fleetSetup,
-        pendingBatches: outcome.pendingBatches,
-        pendingSamples: outcome.pendingSamples,
-        manpower: outcome.manpower,
-        handoverImport: outcome.handoverImport,
-      })
-      if (result.ok) {
-        navigate('/home')
-        return
-      }
-      setPhase({ kind: 'initialize-error', code: result.error.code, shift, masterData, outcome, fleetSetup })
-    },
-    [navigate],
-  )
-
-  const handleFleetSetupReady = useCallback(
-    (shift: Shift, masterData: MasterData, outcome: SetupOutcome) => (fleetSetup: FleetSetup) => {
-      void runInitialize(shift, masterData, outcome, fleetSetup)
-    },
-    [runInitialize],
-  )
-
-  const handleRetryInitialize = useCallback(() => {
-    if (phase.kind !== 'initialize-error') return
-    void runInitialize(phase.shift, phase.masterData, phase.outcome, phase.fleetSetup)
-  }, [phase, runInitialize])
-
-  if (phase.kind === 'registration') {
-    return (
-      <ShiftStartPage
-        store={localOperationalStore}
-        masterDataReader={localOperationalStore}
-        onContinue={handleContinueFromRegistration}
-      />
-    )
+  if (location.pathname === '/start') {
+    return <ShiftStartPage store={localOperationalStore} masterDataReader={localOperationalStore} onContinue={handleContinueFromRegistration}
+      initialChecker={landingState?.setupChecker} forceNew={landingState?.forceNew} initialValues={session.workSetupDraft?.values}
+      initialManpowerSelection={session.workSetupDraft?.manpower} onBack={goBack} />
   }
 
-  if (phase.kind === 'handover-unavailable') {
-    return (
-      <div>
-        <PageHeader title={t('handover.title')} />
-        <div className="px-5 py-4">
-          <Card>
-            <CardContent role="alert" className="flex flex-col gap-3">
-              <p>{t('setup.errors.previousShiftUnavailable')}</p>
-              <Button
-                type="button"
-                onClick={() =>
-                  setPhase({
-                    kind: 'manpower',
-                    shift: phase.shift,
-                    masterData: phase.masterData,
-                    outcome: { pendingBatches: [], pendingSamples: [] },
-                  })
-                }
-              >
-                {t('handover.startWithoutPreviousShift')}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
+  if (!session.shift || !session.masterData || !session.manpower || !session.expectedPreviousShift) return <Navigate to="/start" replace />
+
+  if (location.pathname === '/start/import') {
+    return <HandoverPage expectedPreviousShift={session.expectedPreviousShift} store={localOperationalStore} onImportReady={handleImportReady}
+      onStartWithoutPreviousShift={handleStartWithoutPreviousShift} onBack={goBack} hasExistingChoice={!!session.outcome}
+      onContinueExistingChoice={session.outcome ? () => navigate('/start/piles') : undefined} />
   }
 
-  if (phase.kind === 'handover') {
-    return (
-      <HandoverPage
-        expectedPreviousShift={phase.expectedPreviousShift}
-        store={localOperationalStore}
-        onImportReady={handleImportReady(phase.shift, phase.masterData)}
-        onStartWithoutPreviousShift={handleStartWithoutPreviousShift(phase.shift, phase.masterData)}
-      />
-    )
+  if (!session.outcome) return <Navigate to="/start/import" replace />
+
+  if (location.pathname === '/start/piles') {
+    return <PileRegistrationPage shift={session.shift} masterData={session.masterData} initialRegistrations={session.outcome.pileRegistrations}
+      onRegistrationsChange={(pileRegistrations) => setSession((current) => current.outcome ? { ...current, outcome: { ...current.outcome, pileRegistrations } } : current)}
+      onRegistrationsReady={(pileRegistrations) => { setSession((current) => current.outcome ? { ...current, outcome: { ...current.outcome, pileRegistrations } } : current); navigate('/start/fleet') }}
+      onBack={goBack} />
   }
 
-  if (phase.kind === 'manpower') {
-    return (
-      <ManpowerSetupPage
-        shift={phase.shift}
-        masterData={phase.masterData}
-        onManpowerReady={handleManpowerReady(phase.shift, phase.masterData, phase.outcome)}
-        onBack={() => {
-          const expected = deriveExpectedPreviousShift(phase.shift)
-          setPhase(
-            expected.ok
-              ? { kind: 'handover', shift: phase.shift, masterData: phase.masterData, expectedPreviousShift: expected.value }
-              : { kind: 'handover-unavailable', shift: phase.shift, masterData: phase.masterData },
-          )
-        }}
-      />
-    )
+  if (location.pathname === '/start/fleet') {
+    return <FleetSetupPage shift={session.shift} masterData={session.masterData}
+      onFleetSetupReady={(fleetSetup) => void runInitialize(session.shift!, session.masterData!, session.outcome!, fleetSetup)}
+      initialEntries={session.fleetDraft} onEntriesChange={(fleetDraft) => setSession((current) => ({ ...current, fleetDraft }))} onBack={goBack}
+      eligibleDestinationPileIds={activeRegistrationPileIds(session.outcome.pileRegistrations)}
+      createNewPile={(draft) => createAppsScriptPileAreaForSetup({ draft, sectorCode: session.shift!.sectorCode, masterData: session.masterData! })}
+      onMasterDataUpdated={(masterData) => setSession((current) => ({ ...current, masterData }))} />
   }
 
-  if (phase.kind === 'fleet-setup') {
-    return (
-      <FleetSetupPage
-        shift={phase.shift}
-        masterData={phase.masterData}
-        onFleetSetupReady={handleFleetSetupReady(phase.shift, phase.masterData, phase.outcome)}
-        onBack={() => {
-          setPhase({
-            kind: 'manpower',
-            shift: phase.shift,
-            masterData: phase.masterData,
-            outcome: phase.outcome,
-          })
-        }}
-        createNewPile={(draft) =>
-          createAppsScriptPileAreaForSetup({ draft, sectorCode: phase.shift.sectorCode, masterData: phase.masterData })
-        }
-        onMasterDataUpdated={(masterData) =>
-          setPhase((current) => (current.kind === 'fleet-setup' ? { ...current, masterData } : current))
-        }
-      />
-    )
-  }
-
-  if (phase.kind === 'initializing') {
-    return (
-      <div>
-        <PageHeader title={t('setup.initializing.title')} />
-        <div className="px-5 py-4" aria-live="polite">
-          <p className="text-sm text-muted-foreground">{t('setup.initializing.message')}</p>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div>
-      <PageHeader title={t('setup.initializing.title')} />
-      <div className="px-5 py-4">
-        <Card>
-          <CardContent role="alert" className="flex flex-col gap-3">
-            <p>{t('setup.errors.initializeFailed')}</p>
-            <Button type="button" onClick={handleRetryInitialize}>
-              {t('shiftStart.errors.retry')}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  )
+  return <Navigate to="/start" replace />
 }

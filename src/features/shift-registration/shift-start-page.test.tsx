@@ -9,14 +9,18 @@ import type {
   ShiftWorkspaceReader,
 } from '@/application/ports/shift-workspace-reader'
 import { parseSamplingHouseCode, parseSectorCode } from '@/domain/common/codes'
+import { parseEmployeeId } from '@/domain/common/identifiers'
+import { parseCrewCode } from '@/domain/master/master-codes'
 import { createMasterData, type MasterData } from '@/domain/master/master-data'
-import { createSamplingHouseReference, createSectorReference } from '@/domain/master/references'
+import { createCrewReference, createEmployeeReference, createSamplingHouseReference, createSectorReference } from '@/domain/master/references'
+import type { ManpowerAssignment } from '@/domain/manpower/manpower-assignment'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err, ok } from '@/domain/common/result'
 import type { Shift } from '@/domain/shift/shift'
 import { buildFixtureShift } from '@/infrastructure/local-db/local-db-test-fixtures'
 import i18n from '@/i18n'
 import { ShiftStartPage, type MasterDataCacheReader } from './shift-start-page'
+import { clearWorkSetupDraft, readWorkSetupDraft, saveWorkSetupDraft } from '@/infrastructure/device/work-setup-draft-store'
 
 type WorkspaceResult = Result<CurrentShiftWorkspace | undefined, ShiftWorkspaceReadError>
 type MasterDataResult = Result<{ readonly masterData: MasterData; readonly fetchedAt: Date } | undefined, DomainError>
@@ -87,8 +91,8 @@ function buildTestMasterData(): MasterData {
   const br1Only = must(parseSamplingHouseCode('SHT/C01'))
   return must(
     createMasterData({
-      employees: [],
-      crews: [],
+      employees: [createEmployeeReference(must(parseEmployeeId('RAHARJO-1')), 'Raharjo Rahman')],
+      crews: [createCrewReference(must(parseCrewCode('260225')), 'Crew Only', 'Sampler')],
       sectors: [createSectorReference(br1), createSectorReference(ds)],
       locations: [],
       samplingHouses: [
@@ -118,7 +122,8 @@ function renderPage(overrides: {
   generateShiftId?: () => string
   refreshMasterData?: () => Promise<Result<void, DomainError>>
   isOnline?: () => boolean
-  onContinue?: (shift: Shift, masterData: MasterData) => void
+  now?: () => Date
+  onContinue?: (shift: Shift, masterData: MasterData, manpower: readonly ManpowerAssignment[]) => void
 }) {
   const store = overrides.store ?? new FakeShiftWorkspaceReader(ok(undefined))
   const masterDataReader = overrides.masterDataReader ?? readyMasterDataReader()
@@ -136,6 +141,7 @@ function renderPage(overrides: {
                 generateShiftId={overrides.generateShiftId}
                 refreshMasterData={overrides.refreshMasterData}
                 isOnline={overrides.isOnline}
+                now={overrides.now}
                 onContinue={onContinue}
               />
             }
@@ -154,9 +160,15 @@ function fillValidForm() {
   fireEvent.change(screen.getByLabelText('Sampling House'), { target: { value: 'SH_01' } })
 }
 
+async function addChecker(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText('Search NIK / Name'), 'Raharjo')
+  await user.click(await screen.findByRole('button', { name: /Raharjo Rahman/ }))
+}
+
 describe('ShiftStartPage', () => {
   beforeEach(() => {
     void i18n.changeLanguage('en')
+    clearWorkSetupDraft()
   })
 
   it('A. fresh local DB / no current shift shows the registration form once MasterData is ready', async () => {
@@ -168,6 +180,21 @@ describe('ShiftStartPage', () => {
     expect(screen.getByLabelText('Sector')).toBeInTheDocument()
     expect(screen.getByLabelText('Sampling House')).toBeInTheDocument()
     expect(refreshMasterData).not.toHaveBeenCalled()
+  })
+
+  it('A2. defaults a new registration from the local date and keeps a manual Shift Code edit after re-render', async () => {
+    renderPage({ now: () => new Date(2026, 8, 4, 10, 0) })
+
+    expect(await screen.findByLabelText('Shift Date')).toHaveValue('2026-09-04')
+    expect(screen.getByText('04-Sep-2026')).toBeInTheDocument()
+    expect(screen.getByLabelText('Shift Code')).toHaveValue('DS')
+    expect(screen.getByTestId('time-location-row-1')).toHaveClass('grid-cols-2')
+    expect(screen.getByTestId('time-location-row-2')).toHaveClass('grid-cols-2')
+
+    fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'NS' } })
+    fireEvent.change(screen.getByLabelText('Sector'), { target: { value: 'BR1' } })
+
+    expect(screen.getByLabelText('Shift Code')).toHaveValue('NS')
   })
 
   it('B. current shift exists shows the Resume card with date/shift code/sector/sampling house/status', async () => {
@@ -226,71 +253,118 @@ describe('ShiftStartPage', () => {
     expect(await screen.findByText('Active Shift Found')).toBeInTheDocument()
   })
 
-  it('G. a valid registration produces a review with a Shift in status NEW, and Continue hands it (with MasterData) to the caller', async () => {
+  it('G. one Pengawas with all valid fields enables Next and hands the new Shift to the caller', async () => {
     const user = userEvent.setup()
     let readyShift: Shift | undefined
     let readyMasterData: MasterData | undefined
+    let readyManpower: readonly ManpowerAssignment[] | undefined
     renderPage({
       generateShiftId: () => 'fixed-shift-id',
-      onContinue: (shift, masterData) => {
+      onContinue: (shift, masterData, manpower) => {
         readyShift = shift
         readyMasterData = masterData
+        readyManpower = manpower
       },
     })
 
     await screen.findByLabelText('Shift Date')
     fillValidForm()
-    await user.click(screen.getByRole('button', { name: 'Review Registration' }))
-
-    expect(await screen.findByText('Registration is ready for setup.')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await addChecker(user)
+    expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Next' }))
 
     expect(readyShift?.status).toBe('NEW')
     expect(readyShift?.id).toBe('fixed-shift-id')
     expect(readyMasterData).toBeDefined()
+    expect(readyManpower).toHaveLength(1)
+    expect(readyManpower?.[0]?.jobDeskCode).toBe('')
   })
 
-  it('G2. an invalid generated ShiftId shows a translated registration error, not the review, and never a raw DomainError.message', async () => {
+  it('G2. an invalid generated ShiftId shows a translated registration error and never a raw DomainError.message', async () => {
     const user = userEvent.setup()
     renderPage({ generateShiftId: () => '   ' })
 
     await screen.findByLabelText('Shift Date')
     fillValidForm()
-    await user.click(screen.getByRole('button', { name: 'Review Registration' }))
+    await addChecker(user)
+    await user.click(screen.getByRole('button', { name: 'Next' }))
 
     expect(await screen.findByText('Unable to complete registration. Please try again.')).toBeInTheDocument()
-    expect(screen.queryByText('Registration is ready for setup.')).not.toBeInTheDocument()
     expect(screen.queryByText(/must not be blank or whitespace-only/i)).not.toBeInTheDocument()
   })
 
-  it('H. an invalid form shows field-level validation and does not show the review', async () => {
-    const user = userEvent.setup()
-    renderPage({})
+  it('G3. zero Pengawas disables Next and shows the inline requirement', async () => {
+    const onContinue = vi.fn()
+    renderPage({ onContinue })
 
     await screen.findByLabelText('Shift Date')
-    await user.click(screen.getByRole('button', { name: 'Review Registration' }))
-
-    expect(await screen.findAllByText('This field is required.')).toHaveLength(4)
-    expect(screen.queryByText('Registration is ready for setup.')).not.toBeInTheDocument()
+    fillValidForm()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+    expect(screen.getByText('At least 1 Supervisor is required.')).toBeInTheDocument()
+    expect(onContinue).not.toHaveBeenCalled()
   })
 
-  it('I. editing a review returns to the form with entered values retained', async () => {
+  it('G4. a Crew-only roster cannot continue', async () => {
     const user = userEvent.setup()
     renderPage({})
 
     await screen.findByLabelText('Shift Date')
     fillValidForm()
-    await user.click(screen.getByRole('button', { name: 'Review Registration' }))
+    await user.type(screen.getByLabelText('Search NIK / Name'), 'Crew Only')
+    await user.click(await screen.findByRole('button', { name: /Crew Only/ }))
 
-    expect(await screen.findByText('Registration is ready for setup.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+    expect(screen.getByText('At least 1 Supervisor is required.')).toBeInTheDocument()
+  })
 
-    await user.click(screen.getByRole('button', { name: 'Edit Registration' }))
+  it('H. an invalid form shows field-level validation and stays on Work Setup', async () => {
+    const user = userEvent.setup()
+    renderPage({})
+
+    await screen.findByLabelText('Shift Date')
+    await user.type(screen.getByLabelText('Search NIK / Name'), 'Raharjo')
+    await user.click(await screen.findByRole('button', { name: /Raharjo Rahman/ }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    expect(await screen.findAllByText('This field is required.')).toHaveLength(2)
+    expect(screen.getByRole('heading', { name: 'WORK SETUP' })).toBeInTheDocument()
+  })
+
+  it('I. Work Setup retains entered values without a separate review step', async () => {
+    renderPage({})
+
+    await screen.findByLabelText('Shift Date')
+    fillValidForm()
+
+    expect(screen.getByLabelText('Shift Date')).toHaveValue('2026-09-04')
+    expect(screen.getByLabelText('Shift Code')).toHaveValue('DS')
+    expect(screen.getByLabelText('Sector')).toHaveValue('BR1')
+    expect(screen.getByLabelText('Sampling House')).toHaveValue('SH_01')
+  })
+
+  it('restores the local-only Work Setup draft after a browser refresh', async () => {
+    saveWorkSetupDraft({
+      step: 'WORK_SETUP',
+      checkerPersonId: 'RAHARJO-1',
+      shiftDate: '2026-09-04',
+      shiftCode: 'DS',
+      sectorCode: 'BR1',
+      samplingHouseCode: 'SH_01',
+      manpowerPersonIds: ['RAHARJO-1'],
+    })
+    const first = renderPage({})
+
+    await screen.findByLabelText('Shift Date')
+    first.unmount()
+    renderPage({})
 
     expect(await screen.findByLabelText('Shift Date')).toHaveValue('2026-09-04')
     expect(screen.getByLabelText('Shift Code')).toHaveValue('DS')
     expect(screen.getByLabelText('Sector')).toHaveValue('BR1')
     expect(screen.getByLabelText('Sampling House')).toHaveValue('SH_01')
+    expect(await screen.findByText(/Raharjo Rahman/)).toBeInTheDocument()
+    expect(screen.getByTestId('work-setup-roster')).toHaveTextContent('Raharjo Rahman')
+    expect(readWorkSetupDraft()?.manpowerPersonIds).toEqual(['RAHARJO-1'])
   })
 
   it('J. the Shift Code selector only offers DS/NS — no arbitrary text is possible', async () => {
@@ -348,9 +422,9 @@ describe('ShiftStartPage', () => {
     fireEvent.change(screen.getByLabelText('Shift Date'), { target: { value: '2026-09-04' } })
     fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'DS' } })
     // Sector left unselected — Sector and Sampling House must both report errors.
-    await user.click(screen.getByRole('button', { name: 'Review Registration' }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
 
-    expect(screen.queryByText('Registration is ready for setup.')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'WORK SETUP' })).toBeInTheDocument()
   })
 
   it('O. an empty cache while offline shows the first-use internet-required message', async () => {

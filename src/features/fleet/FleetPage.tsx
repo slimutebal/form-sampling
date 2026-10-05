@@ -1,4 +1,4 @@
-import { useOutletContext } from 'react-router'
+import { useLocation, useNavigate, useOutletContext } from 'react-router'
 import type { ActiveWorkspaceContext } from '@/app/router/AppLayout'
 import { localOperationalStore } from '@/app/local-operational-store'
 import { activateAppsScriptPile } from '@/app/pile-master/activate-apps-script-pile'
@@ -12,12 +12,27 @@ import { FleetActivePage } from '@/features/fleet/fleet-active-page'
  */
 export function FleetPage() {
   const { workspace, refreshWorkspace } = useOutletContext<ActiveWorkspaceContext>()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const addFromSetup = Boolean((location.state as { readonly add?: boolean } | null)?.add)
+  const adjustFrontId = (location.state as { readonly adjustFrontId?: string } | null)
+    ?.adjustFrontId
+  const returnTo =
+    (location.state as { readonly returnTo?: string } | null)?.returnTo === '/regist'
+      ? '/regist'
+      : undefined
 
   return (
     <FleetActivePage
       workspace={workspace}
       store={localOperationalStore}
-      onFleetUpdated={refreshWorkspace}
+      initialAdding={addFromSetup}
+      initialAdjustingFrontId={adjustFrontId}
+      onCancelInitialAdjustment={returnTo ? () => navigate(returnTo) : undefined}
+      onFleetUpdated={() => {
+        refreshWorkspace()
+        if (returnTo) navigate(returnTo)
+      }}
       createNewPile={(draft) =>
         activateAppsScriptPile({
           draft,

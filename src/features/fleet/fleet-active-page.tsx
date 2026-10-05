@@ -29,7 +29,10 @@ export interface FleetActivePageStore {
     shiftId: ShiftId,
     params: { readonly fleetSetup: FleetSetup; readonly activatePile?: Pile },
   ): Promise<Result<void, DomainError>>
-  updateActiveFrontFleet(shiftId: ShiftId, fleetSetup: FleetSetup): Promise<Result<void, DomainError>>
+  updateActiveFrontFleet(
+    shiftId: ShiftId,
+    fleetSetup: FleetSetup,
+  ): Promise<Result<void, DomainError>>
 }
 
 export interface FleetActivePageProps {
@@ -41,6 +44,12 @@ export interface FleetActivePageProps {
   generateFleetId?: FleetIdGenerator
   /** Post-init New Pile Master creation for a continuation's Destination — omit to hide the "+ Add New Pile" fallback. */
   createNewPile?: (draft: NewPileDraft) => Promise<Result<ActivatedPile, DomainError>>
+  /** Opens the existing continuation editor directly when Setup's add menu launches it. */
+  initialAdding?: boolean
+  /** Setup's pencil action opens the existing active Front adjustment flow. */
+  initialAdjustingFrontId?: string
+  /** Active Setup returns directly after cancelling its initial Fleet adjustment. */
+  onCancelInitialAdjustment?: () => void
 }
 
 /**
@@ -58,21 +67,32 @@ export function FleetActivePage({
   onFleetUpdated,
   generateFleetId = defaultGenerateFleetId,
   createNewPile,
+  initialAdding = false,
+  initialAdjustingFrontId,
+  onCancelInitialAdjustment,
 }: FleetActivePageProps) {
   const { t } = useTranslation()
-  const [adding, setAdding] = useState(false)
+  const [adding, setAdding] = useState(initialAdding)
   const [fleetId, setFleetId] = useState(generateFleetId)
   const [expandedFrontIds, setExpandedFrontIds] = useState<ReadonlySet<string>>(new Set())
-  const [adjustingFrontId, setAdjustingFrontId] = useState<string>()
+  const [adjustingFrontId, setAdjustingFrontId] = useState<string | undefined>(
+    initialAdjustingFrontId,
+  )
   const [saving, setSaving] = useState(false)
   const [errorCode, setErrorCode] = useState<string>()
 
   const fleetSetup = workspace.fleetSetup
   const lineage = useMemo(() => deriveFrontLineage(fleetSetup), [fleetSetup])
 
-  const activeFronts = fleetSetup.fronts.filter((front) => lineage.activeFrontIds.includes(front.frontId))
-  const historicalFronts = fleetSetup.fronts.filter((front) => lineage.historicalFrontIds.includes(front.frontId))
-  const adjustingFront = adjustingFrontId ? activeFronts.find((front) => front.frontId === adjustingFrontId) : undefined
+  const activeFronts = fleetSetup.fronts.filter((front) =>
+    lineage.activeFrontIds.includes(front.frontId),
+  )
+  const historicalFronts = fleetSetup.fronts.filter((front) =>
+    lineage.historicalFrontIds.includes(front.frontId),
+  )
+  const adjustingFront = adjustingFrontId
+    ? activeFronts.find((front) => front.frontId === adjustingFrontId)
+    : undefined
 
   function toggleExpanded(frontId: string) {
     setExpandedFrontIds((current) => {
@@ -123,6 +143,10 @@ export function FleetActivePage({
   }
 
   function cancelAdjustUnit() {
+    if (initialAdjustingFrontId && onCancelInitialAdjustment) {
+      onCancelInitialAdjustment()
+      return
+    }
     setAdjustingFrontId(undefined)
     setErrorCode(undefined)
   }
@@ -145,9 +169,11 @@ export function FleetActivePage({
   }
 
   return (
-    <div>
-      <PageHeader title={t('fleetActive.title')} />
-      <div className="flex flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="shrink-0">
+        <PageHeader title={t('fleetActive.title')} />
+      </div>
+      <div className="scrollbar-none flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
         {errorCode ? (
           <p
             role="alert"
@@ -171,6 +197,7 @@ export function FleetActivePage({
             masterData={workspace.masterData}
             fleetSetup={fleetSetup}
             workspacePiles={workspace.piles}
+            pileRegistrations={workspace.pileRegistrations}
             fleetId={fleetId}
             createNewPile={createNewPile}
             onPileActivated={() => onFleetUpdated()}
@@ -196,8 +223,16 @@ export function FleetActivePage({
             ) : (
               <div className="flex flex-col gap-3">
                 {activeFronts.map((front) => {
-                  const fleet = fleetSetup.fleets.find((candidate) => candidate.frontId === front.frontId)
-                  const effective = fleet ? resolveEffectiveFleetAgainstMaster(workspace.masterData, fleetSetup, fleet.fleetId) : undefined
+                  const fleet = fleetSetup.fleets.find(
+                    (candidate) => candidate.frontId === front.frontId,
+                  )
+                  const effective = fleet
+                    ? resolveEffectiveFleetAgainstMaster(
+                        workspace.masterData,
+                        fleetSetup,
+                        fleet.fleetId,
+                      )
+                    : undefined
                   const truckIds = effective?.ok ? effective.value.truckIds : []
                   const referenceFrontId = lineage.predecessorFrontIdByFrontId.get(front.frontId)
                   const expanded = expandedFrontIds.has(front.frontId)
@@ -210,7 +245,9 @@ export function FleetActivePage({
                         <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-2">
                           {referenceFrontId ? (
                             <>
-                              <dt className="text-muted-foreground">{t('fleetSetup.referenceFleet')}</dt>
+                              <dt className="text-muted-foreground">
+                                {t('fleetSetup.referenceFleet')}
+                              </dt>
                               <dd className="break-all text-right font-medium">
                                 {t('fleetSetup.frontReference', { frontId: referenceFrontId })}
                               </dd>
@@ -218,7 +255,9 @@ export function FleetActivePage({
                           ) : null}
                           <dt className="text-muted-foreground">{t('fleetSetup.hauler')}</dt>
                           <dd className="break-all text-right font-medium">{front.haulerCode}</dd>
-                          <dt className="text-muted-foreground">{t('fleetSetup.destinationPile')}</dt>
+                          <dt className="text-muted-foreground">
+                            {t('fleetSetup.destinationPile')}
+                          </dt>
                           <dd className="break-all text-right font-medium">
                             {front.destinationPileId ?? t('fleetSetup.noReference')}
                           </dd>
@@ -226,10 +265,18 @@ export function FleetActivePage({
                           <dd className="break-all text-right font-medium">{truckIds.length}</dd>
                         </dl>
                         <div className="grid grid-cols-2 gap-2">
-                          <Button type="button" variant="secondary" onClick={() => toggleExpanded(front.frontId)}>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => toggleExpanded(front.frontId)}
+                          >
                             {expanded ? t('fleetActive.hideDetail') : t('fleetActive.detail')}
                           </Button>
-                          <Button type="button" variant="secondary" onClick={() => openAdjustUnit(front.frontId)}>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => openAdjustUnit(front.frontId)}
+                          >
                             {t('fleetActive.adjustUnit')}
                           </Button>
                         </div>
@@ -255,7 +302,9 @@ export function FleetActivePage({
                       <CardContent className="flex flex-row items-center justify-between">
                         <span className="font-semibold">{front.frontId}</span>
                         <span className="text-sm text-muted-foreground">
-                          {successorFrontId ? t('fleetActive.continuedBy', { frontId: successorFrontId }) : null}
+                          {successorFrontId
+                            ? t('fleetActive.continuedBy', { frontId: successorFrontId })
+                            : null}
                         </span>
                       </CardContent>
                     </Card>

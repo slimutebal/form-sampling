@@ -16,6 +16,7 @@ import { findOreSamplingConfig, type MasterData } from '@/domain/master/master-d
 import type { BatchSize } from '@/domain/master/sampling-config'
 import type { FreshPileStartPosition } from '@/domain/pile/fresh-pile-start-position'
 import type { Pile } from '@/domain/pile/pile'
+import type { PileRegistrationDraft } from '@/application/pile-registration/pile-registration-draft'
 
 /**
  * Builds the authoritative `expectedPositions` plan `PileHaulagePage`
@@ -45,6 +46,7 @@ export function derivePileHaulagePlan(
   masterData: MasterData,
   pendingBatches: readonly PendingBatchCarryOver[],
   freshStartPosition?: FreshPileStartPosition,
+  registration?: PileRegistrationDraft,
 ): Result<readonly BatchPosition[], DomainError> {
   const config = findOreSamplingConfig(masterData, pile.oreCode)
   if (!config) {
@@ -57,6 +59,20 @@ export function derivePileHaulagePlan(
   const activeForPile = selectActiveContinuationBatches(pendingBatches).filter(
     (row) => row.pile.id === pile.id,
   )
+
+  // A selected active registration is a per-Batch starting seed. A
+  // carry-over for that exact Batch is newer operational context and keeps
+  // its existing precedence; carry-over for a different Batch must not
+  // replace the operator's selected registration.
+  if (registration?.status === 'ACTIVE' && registration.pileId === pile.id) {
+    const carryOverForRegistration = activeForPile.find(
+      (row) => Number(row.pendingBatch.batchNumber) === Number(registration.batch),
+    )
+    const seed = carryOverForRegistration
+      ? { batchNumber: carryOverForRegistration.pendingBatch.batchNumber, lastRit: carryOverForRegistration.pendingBatch.lastRit }
+      : { batchNumber: registration.batch, lastRit: registration.rit }
+    return remainingPositionsForSeed(seed, config.batchSize)
+  }
 
   if (activeForPile.length === 0 && freshStartPosition) {
     return remainingPositionsFromStart(

@@ -171,10 +171,10 @@ export function buildFixtureMasterData(): MasterData {
 }
 
 /** A FleetSetup with one BASE fleet (FLEET-A/F1) whose only member is T1 — T2 is a known but out-of-fleet truck. */
-export function buildFixtureFleetSetup(masterData: MasterData): FleetSetup {
+export function buildFixtureFleetSetup(masterData: MasterData, destinationPileId?: PileId): FleetSetup {
   const sector = must(parseSectorCode(SECTOR_CODE))
   const hauler = must(parseHaulerCode(HAULER_CODE))
-  const front = createFrontDefinition(fixtureFrontId(FIXTURE_FRONT_ID), sector, hauler)
+  const front = createFrontDefinition(fixtureFrontId(FIXTURE_FRONT_ID), sector, hauler, destinationPileId)
   const fleet = must(
     createBaseFleetDefinition({
       fleetId: fixtureFleetId(FIXTURE_FLEET_ID),

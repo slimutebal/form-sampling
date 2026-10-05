@@ -94,6 +94,25 @@ export function operationalFleetOptionsForPile(
 }
 
 /**
+ * Production's truck-first entry only accepts a Front explicitly assigned
+ * to the selected destination.  This intentionally differs from the legacy
+ * pile lookup above, which still supports old Fronts with no destination.
+ */
+export function operationalFleetOptionsForDestinationPile(
+  masterData: MasterData,
+  fleetSetup: FleetSetup,
+  pileId: PileId,
+): Result<readonly OperationalFleetOption[], DomainError> {
+  const optionsResult = operationalFleetOptionsForPile(masterData, fleetSetup, pileId)
+  if (!optionsResult.ok) return optionsResult
+
+  const frontById = new Map(fleetSetup.fronts.map((front) => [front.frontId, front]))
+  return ok(
+    optionsResult.value.filter((option) => frontById.get(option.frontId)?.destinationPileId === pileId),
+  )
+}
+
+/**
  * Resolves the single operational Front/Fleet option a route/query
  * context names (Phase 18 §5 — the Pile Operation checker no longer
  * offers a Front dropdown; the Front is chosen earlier on the Pile list

@@ -1,7 +1,9 @@
 import type { PileId, ShiftId } from '@/domain/common/identifiers'
+import type { FleetSetup } from '@/domain/fleet/fleet-setup'
 import type { Result } from '@/domain/common/result'
 import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
 import type { ProductionRecord } from '@/domain/production/production-record'
+import type { PileRegistrationDraft } from '@/application/pile-registration/pile-registration-draft'
 
 /**
  * Application-owned failure shape for this port. Only the stable `code`
@@ -41,5 +43,17 @@ export interface ProductionRecordStore {
 
   addProductionTransaction(
     params: AddProductionTransactionParams,
+  ): Promise<Result<void, ProductionRecordStoreError>>
+
+  /** Optional for lightweight callers/tests; the active local store supplies it for quick Fleet recovery. */
+  updateActiveFrontFleet?(
+    shiftId: ShiftId,
+    fleetSetup: FleetSetup,
+  ): Promise<Result<void, ProductionRecordStoreError>>
+
+  /** Existing workspace registration path, used only to save a selected batch continuation. */
+  updatePileRegistrations?(
+    shiftId: ShiftId,
+    pileRegistrations: readonly PileRegistrationDraft[],
   ): Promise<Result<void, ProductionRecordStoreError>>
 }

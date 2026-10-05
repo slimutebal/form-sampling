@@ -1,11 +1,10 @@
-import { useRef, useState, type ChangeEvent } from 'react'
+import { useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { confirmHandoverImport } from '@/application/handover/confirm-handover-import'
 import type { HandoverCarryOverState } from '@/application/handover/handover-carry-over'
 import type { HandoverImportStore } from '@/application/handover/handover-import-store'
 import type { HandoverImportPreview } from '@/application/handover/preview-handover-import'
 import { previewHandoverImport } from '@/application/handover/preview-handover-import'
-import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { ExpectedPreviousShift } from '@/domain/handover/expected-previous-shift'
@@ -32,6 +31,10 @@ export interface HandoverPageProps {
   onImportReady: (carryOver: HandoverCarryOverState, previousShiftInfo: HandoverShiftInfo) => void
   /** ARCHITECTURE.md §7 "Start Without Previous Shift" — omitted when the caller does not offer that path. */
   onStartWithoutPreviousShift?: () => void
+  onBack?: () => void
+  /** A prior selection belongs to the running setup session, not storage. */
+  hasExistingChoice?: boolean
+  onContinueExistingChoice?: () => void
   /** Injectable so tests can supply a fake reader instead of real File/SheetJS/Web Crypto plumbing. */
   readFile?: (file: File) => Promise<Result<HandoverFileReadResult, { readonly code: string }>>
 }
@@ -49,6 +52,17 @@ type Phase =
   | { readonly kind: 'mismatch'; readonly preview: HandoverImportPreview }
   | { readonly kind: 'preview'; readonly preview: HandoverImportPreview }
 
+function HandoverViewport({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
+      <header className="shrink-0 border-b border-border px-5 py-4 text-center">
+        <h1 className="text-lg font-extrabold tracking-wide">{title}</h1>
+      </header>
+      {children}
+    </div>
+  )
+}
+
 /**
  * The Previous Shift handover import screen (ROADMAP.md Phase 12,
  * UI_UX_SPEC.md §19-22): select a previous-shift Excel archive, validate
@@ -65,11 +79,15 @@ export function HandoverPage({
   store,
   onImportReady,
   onStartWithoutPreviousShift,
+  onBack,
+  hasExistingChoice = false,
+  onContinueExistingChoice,
   readFile = defaultReadHandoverFile,
 }: HandoverPageProps) {
   const { t } = useTranslation()
 
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
+  const [pastedReport, setPastedReport] = useState('')
   const isSubmittingRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   /**
@@ -166,32 +184,43 @@ export function HandoverPage({
       aria-label={t('handover.selectFile')}
     />
   )
+  const backAction = onBack ? (
+    <Button type="button" variant="secondary" className="border border-emerald-700 text-emerald-800 hover:bg-emerald-50" onClick={onBack}>
+      ← Back
+    </Button>
+  ) : null
 
   if (phase.kind === 'idle') {
     return (
-      <div>
-        <PageHeader title={t('handover.title')} />
-        <div className="flex flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-          <p className="text-sm text-muted-foreground">{t('handover.description')}</p>
+      <HandoverViewport title="SHIFT HANDOVER">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           {hiddenFileInput}
-          <Button type="button" size="lg" className="w-full" onClick={() => fileInputRef.current?.click()}>
-            {t('handover.selectFile')}
+          <div className="flex min-h-0 flex-1 flex-col gap-4 pt-8">
+          <textarea value={pastedReport} onChange={(event) => setPastedReport(event.target.value)} placeholder={t('handover.pasteTextReport')} className="min-h-0 flex-1 w-full resize-none overflow-y-auto rounded-md border border-border bg-background p-3 text-sm" />
+          <Button type="button" size="lg" className="ml-auto w-full max-w-xs" onClick={() => fileInputRef.current?.click()}>
+            {t('handover.importFile')}
           </Button>
           {onStartWithoutPreviousShift ? (
-            <Button type="button" variant="secondary" className="w-full" onClick={onStartWithoutPreviousShift}>
-              {t('handover.startWithoutPreviousShift')}
+            <Button type="button" variant="secondary" className="mx-auto w-full max-w-xs" onClick={onStartWithoutPreviousShift}>
+              {t('handover.newSetup')}
             </Button>
           ) : null}
+          {hasExistingChoice && onContinueExistingChoice ? (
+            <Button type="button" size="lg" className="mx-auto w-full max-w-xs" onClick={onContinueExistingChoice}>
+              {t('handover.continueSetup')}
+            </Button>
+          ) : null}
+          </div>
+          {backAction}
         </div>
-      </div>
+      </HandoverViewport>
     )
   }
 
   if (phase.kind === 'checking') {
     return (
-      <div>
-        <PageHeader title={t('handover.title')} />
-        <div className="px-5 py-4" aria-live="polite">
+      <HandoverViewport title="SHIFT HANDOVER">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 py-4" aria-live="polite">
           {/* Kept mounted (not just present in 'idle'/'error'/'mismatch'/'preview')
               so a still-hanging check can never strand the operator without a
               file input to act on — `requestIdRef` in `handleFileSelected`
@@ -199,16 +228,16 @@ export function HandoverPage({
               newer selection resolves to. */}
           {hiddenFileInput}
           <p className="text-sm text-muted-foreground">{t('handover.checkingFile')}</p>
+          {backAction}
         </div>
-      </div>
+      </HandoverViewport>
     )
   }
 
   if (phase.kind === 'error') {
     return (
-      <div>
-        <PageHeader title={t('handover.title')} />
-        <div className="flex flex-col gap-4 px-5 py-4">
+      <HandoverViewport title="SHIFT HANDOVER">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 py-4">
           {hiddenFileInput}
           <Card>
             <CardContent role="alert" className="flex flex-col gap-3">
@@ -220,20 +249,20 @@ export function HandoverPage({
           </Card>
           {onStartWithoutPreviousShift ? (
             <Button type="button" variant="secondary" className="w-full" onClick={onStartWithoutPreviousShift}>
-              {t('handover.startWithoutPreviousShift')}
+              {t('handover.newSetup')}
             </Button>
           ) : null}
+          {backAction}
         </div>
-      </div>
+      </HandoverViewport>
     )
   }
 
   if (phase.kind === 'mismatch') {
     const { preview } = phase
     return (
-      <div>
-        <PageHeader title={t('handover.mismatchTitle')} />
-        <div className="flex flex-col gap-4 px-5 py-4">
+      <HandoverViewport title="SHIFT HANDOVER">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 py-4">
           {hiddenFileInput}
           <Card>
             <CardContent role="alert" className="flex flex-col gap-3">
@@ -257,11 +286,12 @@ export function HandoverPage({
           </Card>
           {onStartWithoutPreviousShift ? (
             <Button type="button" variant="secondary" className="w-full" onClick={onStartWithoutPreviousShift}>
-              {t('handover.startWithoutPreviousShift')}
+              {t('handover.newSetup')}
             </Button>
           ) : null}
+          {backAction}
         </div>
-      </div>
+      </HandoverViewport>
     )
   }
 
@@ -271,9 +301,8 @@ export function HandoverPage({
   const pendingSampleCount = preview.pendingSamples.length
 
   return (
-    <div>
-      <PageHeader title={t('handover.previewTitle')} />
-      <div className="flex flex-col gap-4 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+    <HandoverViewport title="SHIFT HANDOVER">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         {hiddenFileInput}
 
         <Card>
@@ -317,7 +346,8 @@ export function HandoverPage({
         <Button type="button" size="lg" className="w-full" onClick={handleConfirm}>
           {t('handover.confirmImport')}
         </Button>
+        {backAction}
       </div>
-    </div>
+    </HandoverViewport>
   )
 }

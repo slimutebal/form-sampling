@@ -109,7 +109,7 @@ export function FrontFleetAdjustmentEditor({
           errorKey={displayErrorCode ? fleetActiveErrorTranslationKey(displayErrorCode) : undefined}
         />
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="sticky bottom-0 z-10 grid grid-cols-2 gap-2 border-t border-border bg-background py-2">
           <Button type="button" variant="secondary" onClick={onCancel}>
             {t('fleetSetup.cancel')}
           </Button>

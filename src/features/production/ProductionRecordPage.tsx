@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { useOutletContext, useParams, useSearchParams } from 'react-router'
+import { Link, useOutletContext, useParams, useSearchParams } from 'react-router'
 import type { ActiveWorkspaceContext } from '@/app/router/AppLayout'
 import { localOperationalStore } from '@/app/local-operational-store'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -7,6 +7,7 @@ import { createBatchPosition, type BatchPosition } from '@/domain/batch/batch-po
 import { parseBatchNumber } from '@/domain/batch/batch-number'
 import { parseRitNumber } from '@/domain/batch/rit-number'
 import { ProductionRecordEntry } from '@/features/production/production-record-entry'
+import { activeRegistrationsForPile } from '@/application/pile-registration/registration-context'
 
 /**
  * Parses the optional `?batch=&rit=&mode=missed` missed-Rit correction
@@ -46,8 +47,15 @@ export function ProductionRecordPage() {
   const { t } = useTranslation('production')
   const { pileId } = useParams<{ pileId: string }>()
   const [searchParams] = useSearchParams()
-  const { workspace } = useOutletContext<ActiveWorkspaceContext>()
+  const { workspace, refreshWorkspace } = useOutletContext<ActiveWorkspaceContext>()
   const pile = workspace.piles.find((candidate) => candidate.id === pileId)
+  const activeRegistrations = pile ? activeRegistrationsForPile(workspace.pileRegistrations, pile.id) : []
+  const requestedBatch = parseBatchNumber(Number(searchParams.get('registrationBatch')))
+  const registration = activeRegistrations.length === 1
+    ? activeRegistrations[0]
+    : requestedBatch.ok
+      ? activeRegistrations.find((candidate) => Number(candidate.batch) === Number(requestedBatch.value))
+      : undefined
 
   if (!pile) {
     return (
@@ -62,6 +70,28 @@ export function ProductionRecordPage() {
     )
   }
 
+  if (activeRegistrations.length === 0) {
+    return <div><PageHeader title={t('title')} /><div className="px-5 py-4"><p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">No active batch registered for this pile.</p></div></div>
+  }
+
+  if (!registration) {
+    return (
+      <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden">
+        <div className="shrink-0"><PageHeader title={t('title')} /></div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="flex flex-col gap-3">
+          <h2 className="font-semibold">Select Batch</h2>
+          {activeRegistrations.map((candidate) => (
+            <Link key={Number(candidate.batch)} to={`/production/record/${encodeURIComponent(pile.id as string)}?registrationBatch=${Number(candidate.batch)}`} className="rounded-lg border border-border p-3 font-medium">
+              Batch {String(candidate.batch).padStart(3, '0')} · Trip {String(candidate.rit).padStart(3, '0')}
+            </Link>
+          ))}
+        </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <ProductionRecordEntry
       shift={workspace.shift}
@@ -70,8 +100,10 @@ export function ProductionRecordPage() {
       fleetSetup={workspace.fleetSetup}
       manpower={workspace.manpower}
       pendingBatches={workspace.pendingBatches}
+      registration={registration}
       targetPosition={parseMissedTargetPosition(searchParams)}
       store={localOperationalStore}
+      onFleetUpdated={refreshWorkspace}
     />
   )
 }

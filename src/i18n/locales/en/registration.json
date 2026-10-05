@@ -1,15 +1,15 @@
 {
   "navigation": {
-    "registration": "Regist"
+    "registration": "SETUP"
   },
-  "title": "Regist",
+  "title": "SETUP",
   "manpower": {
     "title": "Manpower",
     "description": "Operator, checker, and crew"
   },
   "pile": {
     "title": "Pile_ID",
-    "description": "Pile, batch, rit, and status"
+    "description": "Pile, batch, Trip, and status"
   },
   "fleet": {
     "title": "Fleet",

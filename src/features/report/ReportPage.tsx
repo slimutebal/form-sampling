@@ -159,16 +159,25 @@ export function ReportPage() {
     reportResults.map(([language, result]) => [language, (result as { ok: true; value: ShiftReport }).value]),
   ) as Record<ReportLanguage, ShiftReport>
 
+  const report = reports.en
+  const delivered = report.sampleHandling.filter((sample) => sample.status === 'DELIVERED')
+  const bags = delivered.reduce((total, sample) => total + Number(sample.totalBag), 0)
+  const rejects = phase.productionRecords.filter((record) => record.effective.status === 'ACTIVE' && record.effective.disposition === 'REJECT').length
+
   return (
-    <div>
-      <WhatsAppReportPreview reports={reports} />
-      <div className="flex flex-col gap-2 px-5 pb-4">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="shrink-0"><PageHeader title="REPORT" /></div>
+      <div aria-label="Shift dashboard" className="shrink-0 px-5 py-3">
+        <Card><CardContent className="grid grid-cols-4 gap-y-3 text-center"><p className="col-span-4 text-left text-[11px] font-semibold text-muted-foreground">SHIFT DASHBOARD</p>{[[report.productionSummary.length, 'Piles'], [report.productionTotals.rit, 'Trips'], [report.productionTotals.batch, 'Batches'], [report.productionTotals.increment, 'Incr'], [report.pendingSamples.length, 'Pending'], [delivered.length, 'Delivered'], [bags, 'Bags'], [rejects, 'Reject'], [report.productionTotals.wrongTruck, 'Wrong Truck']].map(([value, label]) => <div key={String(label)}><strong className={label === 'Reject' && Number(value) > 0 ? 'block text-xl text-red-700' : label === 'Wrong Truck' && Number(value) > 0 ? 'block text-xl text-amber-700' : 'block text-xl'}>{value}</strong><span className="text-[10px] text-muted-foreground">{label}</span></div>)}</CardContent></Card>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col px-5 pb-2"><p className="shrink-0 py-1 text-sm font-semibold">Report text</p><WhatsAppReportPreview reports={reports} initialReportLanguage="en" embedded /></div>
+      <div className="shrink-0 px-5 pb-2">
         {exportErrorCode ? (
           <p role="alert" className="text-sm text-red-600">
             {t('report.errors.exportFailed')}
           </p>
         ) : null}
-        <Button type="button" size="lg" variant="secondary" onClick={() => void handleExport()} disabled={exporting}>
+        <Button type="button" size="lg" variant="secondary" className="w-full" onClick={() => void handleExport()} disabled={exporting}>
           {exporting ? t('report.exporting') : t('report.exportExcel')}
         </Button>
       </div>

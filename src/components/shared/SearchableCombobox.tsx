@@ -17,6 +17,8 @@ interface SearchableComboboxProps {
   onClearSelection: () => void
   placeholder?: string
   noResultsContent?: ReactNode
+  hideLabel?: boolean
+  resultsAbove?: boolean
 }
 
 /**
@@ -37,12 +39,14 @@ export function SearchableCombobox({
   onClearSelection,
   placeholder,
   noResultsContent,
+  hideLabel = false,
+  resultsAbove = false,
 }: SearchableComboboxProps) {
   const inputId = useId()
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={inputId} className="text-sm font-medium">
+    <div className={`flex flex-col gap-1.5 ${resultsAbove ? 'relative' : ''}`}>
+      <label htmlFor={inputId} className={hideLabel ? 'sr-only' : 'text-sm font-medium'}>
         {label}
       </label>
       {selectedLabel !== undefined ? (
@@ -63,9 +67,11 @@ export function SearchableCombobox({
           />
           {query.trim() ? (
             options.length === 0 ? (
-              (noResultsContent ?? null)
+              <div className={resultsAbove ? 'absolute bottom-full left-0 z-20 mb-2 w-full rounded-md border border-border bg-background p-2 shadow-lg' : undefined}>
+                {noResultsContent ?? null}
+              </div>
             ) : (
-              <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto">
+              <ul className={`flex max-h-64 flex-col gap-2 overflow-y-auto ${resultsAbove ? 'absolute bottom-full left-0 z-20 mb-2 w-full rounded-md border border-border bg-background p-2 shadow-lg' : ''}`}>
                 {options.map((option) => (
                   <li key={option.value}>
                     <button
