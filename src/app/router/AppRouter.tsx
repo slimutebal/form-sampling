@@ -1,4 +1,7 @@
+import { useEffect } from 'react'
 import { Navigate, Route, Routes, useParams } from 'react-router'
+import { refreshAppsScriptMasterData } from '@/app/google/google-master-data-sync'
+import { subscribeToConnectivity } from '@/infrastructure/device/connectivity'
 import { AppLayout } from '@/app/router/AppLayout'
 import { WelcomePage } from '@/app/router/WelcomePage'
 import { PreShiftShell } from '@/components/shared/PreShiftShell'
@@ -32,9 +35,25 @@ function RedirectPileDetailToProductionRecord() {
   return <Navigate to={`/production/record/${encodeURIComponent(pileId ?? '')}`} replace />
 }
 
+/** Keeps the validated cache current without blocking an offline-safe UI. */
+function MasterDataRefreshLifecycle() {
+  useEffect(() => {
+    const refreshWhenOnline = () => {
+      if (navigator.onLine) void refreshAppsScriptMasterData()
+    }
+    refreshWhenOnline()
+    return subscribeToConnectivity((online) => {
+      if (online) void refreshAppsScriptMasterData()
+    })
+  }, [])
+  return null
+}
+
 export function AppRouter() {
   return (
-    <Routes>
+    <>
+      <MasterDataRefreshLifecycle />
+      <Routes>
       <Route path="/" element={<WelcomePage />} />
       <Route
         path="/start/*"
@@ -74,6 +93,7 @@ export function AppRouter() {
         <Route path="/samples" element={<SamplesPage />} />
         <Route path="/report" element={<ReportPage />} />
       </Route>
-    </Routes>
+      </Routes>
+    </>
   )
 }

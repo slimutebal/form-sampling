@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { searchPersonnel } from '@/application/manpower/personnel-search'
+import { sortSelectedStaffByLevel } from '@/application/manpower/personnel-order'
 import { Button } from '@/components/ui/button'
 import type { MasterData } from '@/domain/master/master-data'
 import type { SelectedPerson } from '@/features/manpower/use-manpower-roster'
@@ -27,7 +28,7 @@ function RosterGroup({
 
   return (
     <section className="flex flex-col gap-1.5" aria-label={title}>
-      <h3 className="text-sm font-medium text-muted-foreground">
+      <h3 className="type-subsection-title text-muted-foreground">
         {title}
       </h3>
 
@@ -98,8 +99,9 @@ export function WorkSetupManpower({
 
   // Master-derived personnel classification.
   // Checker does not change someone's personnel classification.
-  const supervisors = value.selected.filter(
-    (person) => person.source === 'EMPLOYEE',
+  const supervisors = sortSelectedStaffByLevel(
+    value.selected.filter((person) => person.source === 'EMPLOYEE'),
+    masterData.employees,
   )
 
   const crew = value.selected.filter(
@@ -142,7 +144,7 @@ export function WorkSetupManpower({
     >
       {/* HEADER */}
       <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
-        <h2 className="text-base font-semibold">
+        <h2 className="type-section-title">
           {t('workSetup.manpower')}
         </h2>
 

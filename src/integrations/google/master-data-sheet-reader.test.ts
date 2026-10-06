@@ -8,8 +8,10 @@ type GoogleRows = readonly (readonly unknown[])[]
 function validRanges(): RawMasterDataRanges {
   return {
     employees: [
-      ['Employee_ID', 'Name'],
-      ['12345', 'John Doe'],
+      ['Employee_ID', 'Name', 'Level'],
+      ['001', 'Supervisor A', 'Supervisor'],
+      ['002', 'Foreman B', 'Foreman'],
+      ['003', 'Employee C', ''],
       ['', '', ''], // trailing blank row — ignored
     ],
     crews: [
@@ -49,7 +51,11 @@ describe('parseMasterDataFromRanges — happy path', () => {
     const result = parseMasterDataFromRanges(validRanges())
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.value.employees).toEqual([{ id: '12345', name: 'John Doe' }])
+    expect(result.value.employees).toEqual([
+      { id: '001', name: 'Supervisor A', level: 'Supervisor' },
+      { id: '002', name: 'Foreman B', level: 'Foreman' },
+      { id: '003', name: 'Employee C' },
+    ])
     expect(result.value.crews).toEqual([
       { code: 'CREW-A', name: 'Crew A', jobCode: 'Sampler' },
       { code: 'CREW-B', name: 'Crew B', jobCode: undefined },
@@ -126,7 +132,7 @@ describe('parseMasterDataFromRanges — row validation', () => {
     const result = parseMasterDataFromRanges({
       ...ranges,
       employees: [
-        ['Employee_ID', 'Name'],
+        ['Employee_ID', 'Name', 'Level'],
         ['   ', 'Blank Id'],
       ],
     })
@@ -142,6 +148,20 @@ describe('parseMasterDataFromRanges — row validation', () => {
       oreSamplingConfigs: [
         ['Ore', 'Sampling_Interval', 'Batch_Size', 'Packing'],
         ['SAP', undefined, 20, 2],
+      ],
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('GOOGLE_MASTER_ROW_INVALID')
+  })
+
+  it('rejects an Employee with a blank required Name even when Level is present', () => {
+    const ranges = validRanges()
+    const result = parseMasterDataFromRanges({
+      ...ranges,
+      employees: [
+        ['Employee_ID', 'Name', 'Level'],
+        ['004', '', 'Foreman'],
       ],
     })
     expect(result.ok).toBe(false)
@@ -185,9 +205,9 @@ describe('parseMasterDataFromRanges — createMasterData validation is never byp
     const result = parseMasterDataFromRanges({
       ...ranges,
       employees: [
-        ['Employee_ID', 'Name'],
-        ['12345', 'John Doe'],
-        ['12345', 'Jane Doe'],
+        ['Employee_ID', 'Name', 'Level'],
+        ['12345', 'John Doe', 'Supervisor'],
+        ['12345', 'Jane Doe', 'Foreman'],
       ],
     })
     expect(result.ok).toBe(false)
@@ -258,7 +278,7 @@ describe('parseMasterDataFromRanges — createMasterData validation is never byp
 function fakeTransport(ranges: RawMasterDataRanges): { transport: GoogleSheetsTransport; requestedRanges: string[] } {
   const requestedRanges: string[] = []
   const byRange: Record<string, GoogleRows> = {
-    'Employees!A:B': ranges.employees,
+    'Employees!A:C': ranges.employees,
     'Crews!A:C': ranges.crews,
     'Sectors!A:A': ranges.sectors,
     'Sampling_Houses!A:B': ranges.samplingHouses,

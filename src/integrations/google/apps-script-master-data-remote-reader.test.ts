@@ -3,7 +3,7 @@ import { AppsScriptMasterDataRemoteReader } from './apps-script-master-data-remo
 
 const validPayload = {
   tables: {
-    Employees: [['Employee_ID', 'Name']],
+    Employees: [['Employee_ID', 'Name', 'Level']],
     Crews: [['Crew_ID', 'Name', 'Job']],
     Sectors: [['Sector_Code'], ['BR1']],
     Sampling_Houses: [['Sector_Code', 'Sampling_House_Code'], ['BR1', 'SH1']],
@@ -52,6 +52,23 @@ describe('AppsScriptMasterDataRemoteReader', () => {
     if (result.ok) expect(result.value.sectors).toEqual([{ code: 'BR1' }])
     expect(document.head.contains(script)).toBe(false)
     expect((window as unknown as Record<string, unknown>)[url.searchParams.get('callback') ?? '']).toBeUndefined()
+  })
+
+  it('retains Level while projecting verified leading contract columns from Apps Script rows', async () => {
+    const reader = new AppsScriptMasterDataRemoteReader('https://example.test/exec')
+    const pending = reader.readMasterData()
+    callbackFor(jsonpScript())({
+      ...validPayload,
+      tables: {
+        ...validPayload.tables,
+        Employees: [['Employee_ID', 'Name', 'Level', 'Initial'], ['SCM0268', 'Mega Putri', 'Supervisor', 'Mega']],
+      },
+    })
+
+    await expect(pending).resolves.toMatchObject({
+      ok: true,
+      value: { employees: [{ id: 'SCM0268', name: 'Mega Putri', level: 'Supervisor' }] },
+    })
   })
 
   it('maps a script error to the stable unavailable error and cleans up', async () => {
