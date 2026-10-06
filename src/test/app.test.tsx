@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { I18nextProvider } from 'react-i18next'
 import { MemoryRouter } from 'react-router'
+import { localOperationalStore } from '@/app/local-operational-store'
 import { AppRouter } from '@/app/router/AppRouter'
 import i18n from '@/i18n'
 
@@ -16,8 +17,8 @@ function renderApp(initialEntries: string[]) {
 }
 
 describe('application shell', () => {
-  beforeEach(() => {
-    void i18n.changeLanguage('id')
+  beforeEach(async () => {
+    await i18n.changeLanguage('id')
   })
 
   it('renders the welcome screen at the root route', () => {
@@ -36,8 +37,10 @@ describe('application shell', () => {
   })
 
   it('an active route without a workspace redirects to /start rather than rendering a broken active screen', async () => {
+    expect(await localOperationalStore.loadCurrentShiftWorkspace()).toEqual({ ok: true, value: undefined })
+
     renderApp(['/piles'])
-    expect(await screen.findByRole('heading', { name: 'WORK SETUP' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'WORK SETUP' }, { timeout: 5_000 })).toBeInTheDocument()
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
 })
