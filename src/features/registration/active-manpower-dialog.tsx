@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FilePenLine, MoreVertical, X } from 'lucide-react'
 import { useOutletContext } from 'react-router'
 import type { ActiveWorkspaceContext } from '@/app/router/AppLayout'
 import { localOperationalStore } from '@/app/local-operational-store'
-import { createManpowerFromDraft } from '@/application/manpower/create-manpower-from-draft'
+import { refreshAppsScriptMasterData } from '@/app/google/google-master-data-sync'
+import { updateActiveManpower } from '@/application/manpower/update-active-manpower'
 import { Button } from '@/components/ui/button'
 import {
   manpowerAssignmentsToSelected,
@@ -17,8 +18,9 @@ interface ActiveManpowerDialogProps {
 /** Compact modal presentation over the existing active-shift roster logic. */
 export function ActiveManpowerDialog({ onClose }: ActiveManpowerDialogProps) {
   const { workspace, refreshWorkspace } = useOutletContext<ActiveWorkspaceContext>()
+  const [personnelCatalog, setPersonnelCatalog] = useState(workspace.masterData)
   const roster = useManpowerRoster(
-    workspace.masterData,
+    personnelCatalog,
     manpowerAssignmentsToSelected(workspace.manpower),
   )
   const [error, setError] = useState<string>()
@@ -29,24 +31,39 @@ export function ActiveManpowerDialog({ onClose }: ActiveManpowerDialogProps) {
   }>()
   const [checkerMenuPersonId, setCheckerMenuPersonId] = useState<string>()
 
+  useEffect(() => {
+    let cancelled = false
+    void localOperationalStore.readCachedMasterData().then((cached) => {
+      if (cached.ok && cached.value && !cancelled) setPersonnelCatalog(cached.value.masterData)
+    })
+    if (navigator.onLine) {
+      void refreshAppsScriptMasterData().then((refreshed) => {
+        if (refreshed.ok && !cancelled) setPersonnelCatalog(refreshed.value.masterData)
+      })
+    }
+    return () => { cancelled = true }
+  }, [])
+
   function toggleChecker(personId: string) {
     const person = roster.selected.find((candidate) => candidate.personId === personId)
     if (!person) return
-    const nextJobDesk = /checker/i.test(person.jobDeskCode)
-      ? person.jobDeskCode.replace(/\s*checker\s*/i, ' ').trim()
-      : `${person.jobDeskCode} Checker`.trim()
-    roster.changeJobDesk(personId, nextJobDesk)
+    if (person.jobDeskCode.trim() === 'Checker') return
+    roster.replaceChecker(personId, (previousChecker) => {
+      if (previousChecker.source === 'EMPLOYEE') return ''
+      return personnelCatalog.crews.find((crew) => crew.code === previousChecker.personId)?.jobCode ?? 'Crew'
+    })
     setCheckerMenuPersonId(undefined)
   }
 
   async function save() {
     if (saving) return
-    const result = createManpowerFromDraft(
+    const result = updateActiveManpower(
+      workspace.manpower,
       roster.selected.map((person) => ({
         personId: person.personId,
         jobDeskCode: person.jobDeskCode,
       })),
-      workspace.masterData,
+      personnelCatalog,
     )
     if (!result.ok) {
       setError('Check the selected personnel and Job Desk values.')
@@ -78,7 +95,7 @@ export function ActiveManpowerDialog({ onClose }: ActiveManpowerDialogProps) {
         className="fixed inset-x-4 top-1/2 z-50 mx-auto flex max-h-[78dvh] w-auto max-w-md -translate-y-1/2 flex-col rounded-2xl bg-background shadow-2xl"
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="font-semibold">Manpower</h2>
+          <h2 className="type-dialog-title">Manpower</h2>
           <button type="button" aria-label="Close Add Manpower" onClick={onClose}>
             <X aria-hidden="true" size={20} />
           </button>
@@ -135,7 +152,7 @@ export function ActiveManpowerDialog({ onClose }: ActiveManpowerDialogProps) {
                           className="w-full px-2 py-2 text-left text-xs hover:bg-muted"
                           onClick={() => toggleChecker(person.personId)}
                         >
-                          {/checker/i.test(person.jobDeskCode) ? 'Remove Checker' : 'Mark Checker'}
+                          {person.jobDeskCode.trim() === 'Checker' ? 'Checker' : 'Make Checker'}
                         </button>
                       </div>
                     ) : null}
@@ -206,6 +223,11 @@ export function ActiveManpowerDialog({ onClose }: ActiveManpowerDialogProps) {
             <Button
               type="button"
               onClick={() => {
+                if (roster.selected.find((person) => person.personId === removeCandidate.personId)?.jobDeskCode.trim() === 'Checker') {
+                  setError('Choose another Checker before removing the current Checker.')
+                  setRemoveCandidate(undefined)
+                  return
+                }
                 roster.removePerson(removeCandidate.personId)
                 setRemoveCandidate(undefined)
               }}

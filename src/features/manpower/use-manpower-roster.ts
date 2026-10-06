@@ -59,5 +59,17 @@ export function useManpowerRoster(masterData: MasterData, initial: readonly Sele
     )
   }
 
-  return { query, setQuery, selected, searchResults, addPerson, removePerson, changeJobDesk }
+  function replaceChecker(personId: string, replacementJobDeskForPreviousChecker: (person: SelectedPerson) => string) {
+    setSelected((current) =>
+      current.map((person) => {
+        if (person.personId === personId) return { ...person, jobDeskCode: 'Checker' }
+        if (person.jobDeskCode.trim() === 'Checker') {
+          return { ...person, jobDeskCode: replacementJobDeskForPreviousChecker(person) }
+        }
+        return person
+      }),
+    )
+  }
+
+  return { query, setQuery, selected, searchResults, addPerson, removePerson, changeJobDesk, replaceChecker }
 }

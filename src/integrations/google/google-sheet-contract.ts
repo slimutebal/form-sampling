@@ -17,7 +17,7 @@ export interface GoogleSheetsConfig {
 }
 
 export const GOOGLE_MASTER_SHEET_RANGES = {
-  employees: 'Employees!A:B',
+  employees: 'Employees!A:C',
   crews: 'Crews!A:C',
   sectors: 'Sectors!A:A',
   samplingHouses: 'Sampling_Houses!A:B',
@@ -28,7 +28,7 @@ export const GOOGLE_MASTER_SHEET_RANGES = {
 } as const
 
 export const GOOGLE_MASTER_HEADERS = {
-  employees: ['Employee_ID', 'Name'],
+  employees: ['Employee_ID', 'Name', 'Level'],
   crews: ['Crew_ID', 'Name', 'Job'],
   sectors: ['Sector_Code'],
   samplingHouses: ['Sector_Code', 'Sampling_House_Code'],

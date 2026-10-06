@@ -1,4 +1,5 @@
 import type { MasterData } from '@/domain/master/master-data'
+import { sortEmployeeCandidates } from './personnel-order'
 
 /**
  * One search hit against either the Employee or Crew master (Phase 18 §4).
@@ -13,6 +14,7 @@ export interface PersonnelSearchResult {
   readonly name: string
   readonly source: 'EMPLOYEE' | 'CREW'
   readonly jobCode?: string
+  readonly level?: string
 }
 
 /**
@@ -31,13 +33,15 @@ export function searchPersonnel(
     return []
   }
 
-  const employeeResults: PersonnelSearchResult[] = masterData.employees
+  const employeeResults = sortEmployeeCandidates(masterData.employees
     .filter(
       (employee) =>
         (employee.id as string).toLowerCase().includes(normalized) ||
         employee.name.toLowerCase().includes(normalized),
     )
-    .map((employee) => ({ personId: employee.id as string, name: employee.name, source: 'EMPLOYEE' as const }))
+    .map((employee) => employee.level === undefined
+      ? { personId: employee.id as string, name: employee.name, source: 'EMPLOYEE' as const }
+      : { personId: employee.id as string, name: employee.name, source: 'EMPLOYEE' as const, level: employee.level }))
 
   const crewResults: PersonnelSearchResult[] = masterData.crews
     .filter(

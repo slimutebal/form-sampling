@@ -2,6 +2,7 @@ import type { MasterDataRemoteReader } from '@/application/google/google-ports'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err } from '@/domain/common/result'
 import type { MasterData } from '@/domain/master/master-data'
+import { GOOGLE_MASTER_HEADERS } from './google-sheet-contract'
 import { parseMasterDataFromRanges, type RawMasterDataRanges } from './master-data-sheet-reader'
 
 type Rows = readonly (readonly unknown[])[]
@@ -115,6 +116,22 @@ function isRows(value: unknown): value is Rows {
   return Array.isArray(value) && value.every((row) => Array.isArray(row))
 }
 
+/**
+ * Apps Script currently returns complete sheet rows for `tables`, even for
+ * sheets whose app contract only consumes a leading range (for example,
+ * `Employees!A:C` while the sheet also has columns beyond `Level`). Project
+ * only a verified leading contract range here; the parser below still checks
+ * every required header and every required data value. A renamed, reordered,
+ * missing, or extra column inside the documented range is never accepted.
+ */
+function projectLeadingContractColumns(rows: Rows, headers: readonly string[]): Rows {
+  const firstRow = rows[0]
+  const hasExpectedLeadingHeaders = firstRow !== undefined && headers.every(
+    (header, index) => String(firstRow[index] ?? '').trim() === header,
+  )
+  return hasExpectedLeadingHeaders ? rows.map((row) => row.slice(0, headers.length)) : rows
+}
+
 /** Accepts the documented `{ tables: { Sheet_Name: rows } }` payload only. */
 function toRanges(body: unknown): RawMasterDataRanges | undefined {
   if (typeof body !== 'object' || body === null || !('tables' in body)) return undefined
@@ -133,5 +150,14 @@ function toRanges(body: unknown): RawMasterDataRanges | undefined {
   const trucks = read('Trucks')
   const oreSamplingConfigs = read('Ore_Sampling_Config')
   if (!employees || !crews || !sectors || !samplingHouses || !pileAreas || !haulers || !trucks || !oreSamplingConfigs) return undefined
-  return { employees, crews, sectors, samplingHouses, pileAreas, haulers, trucks, oreSamplingConfigs }
+  return {
+    employees: projectLeadingContractColumns(employees, GOOGLE_MASTER_HEADERS.employees),
+    crews: projectLeadingContractColumns(crews, GOOGLE_MASTER_HEADERS.crews),
+    sectors: projectLeadingContractColumns(sectors, GOOGLE_MASTER_HEADERS.sectors),
+    samplingHouses: projectLeadingContractColumns(samplingHouses, GOOGLE_MASTER_HEADERS.samplingHouses),
+    pileAreas: projectLeadingContractColumns(pileAreas, GOOGLE_MASTER_HEADERS.pileAreas),
+    haulers: projectLeadingContractColumns(haulers, GOOGLE_MASTER_HEADERS.haulers),
+    trucks: projectLeadingContractColumns(trucks, GOOGLE_MASTER_HEADERS.trucks),
+    oreSamplingConfigs: projectLeadingContractColumns(oreSamplingConfigs, GOOGLE_MASTER_HEADERS.oreSamplingConfigs),
+  }
 }

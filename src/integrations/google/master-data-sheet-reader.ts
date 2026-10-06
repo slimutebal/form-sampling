@@ -98,15 +98,16 @@ function parseEmployeeRows(dataRows: GoogleRows): Result<readonly EmployeeRefere
   const employees: EmployeeReference[] = []
   for (let index = 0; index < dataRows.length; index++) {
     const row = dataRows[index]
-    if (isRowBlank(row, 2)) continue
+    if (isRowBlank(row, 3)) continue
     const idText = cellText(row[0])
     const name = cellText(row[1])
+    const level = cellText(row[2])
     if (idText.length === 0 || name.length === 0) {
       return { ok: false, error: requiredCellsMissing('Employees', index) }
     }
     const id = parseEmployeeId(idText)
     if (!id.ok) return { ok: false, error: rowError('Employees', index, id.error) }
-    employees.push(createEmployeeReference(id.value, name))
+    employees.push(createEmployeeReference(id.value, name, level || undefined))
   }
   return ok(employees)
 }

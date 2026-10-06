@@ -11,10 +11,12 @@ import type { CrewCode, HaulerCode, LocationCode, PileAreaCode } from './master-
 export interface EmployeeReference {
   readonly id: EmployeeId
   readonly name: string
+  /** Optional source value from Employees.Level. It orders Staff only. */
+  readonly level?: string
 }
 
-export function createEmployeeReference(id: EmployeeId, name: string): EmployeeReference {
-  return { id, name }
+export function createEmployeeReference(id: EmployeeId, name: string, level?: string): EmployeeReference {
+  return level === undefined ? { id, name } : { id, name, level }
 }
 
 /**
