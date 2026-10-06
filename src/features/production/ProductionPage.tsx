@@ -27,7 +27,10 @@ import { SampleHandlingPage } from '@/features/samples/sample-handling-page'
 import { cn } from '@/components/ui/cn'
 
 type Mode = 'production' | 'samples'
-type LoadPhase = { readonly kind: 'loading' } | { readonly kind: 'error' } | { readonly kind: 'loaded'; readonly records: readonly ProductionRecord[] }
+type LoadPhase =
+  | { readonly kind: 'loading'; readonly loadKey: string }
+  | { readonly kind: 'error'; readonly loadKey: string }
+  | { readonly kind: 'loaded'; readonly loadKey: string; readonly records: readonly ProductionRecord[] }
 
 function timeOf(row: ProductionRecordDisplayRow): string {
   const date = row.record.audit.createdAt
@@ -45,14 +48,15 @@ interface PilePagerProps {
 
 /** Page-grouped selector; Record history uses four cards, Add uses three. */
 function ActivePilePager({ piles, selectedPileId, rowsForPile, masterData, cardsPerPage = 4, onSelect }: PilePagerProps) {
-  const [page, setPage] = useState(0)
+  const selectedIndex = piles.findIndex((pile) => (pile.id as string) === selectedPileId)
+  const initialPage = selectedIndex < 0 ? 0 : Math.floor(selectedIndex / cardsPerPage)
+  const pagerKey = `${selectedPileId ?? ''}:${cardsPerPage}:${piles.map((pile) => pile.id).join('|')}`
+  return <ActivePilePagerContent key={pagerKey} piles={piles} selectedPileId={selectedPileId} rowsForPile={rowsForPile} masterData={masterData} cardsPerPage={cardsPerPage} onSelect={onSelect} initialPage={initialPage} />
+}
+
+function ActivePilePagerContent({ piles, selectedPileId, rowsForPile, masterData, cardsPerPage = 4, onSelect, initialPage }: PilePagerProps & { readonly initialPage: number }) {
+  const [page, setPage] = useState(initialPage)
   const touchStart = useRef<number | undefined>(undefined)
-  useEffect(() => {
-    const selectedIndex = piles.findIndex((pile) => (pile.id as string) === selectedPileId)
-    if (selectedIndex < 0) return
-    const selectedPage = Math.floor(selectedIndex / cardsPerPage)
-    setPage((currentPage) => currentPage === selectedPage ? currentPage : selectedPage)
-  }, [piles, selectedPileId, cardsPerPage])
   const pages = useMemo(() => Array.from({ length: Math.ceil(piles.length / cardsPerPage) }, (_, index) => piles.slice(index * cardsPerPage, index * cardsPerPage + cardsPerPage)), [piles, cardsPerPage])
   const current = pages[Math.min(page, Math.max(0, pages.length - 1))] ?? []
   return <section aria-label="Active Pile pager" className="shrink-0" onTouchStart={(event) => { touchStart.current = event.touches[0]?.clientX }} onTouchEnd={(event) => { const start = touchStart.current; const end = event.changedTouches[0]?.clientX; if (start === undefined || end === undefined || Math.abs(start - end) < 36) return; setPage((value) => start > end ? Math.min(pages.length - 1, value + 1) : Math.max(0, value - 1)) }}>
@@ -76,11 +80,14 @@ interface DashboardBatchPagerProps {
 
 /** Five compact, page-snapped Batch cards; ACTIVE registrations always lead page one. */
 function DashboardBatchPager({ batches, sapTheme, resetKey }: DashboardBatchPagerProps) {
+  return <DashboardBatchPagerContent key={resetKey} batches={batches} sapTheme={sapTheme} />
+}
+
+function DashboardBatchPagerContent({ batches, sapTheme }: Omit<DashboardBatchPagerProps, 'resetKey'>) {
   const [page, setPage] = useState(0)
   const touchStart = useRef<number | undefined>(undefined)
   const pages = useMemo(() => Array.from({ length: Math.ceil(batches.length / 5) }, (_, index) => batches.slice(index * 5, index * 5 + 5)), [batches])
   const current = pages[Math.min(page, Math.max(0, pages.length - 1))] ?? []
-  useEffect(() => setPage(0), [resetKey])
   const activeTheme = sapTheme ? 'border-emerald-600 bg-emerald-50 text-emerald-950' : 'border-amber-800 bg-amber-50 text-amber-950'
   const historicalTheme = sapTheme ? 'border-emerald-200 bg-emerald-50/35 text-emerald-800' : 'border-amber-300 bg-amber-50/35 text-amber-800'
   return <section aria-label="Dashboard Batch cards" className="shrink-0" onTouchStart={(event) => { touchStart.current = event.touches[0]?.clientX }} onTouchEnd={(event) => { const start = touchStart.current; const end = event.changedTouches[0]?.clientX; if (start === undefined || end === undefined || Math.abs(start - end) < 32) return; setPage((value) => start > end ? Math.min(pages.length - 1, value + 1) : Math.max(0, value - 1)) }}>
@@ -93,8 +100,13 @@ function DashboardBatchPager({ batches, sapTheme, resetKey }: DashboardBatchPage
 export function ProductionPage() {
   const { workspace, refreshWorkspace } = useOutletContext<ActiveWorkspaceContext>()
   const [mode, setMode] = useState<Mode>('production')
-  const [phase, setPhase] = useState<LoadPhase>({ kind: 'loading' })
   const [reloadToken, setReloadToken] = useState(0)
+  const loadKey = `${workspace.shift.id}:${reloadToken}`
+  const [loadedPhase, setLoadedPhase] = useState<LoadPhase>(() => ({ kind: 'loading', loadKey }))
+  const phase = useMemo<LoadPhase>(
+    () => loadedPhase.loadKey === loadKey ? loadedPhase : { kind: 'loading', loadKey },
+    [loadedPhase, loadKey],
+  )
   const [selectedPileId, setSelectedPileId] = useState<string>()
   const [expandedTransactionId, setExpandedTransactionId] = useState<string>()
   const [activeSort, setActiveSort] = useState<ProductionHistorySortKey>('rec')
@@ -110,18 +122,19 @@ export function ProductionPage() {
 
   useEffect(() => {
     let cancelled = false
-    setPhase({ kind: 'loading' })
     void localOperationalStore.listProductionRecordsForShift(workspace.shift.id).then((result) => {
-      if (!cancelled) setPhase(result.ok ? { kind: 'loaded', records: result.value } : { kind: 'error' })
+      if (!cancelled) setLoadedPhase(result.ok ? { kind: 'loaded', loadKey, records: result.value } : { kind: 'error', loadKey })
     })
     return () => { cancelled = true }
-  }, [workspace.shift.id, reloadToken])
+  }, [workspace.shift.id, reloadToken, loadKey])
 
   const activePiles = useMemo(() => workspace.piles.filter((pile) => activeRegistrationsForPile(workspace.pileRegistrations, pile.id).length > 0), [workspace.pileRegistrations, workspace.piles])
   const selectedPile = activePiles.find((pile) => (pile.id as string) === selectedPileId) ?? activePiles[0]
-  useEffect(() => { if (selectedPile && selectedPileId !== (selectedPile.id as string)) setSelectedPileId(selectedPile.id as string) }, [selectedPile, selectedPileId])
   const rowsForPile = (pile: Pile) => phase.kind === 'loaded' ? effectiveProductionRowsForPile(phase.records, pile.id) : []
-  const rows = selectedPile ? rowsForPile(selectedPile) : []
+  const rows = useMemo(
+    () => selectedPile && phase.kind === 'loaded' ? effectiveProductionRowsForPile(phase.records, selectedPile.id) : [],
+    [phase, selectedPile],
+  )
   const dashboardCounters = useMemo(() => selectedPile && phase.kind === 'loaded'
     ? deriveProductionOperationalCounters(phase.records, selectedPile, workspace.masterData)
     : { tripCount: 0, incrementCount: 0, rejectCount: 0, wrongTruckCount: 0 }, [phase, selectedPile, workspace.masterData])
@@ -172,7 +185,7 @@ export function ProductionPage() {
     if (mode === 'production') resetHistoryView()
   }, [mode])
   useEffect(() => {
-    if (mode === 'production' && !addOpen) historyListRef.current?.scrollTo({ top: 0 })
+    if (mode === 'production' && !addOpen) historyListRef.current?.scrollTo?.({ top: 0 })
   }, [historyResetToken, mode, addOpen])
   function href(row: ProductionRecordDisplayRow, suffix = ''): string {
     return '/production/detail/' + encodeURIComponent(row.record.transaction.pileId as string) + '/batch/' + row.batchNumber + '/rit/' + row.tripWithinBatch + suffix

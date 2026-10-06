@@ -35,6 +35,7 @@ function buildWorkspace(): LocalShiftWorkspace {
     pendingBatches: [],
     pendingSamples: [],
     manpower: [createManpowerAssignment('12345', 'John Doe', 'Checker', true)],
+    pileRegistrations: [],
   }
 }
 
@@ -84,7 +85,7 @@ function mockRecords(records: readonly ProductionRecord[]) {
 
 async function selectTarget(user: ReturnType<typeof userEvent.setup>, batch: number, rit: number) {
   await user.selectOptions(screen.getByLabelText('Target Batch'), String(batch))
-  await user.selectOptions(screen.getByLabelText('Target Rit'), String(rit))
+  await user.selectOptions(screen.getByLabelText('Target Trip'), String(rit))
 }
 
 beforeEach(async () => {
@@ -104,7 +105,7 @@ describe('ProductionSwitchRecordPage — from a source record (MOVE/SWAP)', () =
     await screen.findByRole('heading', { name: 'SWITCH RECORD' })
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Target Batch').tagName).toBe('SELECT')
-    expect(screen.getByLabelText('Target Rit').tagName).toBe('SELECT')
+    expect(screen.getByLabelText('Target Trip').tagName).toBe('SELECT')
 
     await selectTarget(user, 4, 9)
     expect(await screen.findByText('AVAILABLE')).toBeInTheDocument()
@@ -203,7 +204,7 @@ describe('ProductionSwitchRecordPage — MISSED "Switch Existing Record" (target
     renderPage(4, 3)
 
     await screen.findByRole('heading', { name: 'SWITCH RECORD' })
-    expect(screen.getByText('S5_02 Batch 4 Rit 3')).toBeInTheDocument()
+    expect(screen.getByText('S5_02 Batch 4 Trip 3')).toBeInTheDocument()
 
     await user.selectOptions(screen.getByLabelText('Select an existing record'), 'TX-5')
     await user.type(screen.getByLabelText('Correction Reason'), 'Salah posisi ritase')

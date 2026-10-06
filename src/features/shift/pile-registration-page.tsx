@@ -126,7 +126,7 @@ export function PileRegistrationPage({
           ← Back
         </Button>
         <h1 className="min-w-0 text-center text-lg font-extrabold tracking-wide">SAMPLE SETUP</h1>
-        <Button type="button" disabled={registrations.length === 0} onClick={() => onRegistrationsReady(registrations)}>Next →</Button>
+        <Button type="button" onClick={() => onRegistrationsReady(registrations)}>Next →</Button>
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-5 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         <div className="flex shrink-0 items-center justify-between gap-3">

@@ -32,6 +32,7 @@ function buildWorkspace(): LocalShiftWorkspace {
     pendingBatches: [],
     pendingSamples: [],
     manpower: [],
+    pileRegistrations: [],
   }
 }
 
@@ -88,7 +89,7 @@ describe('PileDetailPage', () => {
       ),
     ).not.toBeInTheDocument()
     expect(screen.getByLabelText('Batch Awal')).toHaveValue('001')
-    expect(screen.getByLabelText('Rit Awal')).toHaveValue('001')
+    expect(screen.getByLabelText('Trip Awal')).toHaveValue('001')
   })
 
   it('confirming the default Initial Position persists it via the store and refreshes the workspace', async () => {

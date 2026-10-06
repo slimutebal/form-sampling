@@ -33,6 +33,7 @@ function buildWorkspace(): LocalShiftWorkspace {
     pendingBatches: [],
     pendingSamples: [],
     manpower: [],
+    pileRegistrations: [],
   }
 }
 
@@ -97,9 +98,9 @@ describe('ProductionPileDetailPage', () => {
     expect(await screen.findByText('PRODUCTION SUMMARY')).toBeInTheDocument()
     const batchTotalTile = (await screen.findByText('Batch Total')).closest('div')
     expect(batchTotalTile).toHaveTextContent('1')
-    const acceptTile = screen.getByText('Accepted Rit').closest('div')
+    const acceptTile = screen.getByText('Accepted Trips').closest('div')
     expect(acceptTile).toHaveTextContent('2')
-    const rejectTile = screen.getByText('Rejected Rit').closest('div')
+    const rejectTile = screen.getByText('Rejected Trips').closest('div')
     expect(rejectTile).toHaveTextContent('1')
   })
 
@@ -112,7 +113,7 @@ describe('ProductionPileDetailPage', () => {
     renderPage()
 
     expect(await screen.findByText('⚠ PRODUCTION WARNING')).toBeInTheDocument()
-    expect(screen.getByText('Batch 4 • Missed Rit: 2')).toBeInTheDocument()
+    expect(screen.getByText('Batch 4 • Missed Trip: 2')).toBeInTheDocument()
   })
 
   it('renders one Batch card per Batch, with status and a Missed Rit line only when applicable', async () => {
@@ -126,11 +127,11 @@ describe('ProductionPileDetailPage', () => {
 
     const batch4Link = (await screen.findByText('Batch 4')).closest('a')!
     expect(batch4Link).toHaveTextContent('ACTIVE')
-    expect(batch4Link).toHaveTextContent('⚠ Missed Rit: 2')
+    expect(batch4Link).toHaveTextContent('⚠ Missed Trip: 2')
     expect(batch4Link).toHaveAttribute('href', '/production/detail/S5_02/batch/4')
 
     const batch2Link = screen.getByText('Batch 2').closest('a')!
-    expect(batch2Link).not.toHaveTextContent('Missed Rit')
+    expect(batch2Link).not.toHaveTextContent('Missed Trip')
   })
 
   it('"Lihat" scrolls to the first missed Batch, in ascending numeric order', async () => {

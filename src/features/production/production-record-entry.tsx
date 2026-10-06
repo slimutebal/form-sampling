@@ -63,9 +63,11 @@ export function ProductionRecordEntry({
 }: ProductionRecordEntryProps) {
   const navigate = useNavigate()
   const [phase, setPhase] = useState<LoadPhase>({ kind: 'loading' })
-  const [reloadToken, setReloadToken] = useState(0)
   const [activeFleetSetup, setActiveFleetSetup] = useState(fleetSetup)
-  const registeredRegistrations = registrations ?? (registration ? [registration] : [])
+  const registeredRegistrations = useMemo(
+    () => registrations ?? (registration ? [registration] : []),
+    [registrations, registration],
+  )
   const [selectedBatch, setSelectedBatch] = useState(registration ? String(Number(registration.batch)) : '')
   const [selectedSuccessorBatch, setSelectedSuccessorBatch] = useState('')
   const [selectedFleetId, setSelectedFleetId] = useState('')
@@ -93,16 +95,16 @@ export function ProductionRecordEntry({
       if (!cancelled) setPhase(result.ok ? { kind: 'loaded', records: result.value } : { kind: 'error', code: result.error.code })
     })
     return () => { cancelled = true }
-  }, [store, shift.id, pile.id, reloadToken])
+  }, [store, shift.id, pile.id])
 
   const operationalBatches = useMemo(() => phase.kind === 'loaded'
     ? deriveOperationalBatchStates(masterData, pile, phase.records, registeredRegistrations)
     : undefined, [phase, masterData, pile, registeredRegistrations])
-  const availableEndpoints = operationalBatches?.ok
+  const availableEndpoints = useMemo(() => operationalBatches?.ok
     ? operationalBatches.value
       .filter((batch) => batch.operationalStatus === 'DIRECT_ACTIVE' || batch.operationalStatus === 'NEEDS_CONTINUATION')
       .map((batch) => ({ ...batch, batch: batch.registration.batch }))
-    : []
+    : [], [operationalBatches])
   useEffect(() => {
     if (!registration && availableEndpoints.length === 1 && !selectedBatch) {
       setSelectedBatch(String(availableEndpoints[0]!.batchNumber))
@@ -125,9 +127,9 @@ export function ProductionRecordEntry({
         continuationFromBatch: selectedEndpoint.registration.batch,
       }
   }, [selectedEndpoint, selectedSuccessorBatch, registeredRegistrations, pile])
-  const selectedRegistration = selectedEndpoint?.operationalStatus === 'NEEDS_CONTINUATION'
+  const selectedRegistration = useMemo(() => selectedEndpoint?.operationalStatus === 'NEEDS_CONTINUATION'
     ? selectedSuccessor && { ...selectedSuccessor, continuationFromBatch: selectedEndpoint.registration.batch }
-    : selectedEndpoint?.registration
+    : selectedEndpoint?.registration, [selectedEndpoint, selectedSuccessor])
   const fleetOptionsResult = useMemo(() => operationalFleetOptionsForDestinationPile(masterData, activeFleetSetup, pile.id), [masterData, activeFleetSetup, pile.id])
   const fleetOptions = fleetOptionsResult.ok ? fleetOptionsResult.value : []
   const selectedFleet = fleetOptions.find((candidate) => (candidate.fleetId as string) === selectedFleetId)
@@ -192,7 +194,7 @@ export function ProductionRecordEntry({
           setError('SUCCESSOR_BATCH_INACTIVE')
           return
         }
-        if (existing && hasEffectiveProductionForRegistration(phase.records, existing)) {
+        if (existing && phase.kind === 'loaded' && hasEffectiveProductionForRegistration(phase.records, existing)) {
           setError('SUCCESSOR_ALREADY_STARTED')
           return
         }

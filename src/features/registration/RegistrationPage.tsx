@@ -146,8 +146,8 @@ export function RegistrationPage() {
   const samplePanelRef = useRef<HTMLElement>(null)
   const [samplePanelHeight, setSamplePanelHeight] = useState(0)
   const [sampleModalViewport, setSampleModalViewport] = useState(() => ({
-    height: typeof window === 'undefined' ? 720 : window.innerHeight,
-    offsetTop: 0,
+    height: typeof window === 'undefined' ? 720 : window.visualViewport?.height ?? window.innerHeight,
+    offsetTop: typeof window === 'undefined' ? 0 : window.visualViewport?.offsetTop ?? 0,
   }))
 
   useEffect(() => {
@@ -185,17 +185,13 @@ export function RegistrationPage() {
   }, [])
 
   useEffect(() => {
-    if (!sampleFormOpen) {
-      setSampleCanSubmit(false)
-      return
-    }
+    if (!sampleFormOpen) return
     const visualViewport = window.visualViewport
     const updateViewport = () =>
       setSampleModalViewport({
         height: visualViewport?.height ?? window.innerHeight,
         offsetTop: visualViewport?.offsetTop ?? 0,
       })
-    updateViewport()
     visualViewport?.addEventListener('resize', updateViewport)
     visualViewport?.addEventListener('scroll', updateViewport)
     window.addEventListener('resize', updateViewport)
@@ -205,6 +201,18 @@ export function RegistrationPage() {
       window.removeEventListener('resize', updateViewport)
     }
   }, [sampleFormOpen])
+
+  function openSampleForm(registration?: PileRegistrationDraft) {
+    setEditingRegistration(registration)
+    setSampleCanSubmit(false)
+    setSampleFormOpen(true)
+  }
+
+  function closeSampleForm() {
+    setSampleCanSubmit(false)
+    setSampleFormOpen(false)
+    setEditingRegistration(undefined)
+  }
 
   useEffect(() => {
     const panel = samplePanelRef.current
@@ -224,9 +232,8 @@ export function RegistrationPage() {
       if (event.key !== 'Escape') return
       setAddMenuOpen(false)
       setManpowerFormOpen(false)
-      setSampleFormOpen(false)
+      closeSampleForm()
       setFleetFormOpen(false)
-      setEditingRegistration(undefined)
       setOpenSampleActionKey(undefined)
     }
     window.addEventListener('keydown', closeOnEscape)
@@ -520,8 +527,7 @@ export function RegistrationPage() {
                             type="button"
                             className="block w-full rounded px-2 py-1.5 text-left text-sm hover:bg-muted"
                             onClick={() => {
-                              setEditingRegistration(row)
-                              setSampleFormOpen(true)
+                              openSampleForm(row)
                               setOpenSampleActionKey(undefined)
                             }}
                           >
@@ -626,8 +632,7 @@ export function RegistrationPage() {
               type="button"
               className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-muted"
               onClick={() => {
-                setEditingRegistration(undefined)
-                setSampleFormOpen(true)
+                openSampleForm()
                 setAddMenuOpen(false)
               }}
             >
@@ -668,10 +673,7 @@ export function RegistrationPage() {
           type="button"
           aria-label="Dismiss Sample"
           className="fixed inset-0 z-40 cursor-default bg-black/30"
-          onClick={() => {
-            setSampleFormOpen(false)
-            setEditingRegistration(undefined)
-          }}
+          onClick={closeSampleForm}
         />
       ) : null}
       {sampleFormOpen ? (
@@ -702,10 +704,7 @@ export function RegistrationPage() {
                 type="button"
                 aria-label="Close Sample"
                 className="flex size-11 items-center justify-center text-red-700"
-                onClick={() => {
-                  setSampleFormOpen(false)
-                  setEditingRegistration(undefined)
-                }}
+                onClick={closeSampleForm}
               >
                 <X aria-hidden="true" size={22} />
               </button>
@@ -725,10 +724,7 @@ export function RegistrationPage() {
               formId="active-sample-form"
               initialRegistration={editingRegistration}
               onCanSubmitChange={setSampleCanSubmit}
-              onSaved={() => {
-                setSampleFormOpen(false)
-                setEditingRegistration(undefined)
-              }}
+              onSaved={closeSampleForm}
             />
           </div>
         </section>

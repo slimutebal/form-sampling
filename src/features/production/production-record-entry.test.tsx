@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { MemoryRouter } from 'react-router'
@@ -22,7 +22,11 @@ function value<T>(result: { ok: boolean; value?: T }): T {
 class Store implements ProductionRecordStore {
   calls: AddProductionTransactionParams[] = []
   updates = 0
-  constructor(private readonly records: readonly ProductionRecord[] = []) {}
+  private readonly records: readonly ProductionRecord[]
+
+  constructor(records: readonly ProductionRecord[] = []) {
+    this.records = records
+  }
   async listProductionRecordsForShiftPile(): Promise<Result<readonly ProductionRecord[], ProductionRecordStoreError>> { return ok(this.records) }
   async addProductionTransaction(params: AddProductionTransactionParams): Promise<Result<void, ProductionRecordStoreError>> { this.calls.push(params); return ok(undefined) }
   async updateActiveFrontFleet(): Promise<Result<void, ProductionRecordStoreError>> { this.updates += 1; return ok(undefined) }
@@ -47,10 +51,11 @@ describe('ProductionRecordEntry locked selection flow', () => {
     renderEntry()
     expect(await screen.findByText('S5_07')).toBeInTheDocument()
     expect(screen.getByText('Select Batch')).toBeInTheDocument()
-    expect(screen.getByLabelText('Select Fleet')).not.toBeDisabled()
+    await waitFor(() => expect(screen.getByLabelText('Select Fleet')).not.toBeDisabled())
     expect(screen.getByRole('button', { name: /Batch 05/ })).toHaveClass('bg-emerald-600')
     expect(screen.queryByLabelText('Search Truck')).not.toBeInTheDocument()
-    await user.selectOptions(screen.getByLabelText('Select Fleet'), screen.getAllByRole('option')[1]!)
+    await user.click(screen.getByLabelText('Select Fleet'))
+    await user.click(screen.getAllByRole('option')[0]!)
     expect(screen.getByLabelText('Search Truck')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '+ Truck' })).toBeInTheDocument()
   })
@@ -73,9 +78,10 @@ describe('ProductionRecordEntry locked selection flow', () => {
     const user = userEvent.setup()
     renderEntry()
     await user.click(await screen.findByRole('button', { name: /Batch 05/ }))
-    await user.selectOptions(screen.getByLabelText('Select Fleet'), screen.getAllByRole('option')[1]!)
+    await user.click(screen.getByLabelText('Select Fleet'))
+    await user.click(screen.getAllByRole('option')[0]!)
     await user.type(screen.getByLabelText('Search Truck'), FIXTURE_IN_FLEET_TRUCK_ID)
-    expect(screen.getByRole('button', { name: FIXTURE_IN_FLEET_TRUCK_ID })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: FIXTURE_IN_FLEET_TRUCK_ID })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '+ Truck' }))
     const dialog = screen.getByRole('dialog', { name: 'Quick Add Truck' })
     expect(dialog).toBeInTheDocument()

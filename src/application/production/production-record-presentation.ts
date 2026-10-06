@@ -210,7 +210,7 @@ function recoverUnregisteredContinuationBatches(
 function compactFrontCode(frontId: string): string {
   const parts = frontId.split('/')
   const suffix = parts[parts.length - 1]
-  return suffix ? `F${suffix}` : frontId
+  return suffix ? (suffix.startsWith('F') ? suffix : `F${suffix}`) : frontId
 }
 
 /**

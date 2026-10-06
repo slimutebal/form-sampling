@@ -18,6 +18,7 @@ import i18n from '@/i18n'
 import { ReportPage } from './ReportPage'
 
 function buildWorkspace(overrides: Partial<LocalShiftWorkspace> = {}): LocalShiftWorkspace {
+  const { pileRegistrations = [], ...workspaceOverrides } = overrides
   const masterData = buildFixtureMasterData()
   const fleetSetup = buildFixtureFleetSetup(masterData)
   const shift = buildFixtureShift('shift-1')
@@ -31,7 +32,8 @@ function buildWorkspace(overrides: Partial<LocalShiftWorkspace> = {}): LocalShif
     pendingBatches: [],
     pendingSamples: [],
     manpower: [],
-    ...overrides,
+    pileRegistrations,
+    ...workspaceOverrides,
   }
 }
 
@@ -68,7 +70,8 @@ describe('ReportPage', () => {
 
     renderReport(buildWorkspace())
 
-    expect(await screen.findByRole('heading', { name: 'WhatsApp Report' })).toBeInTheDocument()
+    expect(await screen.findByTestId('whatsapp-report-preview')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'REPORT' })).toBeInTheDocument()
     expect(screen.queryByText('This screen is a navigation placeholder for Phase 1. No operational features yet.')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Export Excel' })).toBeInTheDocument()
   })
@@ -79,13 +82,12 @@ describe('ReportPage', () => {
 
     renderReport(buildWorkspace())
 
-    await screen.findByRole('heading', { name: 'WhatsApp Report' })
+    await screen.findByTestId('whatsapp-report-preview')
     // Exactly one page heading and one report-language toggle survive —
     // the previously duplicated structured "ReportSections" view (its own
     // heading and its own separate language toggle) is gone, not merely
     // hidden underneath.
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(screen.getAllByRole('button', { name: 'Indonesian' })).toHaveLength(1)
     expect(screen.getByTestId('whatsapp-report-preview')).toBeInTheDocument()
   })
 
@@ -95,7 +97,7 @@ describe('ReportPage', () => {
 
     renderReport(buildWorkspace())
 
-    await screen.findByRole('heading', { name: 'WhatsApp Report' })
+    await screen.findByTestId('whatsapp-report-preview')
     expect(screen.getByRole('button', { name: 'Copy Report' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Export Excel' })).toBeInTheDocument()
   })

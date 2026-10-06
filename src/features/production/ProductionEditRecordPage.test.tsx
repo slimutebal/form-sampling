@@ -36,6 +36,7 @@ function buildWorkspace(): LocalShiftWorkspace {
     pendingBatches: [],
     pendingSamples: [],
     manpower: [createManpowerAssignment('12345', 'John Doe', 'Checker', true)],
+    pileRegistrations: [],
   }
 }
 
@@ -105,7 +106,7 @@ describe('ProductionEditRecordPage', () => {
     renderPage(4, 5, 'TX-5')
 
     await screen.findByText(FIXTURE_IN_FLEET_TRUCK_ID)
-    expect(screen.getByText('S5_02 Batch 4 Rit 5')).toBeInTheDocument()
+    expect(screen.getByText('S5_02 Batch 4 Trip 5')).toBeInTheDocument()
     expect(screen.getByLabelText('Front No')).toHaveValue('F1')
     expect(screen.getByRole('button', { name: 'Wet' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Oversize Rock' })).toHaveAttribute('aria-pressed', 'true')

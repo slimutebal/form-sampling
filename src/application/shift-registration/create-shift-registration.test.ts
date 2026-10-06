@@ -32,7 +32,7 @@ const MASTER_DATA = buildTestMasterData()
 const VALID_INPUT: ShiftRegistrationInput = {
   shiftId: 'fixed-shift-id-001',
   shiftDate: '2026-09-04',
-  shiftCode: 'DS',
+  shiftCode: 'D',
   sectorCode: 'SEC',
   samplingHouseCode: 'HOUSE',
   masterData: MASTER_DATA,
@@ -46,7 +46,7 @@ describe('createShiftRegistration', () => {
     if (!result.ok) return
     expect(result.value.id).toBe('fixed-shift-id-001')
     expect(result.value.date).toBe('2026-09-04')
-    expect(result.value.shiftCode).toBe('DS')
+    expect(result.value.shiftCode).toBe('D')
     expect(result.value.sectorCode).toBe('SEC')
     expect(result.value.samplingHouseCode).toBe('HOUSE')
     expect(result.value.status).toBe('NEW')
@@ -55,14 +55,14 @@ describe('createShiftRegistration', () => {
   it('B. trims surrounding whitespace on code fields, matching existing parser behavior', () => {
     const result = createShiftRegistration({
       ...VALID_INPUT,
-      shiftCode: '  DS  ',
+      shiftCode: '  D  ',
       sectorCode: '  SEC  ',
       samplingHouseCode: '  HOUSE  ',
     })
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.value.shiftCode).toBe('DS')
+    expect(result.value.shiftCode).toBe('D')
     expect(result.value.sectorCode).toBe('SEC')
     expect(result.value.samplingHouseCode).toBe('HOUSE')
   })
@@ -99,8 +99,8 @@ describe('createShiftRegistration', () => {
     expect(result.error.code).toBe('BLANK_SAMPLING_HOUSE_CODE')
   })
 
-  it('G. rejects a shift code outside the closed DS/NS set', () => {
-    const result = createShiftRegistration({ ...VALID_INPUT, shiftCode: 'D' })
+  it('G. rejects a shift code outside the closed D/N set', () => {
+    const result = createShiftRegistration({ ...VALID_INPUT, shiftCode: 'DS' })
 
     expect(result.ok).toBe(false)
     if (result.ok) return

@@ -32,6 +32,7 @@ function buildWorkspace(): LocalShiftWorkspace {
     pendingBatches: [],
     pendingSamples: [],
     manpower: [],
+    pileRegistrations: [],
   }
 }
 

@@ -76,29 +76,45 @@ function renderStartPage() {
 async function fillRegistration(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByLabelText('Shift Date')
   fireEvent.change(screen.getByLabelText('Shift Date'), { target: { value: '2026-09-04' } })
-  fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'DS' } })
+  fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'D' } })
   fireEvent.change(screen.getByLabelText('Sector'), { target: { value: 'BR1' } })
   fireEvent.change(screen.getByLabelText('Sampling House'), { target: { value: 'SH_01' } })
   expect(screen.getByTestId('work-setup-roster')).toHaveTextContent('Raharjo Rahman')
   expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
-  await user.click(screen.getByRole('button', { name: 'Next' }))
+  await user.click(screen.getByRole('button', { name: /^Next/ }))
 }
 
 async function completeFleetSetupAndInitialize(user: ReturnType<typeof userEvent.setup>) {
-  await screen.findByRole('button', { name: 'Add Front' })
-  await user.click(screen.getByRole('button', { name: 'Add Front' }))
-  await user.selectOptions(screen.getByLabelText('Front No'), '01')
-  await user.selectOptions(screen.getByLabelText('Hauler'), 'H1')
-  await user.type(screen.getByLabelText('Search Truck / Unit Number'), 'T1')
-  await user.click(screen.getByRole('button', { name: 'T1' }))
-  await user.click(screen.getByRole('button', { name: 'Save Front' }))
-  await user.click(screen.getByRole('button', { name: 'Review Fleet Setup' }))
-  await user.click(screen.getByRole('button', { name: 'Continue' }))
+  await user.click(await screen.findByRole('button', { name: /^Next/ }))
 }
 
 async function continuePileRegistration(user: ReturnType<typeof userEvent.setup>) {
   expect(await screen.findByRole('heading', { name: 'SAMPLE SETUP' })).toBeInTheDocument()
-  await user.click(screen.getByRole('button', { name: 'Lanjut' }))
+  await user.click(screen.getByRole('button', { name: /^Next/ }))
+}
+
+async function addPileRegistration(user: ReturnType<typeof userEvent.setup>) {
+  await screen.findByRole('heading', { name: 'SAMPLE SETUP' })
+  await user.type(screen.getByLabelText('Cari Pile/Stockpile'), 'PILE-1')
+  await user.click(screen.getByRole('button', { name: /^PILE-1/ }))
+  await user.type(screen.getByLabelText('Batch'), '001')
+  await user.type(screen.getByLabelText('Trip'), '001')
+  await user.click(screen.getByRole('button', { name: 'Add Sample' }))
+  await user.click(screen.getByRole('button', { name: /^Next/ }))
+}
+
+async function addFleet(user: ReturnType<typeof userEvent.setup>) {
+  await screen.findByRole('heading', { name: 'FLEET SETUP' })
+  await user.click(screen.getByRole('button', { name: '+ Fleet' }))
+  await user.type(screen.getByLabelText('Front Code'), '01')
+  await user.click(screen.getByRole('button', { name: 'BR1/01' }))
+  await user.selectOptions(screen.getByLabelText('Company'), 'H1')
+  await user.type(screen.getByLabelText('Search Pile / Stockpile'), 'PILE-1')
+  await user.click(screen.getByRole('button', { name: /^PILE-1/ }))
+  await user.type(screen.getByLabelText('Exca Hull Number'), '1')
+  await user.type(screen.getByLabelText('Search Unit Truck'), 'T1')
+  await user.click(screen.getByRole('button', { name: 'T1' }))
+  await user.click(screen.getByRole('button', { name: 'Save Fleet' }))
 }
 
 describe('StartPage setup orchestration', () => {
@@ -123,9 +139,10 @@ describe('StartPage setup orchestration', () => {
     await fillRegistration(user)
     await user.click(await screen.findByRole('button', { name: 'New Setup' }))
 
-    await continuePileRegistration(user)
-    expect(await screen.findByRole('heading', { name: 'Fleet Setup' })).toBeInTheDocument()
+    await addPileRegistration(user)
+    expect(await screen.findByRole('heading', { name: 'FLEET SETUP' })).toBeInTheDocument()
 
+    await addFleet(user)
     await completeFleetSetupAndInitialize(user)
 
     expect(await screen.findByText('HOME_PAGE_MARKER')).toBeInTheDocument()
@@ -133,12 +150,12 @@ describe('StartPage setup orchestration', () => {
     const workspace = await localOperationalStore.loadCurrentShiftWorkspace()
     expect(workspace.ok).toBe(true)
     if (!workspace.ok || !workspace.value) throw new Error('expected an initialized workspace')
-    expect(workspace.value.shift.shiftCode).toBe('DS')
+    expect(workspace.value.shift.shiftCode).toBe('D')
     // No handover was imported, so the workspace must start with zero
     // active piles — masterData.pileAreas (which has PILE-1 for BR1) is
     // a selection catalog, never preloaded wholesale (Phase 18
     // correction).
-    expect(workspace.value.piles).toEqual([])
+    expect(workspace.value.piles.map((pile) => pile.id)).toEqual(['PILE-1'])
     expect(workspace.value.fleetSetup.fronts).toHaveLength(1)
     // No Manpower was added on this path — the workspace must still
     // initialize with an empty (not undefined) manpower list.
@@ -153,17 +170,16 @@ describe('StartPage setup orchestration', () => {
     await fillRegistration(user)
     await user.click(await screen.findByRole('button', { name: 'New Setup' }))
     await continuePileRegistration(user)
-    expect(await screen.findByRole('heading', { name: 'Fleet Setup' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'FLEET SETUP' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await user.click(screen.getByRole('button', { name: /^← Back$/ }))
     expect(await screen.findByRole('heading', { name: 'SAMPLE SETUP' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Kembali' }))
+    await user.click(screen.getByRole('button', { name: /^← Back$/ }))
     expect(await screen.findByRole('heading', { name: 'SHIFT HANDOVER' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(await screen.findByRole('heading', { name: 'WORK SETUP' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Shift Date')).toHaveValue('2026-09-04')
+    await user.click(screen.getByRole('button', { name: /^← Back$/ }))
+    expect(await screen.findByLabelText('Shift Date')).toHaveValue('2026-09-04')
   })
 
   it('keeps separate Batch/Rit registrations intact across Pile Registration -> Fleet Setup -> Back', async () => {
@@ -174,26 +190,26 @@ describe('StartPage setup orchestration', () => {
     await user.click(await screen.findByRole('button', { name: 'New Setup' }))
     await screen.findByRole('heading', { name: 'SAMPLE SETUP' })
     await user.type(screen.getByLabelText('Cari Pile/Stockpile'), 'PILE-1')
-    await user.click(screen.getByRole('button', { name: /PILE-1/ }))
+    await user.click(screen.getByRole('button', { name: /^PILE-1/ }))
     await user.type(screen.getByLabelText('Batch'), '002')
-    await user.type(screen.getByLabelText('Rit'), '002')
+    await user.type(screen.getByLabelText('Trip'), '002')
     await user.selectOptions(screen.getByLabelText('Status'), 'ACTIVE')
     await user.click(screen.getByRole('button', { name: 'Add Sample' }))
 
     await user.type(screen.getByLabelText('Cari Pile/Stockpile'), 'PILE-1')
-    await user.click(screen.getByRole('button', { name: /PILE-1/ }))
+    await user.click(screen.getByRole('button', { name: /^PILE-1/ }))
     await user.type(screen.getByLabelText('Batch'), '006')
-    await user.type(screen.getByLabelText('Rit'), '006')
+    await user.type(screen.getByLabelText('Trip'), '006')
     await user.selectOptions(screen.getByLabelText('Status'), 'ACTIVE')
     await user.click(screen.getByRole('button', { name: 'Add Sample' }))
-    await user.click(screen.getByRole('button', { name: 'Lanjut' }))
+    await user.click(screen.getByRole('button', { name: /^Next/ }))
 
-    expect(await screen.findByRole('heading', { name: 'Fleet Setup' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByRole('heading', { name: 'FLEET SETUP' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^← Back$/ }))
     expect(await screen.findByRole('heading', { name: 'SAMPLE SETUP' })).toBeInTheDocument()
     expect(screen.getByText('2 Samples')).toBeInTheDocument()
-    expect(screen.getByText('002')).toBeInTheDocument()
-    expect(screen.getByText('006')).toBeInTheDocument()
+    expect(screen.getAllByText('002')).toHaveLength(2)
+    expect(screen.getAllByText('006')).toHaveLength(2)
   })
 
   it('keeps Continue Setup available after returning from Handover to Work Setup', async () => {
@@ -203,20 +219,20 @@ describe('StartPage setup orchestration', () => {
     await fillRegistration(user)
     await user.click(await screen.findByRole('button', { name: 'New Setup' }))
     await user.type(screen.getByLabelText('Cari Pile/Stockpile'), 'PILE-1')
-    await user.click(screen.getByRole('button', { name: /PILE-1/ }))
+    await user.click(screen.getByRole('button', { name: /^PILE-1/ }))
     await user.type(screen.getByLabelText('Batch'), '002')
-    await user.type(screen.getByLabelText('Rit'), '002')
+    await user.type(screen.getByLabelText('Trip'), '002')
     await user.click(screen.getByRole('button', { name: 'Add Sample' }))
     await user.click(screen.getByRole('button', { name: /Next/ }))
 
     expect(await screen.findByRole('heading', { name: 'FLEET SETUP' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Back/ }))
-    await user.click(screen.getByRole('button', { name: /Back/ }))
+    await user.click(screen.getByRole('button', { name: /^← Back$/ }))
+    await user.click(screen.getByRole('button', { name: /^← Back$/ }))
     expect(await screen.findByRole('heading', { name: 'SHIFT HANDOVER' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /Back/ }))
-    expect(await screen.findByRole('heading', { name: 'WORK SETUP' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(screen.getByRole('button', { name: /^← Back$/ }))
+    await screen.findByLabelText('Shift Date')
+    await user.click(screen.getByRole('button', { name: /^Next/ }))
 
     expect(await screen.findByRole('button', { name: 'Continue Setup' })).toBeInTheDocument()
   })
@@ -230,11 +246,14 @@ describe('StartPage setup orchestration', () => {
     await continuePileRegistration(user)
 
     await user.click(screen.getByRole('button', { name: 'Browser Back' }))
+    expect(await screen.findByRole('heading', { name: 'SAMPLE SETUP' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Browser Back' }))
     expect(await screen.findByRole('heading', { name: 'SHIFT HANDOVER' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Browser Back' }))
-    expect(await screen.findByRole('heading', { name: 'WORK SETUP' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Shift Date')).toHaveValue('2026-09-04')
-    expect(screen.getByText('1 Pengawas · 0 Crew')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Shift Date')).toHaveValue('2026-09-04')
+    expect(screen.getByText('1 Pengawas')).toBeInTheDocument()
+    expect(screen.getByText('0 Crew')).toBeInTheDocument()
   })
 })

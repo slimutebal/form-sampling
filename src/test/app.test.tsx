@@ -22,7 +22,7 @@ describe('application shell', () => {
 
   it('renders the welcome screen at the root route', () => {
     renderApp(['/'])
-    expect(screen.getByRole('heading', { name: 'Quality Assurance' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Ore Quality Assurance' })).toBeInTheDocument()
   })
 
   it('does not render bottom navigation on the pre-operational start route', () => {

@@ -33,6 +33,7 @@ function buildWorkspace(): LocalShiftWorkspace {
     pendingBatches: [],
     pendingSamples: [],
     manpower: [],
+    pileRegistrations: [],
   }
 }
 
@@ -97,7 +98,7 @@ describe('ProductionBatchDetailPage', () => {
     expect(screen.getByText('Material')).toBeInTheDocument()
     expect(screen.getByText('SAP')).toBeInTheDocument()
     expect(screen.getByText('Capacity')).toBeInTheDocument()
-    expect(screen.getByText('20 Rit')).toBeInTheDocument()
+    expect(screen.getByText('20 Trips')).toBeInTheDocument()
     expect(screen.getByText('Progress')).toBeInTheDocument()
     expect(screen.getByText('2 Accepted / 20')).toBeInTheDocument()
     expect(screen.getByText('Reject')).toBeInTheDocument()
@@ -108,7 +109,7 @@ describe('ProductionBatchDetailPage', () => {
   it('shows the Missed Rit warning line only when the Batch has a missed Rit', async () => {
     mockRecords([record('TX-1', 1, 'ACCEPT'), record('TX-2', 2, 'REJECT'), record('TX-3', 3, 'ACCEPT')])
     renderPage(4)
-    expect(await screen.findByText('⚠ Missed Rit: 2')).toBeInTheDocument()
+    expect(await screen.findByText('⚠ Missed Trip: 2')).toBeInTheDocument()
   })
 
   it('lists Ritase rows in ascending Rit order, with Truck/Disposition/Contamination and a SAMPLE tag', async () => {

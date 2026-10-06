@@ -155,7 +155,7 @@ function renderPage(overrides: {
 
 function fillValidForm() {
   fireEvent.change(screen.getByLabelText('Shift Date'), { target: { value: '2026-09-04' } })
-  fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'DS' } })
+  fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'D' } })
   fireEvent.change(screen.getByLabelText('Sector'), { target: { value: 'BR1' } })
   fireEvent.change(screen.getByLabelText('Sampling House'), { target: { value: 'SH_01' } })
 }
@@ -185,16 +185,16 @@ describe('ShiftStartPage', () => {
   it('A2. defaults a new registration from the local date and keeps a manual Shift Code edit after re-render', async () => {
     renderPage({ now: () => new Date(2026, 8, 4, 10, 0) })
 
-    expect(await screen.findByLabelText('Shift Date')).toHaveValue('2026-09-04')
+    await waitFor(() => expect(screen.getByLabelText('Shift Date')).toHaveValue('2026-09-04'))
     expect(screen.getByText('04-Sep-2026')).toBeInTheDocument()
-    expect(screen.getByLabelText('Shift Code')).toHaveValue('DS')
-    expect(screen.getByTestId('time-location-row-1')).toHaveClass('grid-cols-2')
-    expect(screen.getByTestId('time-location-row-2')).toHaveClass('grid-cols-2')
+    expect(screen.getByLabelText('Shift Code')).toHaveValue('D')
+    expect(screen.getByTestId('time-location-row-1')).toHaveClass('grid-cols-[3fr_2fr]')
+    expect(screen.getByTestId('time-location-row-2')).toHaveClass('flex-col')
 
-    fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'NS' } })
+    fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'N' } })
     fireEvent.change(screen.getByLabelText('Sector'), { target: { value: 'BR1' } })
 
-    expect(screen.getByLabelText('Shift Code')).toHaveValue('NS')
+    expect(screen.getByLabelText('Shift Code')).toHaveValue('N')
   })
 
   it('B. current shift exists shows the Resume card with date/shift code/sector/sampling house/status', async () => {
@@ -337,7 +337,7 @@ describe('ShiftStartPage', () => {
     fillValidForm()
 
     expect(screen.getByLabelText('Shift Date')).toHaveValue('2026-09-04')
-    expect(screen.getByLabelText('Shift Code')).toHaveValue('DS')
+    expect(screen.getByLabelText('Shift Code')).toHaveValue('D')
     expect(screen.getByLabelText('Sector')).toHaveValue('BR1')
     expect(screen.getByLabelText('Sampling House')).toHaveValue('SH_01')
   })
@@ -347,19 +347,19 @@ describe('ShiftStartPage', () => {
       step: 'WORK_SETUP',
       checkerPersonId: 'RAHARJO-1',
       shiftDate: '2026-09-04',
-      shiftCode: 'DS',
+      shiftCode: 'D',
       sectorCode: 'BR1',
       samplingHouseCode: 'SH_01',
       manpowerPersonIds: ['RAHARJO-1'],
     })
     const first = renderPage({})
 
-    await screen.findByLabelText('Shift Date')
+    await waitFor(() => expect(screen.getByLabelText('Shift Date')).toHaveValue('2026-09-04'))
     first.unmount()
     renderPage({})
 
-    expect(await screen.findByLabelText('Shift Date')).toHaveValue('2026-09-04')
-    expect(screen.getByLabelText('Shift Code')).toHaveValue('DS')
+    await waitFor(() => expect(screen.getByLabelText('Shift Date')).toHaveValue('2026-09-04'))
+    expect(screen.getByLabelText('Shift Code')).toHaveValue('D')
     expect(screen.getByLabelText('Sector')).toHaveValue('BR1')
     expect(screen.getByLabelText('Sampling House')).toHaveValue('SH_01')
     expect(await screen.findByText(/Raharjo Rahman/)).toBeInTheDocument()
@@ -373,7 +373,7 @@ describe('ShiftStartPage', () => {
     const select = (await screen.findByLabelText('Shift Code')) as HTMLSelectElement
     expect(select.tagName).toBe('SELECT')
     const values = Array.from(select.options).map((option) => option.value)
-    expect(values.sort()).toEqual(['', 'DS', 'NS'])
+    expect(values.sort()).toEqual(['', 'D', 'N'])
   })
 
   it('K. Sector options come from MasterData, not a hardcoded list', async () => {
@@ -420,7 +420,7 @@ describe('ShiftStartPage', () => {
 
     await screen.findByLabelText('Shift Date')
     fireEvent.change(screen.getByLabelText('Shift Date'), { target: { value: '2026-09-04' } })
-    fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'DS' } })
+    fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'D' } })
     // Sector left unselected — Sector and Sampling House must both report errors.
     await user.click(screen.getByRole('button', { name: 'Next' }))
 

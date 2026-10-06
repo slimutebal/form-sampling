@@ -52,7 +52,7 @@ export function ActivePileRegistrationForm({
   )
   const [error, setError] = useState('')
   const [samplePositions, setSamplePositions] = useState<readonly SamplePosition[]>([])
-  const [hasOperationalHistory, setHasOperationalHistory] = useState(false)
+  const [operationalHistoryResult, setOperationalHistoryResult] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -65,10 +65,7 @@ export function ActivePileRegistrationForm({
   }, [workspace.shiftId])
 
   useEffect(() => {
-    if (!initialRegistration) {
-      setHasOperationalHistory(false)
-      return
-    }
+    if (!initialRegistration) return
     let cancelled = false
     void Promise.all([
       localOperationalStore.listHaulageTransactionsForShiftPile(
@@ -86,7 +83,7 @@ export function ActivePileRegistrationForm({
     ]).then(([haulage, production, samples]) => {
       if (cancelled || !haulage.ok || !production.ok || !samples.ok) return
       const originalBatch = Number(initialRegistration.batch)
-      setHasOperationalHistory(
+      setOperationalHistoryResult(
         haulage.value.some((item) => Number(item.batchPosition.batchNumber) === originalBatch) ||
           production.value.some(
             (item) =>
@@ -171,7 +168,7 @@ export function ActivePileRegistrationForm({
       : undefined
   const validPhysicalInHouse = physicalError ? undefined : physicalInHouse
   const hasDependencies =
-    hasOperationalHistory ||
+    (Boolean(initialRegistration) && operationalHistoryResult) ||
     Boolean(
       initialRegistration &&
       samplePositions.some(

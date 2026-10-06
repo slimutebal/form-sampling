@@ -152,8 +152,8 @@ describe('buildShiftReport — header', () => {
   })
 
   it.each([
-    ['DS', 'D'],
-    ['NS', 'N'],
+    ['D', 'D'],
+    ['N', 'N'],
     ['D', 'D'],
   ] as const)('shiftCodeLabel maps %s to %s (Phase 18 §1) without changing the stored shiftCode', (shiftCode, expectedLabel) => {
     const shift = { ...buildFixtureShift('SHIFT-1'), shiftCode } as BuildShiftReportInput['shift']

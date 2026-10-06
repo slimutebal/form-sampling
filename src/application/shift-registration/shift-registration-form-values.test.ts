@@ -3,10 +3,10 @@ import { createDefaultShiftRegistrationFormValues } from './shift-registration-f
 
 describe('createDefaultShiftRegistrationFormValues', () => {
   it.each([
-    [6, 29, 'NS'],
-    [6, 30, 'DS'],
-    [18, 29, 'DS'],
-    [18, 30, 'NS'],
+    [6, 29, 'N'],
+    [6, 30, 'D'],
+    [18, 29, 'D'],
+    [18, 30, 'N'],
   ] as const)('uses local %i:%i as %s', (hours, minutes, shiftCode) => {
     expect(createDefaultShiftRegistrationFormValues(new Date(2026, 8, 4, hours, minutes)).shiftCode).toBe(shiftCode)
   })

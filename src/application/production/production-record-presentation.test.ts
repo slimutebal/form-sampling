@@ -89,8 +89,8 @@ describe('production record presentation semantics', () => {
       buildFixtureProductionRecord({ transaction: buildFixtureHaulageTransaction({ id: 'TX-3', shiftId: 'SHIFT', pile, batch: 5, rit: 8, masterData, fleetSetup }), createdAt: new Date('2026-09-04T11:00:00Z') }),
     ]
     const rows = effectiveProductionRowsForPile(records, pile.id)
-    expect(sortProductionHistoryRows(rows, 'rec', 'desc').map((row) => row.tripNo)).toEqual([2, 3, 1])
-    expect(sortProductionHistoryRows(rows, 'rec', 'asc').map((row) => row.tripNo)).toEqual([1, 3, 2])
+    expect(sortProductionHistoryRows(rows, 'rec', 'desc').map((row) => row.tripNo)).toEqual([3, 2, 1])
+    expect(sortProductionHistoryRows(rows, 'rec', 'asc').map((row) => row.tripNo)).toEqual([1, 2, 3])
     expect(sortProductionHistoryRows(rows, 'batch', 'desc').map((row) => [row.batchNumber, row.tripWithinBatch])).toEqual([[7, 8], [5, 8], [5, 7]])
     expect(sortProductionHistoryRows(rows, 'batch', 'asc').map((row) => [row.batchNumber, row.tripWithinBatch])).toEqual([[5, 7], [5, 8], [7, 8]])
   })

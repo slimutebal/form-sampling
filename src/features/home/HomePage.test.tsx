@@ -31,6 +31,7 @@ function buildWorkspace(): LocalShiftWorkspace {
     pendingBatches: [],
     pendingSamples: [],
     manpower: [],
+    pileRegistrations: [],
   }
 }
 
@@ -104,6 +105,7 @@ describe('HomePage', () => {
       pendingBatches: [],
       pendingSamples: [],
       manpower: [],
+      pileRegistrations: [],
     })
 
     expect(await screen.findByText('1')).toBeInTheDocument()

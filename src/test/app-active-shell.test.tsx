@@ -56,8 +56,10 @@ describe('application shell — active workspace', () => {
     renderApp(['/home'])
 
     const nav = await screen.findByRole('navigation')
-    expect(within(nav).getByRole('link', { name: /Beranda/i })).toBeInTheDocument()
-    expect(within(nav).getAllByRole('link')).toHaveLength(5)
+    expect(within(nav).getByRole('link', { name: 'SETUP' })).toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'REC' })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: 'REPORT' })).toBeInTheDocument()
+    expect(within(nav).getAllByRole('link')).toHaveLength(2)
   })
 
   it('renders the real Piles screen (not a placeholder)', async () => {

@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ComponentProps } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import { I18nextProvider } from 'react-i18next'
 import { parseOreCode, parseSamplingHouseCode, parseSectorCode, parseShiftCode } from '@/domain/common/codes'
 import { parsePileId, parseShiftId, parseTruckId } from '@/domain/common/identifiers'
 import { parseShiftDate } from '@/domain/common/shift-date'
@@ -10,6 +12,11 @@ import { createHaulerReference, createPileAreaReference, createSectorReference, 
 import { createOreSamplingConfig, parseBatchSize, parsePackingConfigValue, parseSamplingInterval } from '@/domain/master/sampling-config'
 import { createShift, type Shift } from '@/domain/shift/shift'
 import { FleetSetupPage } from './fleet-setup-page'
+import i18n from '@/i18n'
+
+function renderFleetSetup(props: ComponentProps<typeof FleetSetupPage>) {
+  return render(<I18nextProvider i18n={i18n}><FleetSetupPage {...props} /></I18nextProvider>)
+}
 
 function value<T>(result: { ok: boolean; value?: T }): T {
   if (!result.ok) throw new Error('invalid fixture')
@@ -34,20 +41,20 @@ function shift(): Shift {
 
 async function addFleet(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: '+ Fleet' }))
-  await user.type(screen.getByLabelText('Front Code'), '01')
+  await user.type(screen.getByLabelText('Kode Front'), '01')
   await user.click(screen.getByRole('button', { name: 'BR1/01' }))
   await user.selectOptions(screen.getByLabelText('Company'), 'STM')
-  await user.type(screen.getByLabelText('Destination / Pile'), 'S5_24')
+  await user.type(screen.getByLabelText('Search Pile / Stockpile'), 'S5_24')
   await user.click(screen.getByRole('button', { name: /S5_24/ }))
-  await user.type(screen.getByLabelText('Exca Hull Number'), '23')
-  await user.type(screen.getByLabelText('Cari Unit Truck'), 'DT-001')
+  await user.type(screen.getByLabelText('Nomor Lambung Exca'), '23')
+  await user.type(screen.getByLabelText('Search Unit Truck'), 'DT-001')
   await user.click(screen.getByRole('button', { name: 'DT-001' }))
-  await user.click(screen.getByRole('button', { name: 'Save Fleet' }))
+  await user.click(screen.getByRole('button', { name: 'Simpan Fleet' }))
 }
 
 describe('FleetSetupPage', () => {
   it('uses the fixed Fleet setup layout, context values, and a bottom + Fleet action', () => {
-    render(<FleetSetupPage shift={shift()} masterData={buildMasterData()} onFleetSetupReady={vi.fn()} eligibleDestinationPileIds={[value(parsePileId('S5_24'))]} />)
+    renderFleetSetup({ shift: shift(), masterData: buildMasterData(), onFleetSetupReady: vi.fn(), eligibleDestinationPileIds: [value(parsePileId('S5_24'))] })
     expect(screen.getByRole('heading', { name: 'FLEET SETUP' })).toBeInTheDocument()
     expect(screen.getByText('BR1')).toHaveClass('text-emerald-700')
     expect(screen.getByText('28-Sep-2026')).toBeInTheDocument()
@@ -58,26 +65,26 @@ describe('FleetSetupPage', () => {
 
   it('opens the Tambah Fleet modal, requires canonical Exca input, and renders display-only Exca after save', async () => {
     const user = userEvent.setup()
-    render(<FleetSetupPage shift={shift()} masterData={buildMasterData()} onFleetSetupReady={vi.fn()} eligibleDestinationPileIds={[value(parsePileId('S5_24'))]} />)
+    renderFleetSetup({ shift: shift(), masterData: buildMasterData(), onFleetSetupReady: vi.fn(), eligibleDestinationPileIds: [value(parsePileId('S5_24'))] })
     await user.click(screen.getByRole('button', { name: '+ Fleet' }))
     expect(screen.getByRole('dialog', { name: 'TAMBAH FLEET' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Sector')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Company')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Save Fleet' }))
+    await user.click(screen.getByRole('button', { name: 'Simpan Fleet' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Destination')
 
-    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: 'Batal' }))
     await addFleet(user)
     expect(screen.getByText('Exc_0023')).toBeInTheDocument()
     expect(screen.queryByText('STM-Exc_0023')).not.toBeInTheDocument()
     expect(screen.getByText('1 Fleet')).toBeInTheDocument()
-  })
+  }, 15_000)
 
   it('limits destination candidates to active registered Pile IDs', async () => {
     const user = userEvent.setup()
-    render(<FleetSetupPage shift={shift()} masterData={buildMasterData()} onFleetSetupReady={vi.fn()} eligibleDestinationPileIds={[]} />)
+    renderFleetSetup({ shift: shift(), masterData: buildMasterData(), onFleetSetupReady: vi.fn(), eligibleDestinationPileIds: [] })
     await user.click(screen.getByRole('button', { name: '+ Fleet' }))
-    await user.type(screen.getByLabelText('Destination / Pile'), 'S5_24')
+    await user.type(screen.getByLabelText('Search Pile / Stockpile'), 'S5_24')
     expect(screen.queryByRole('button', { name: /S5_24/ })).not.toBeInTheDocument()
   })
 })

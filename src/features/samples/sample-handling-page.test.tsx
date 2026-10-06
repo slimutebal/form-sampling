@@ -180,7 +180,7 @@ describe('SampleHandlingPage', () => {
     expect(within(batchSelect).getByRole('option', { name: '24' })).toBeInTheDocument()
   })
 
-  it('G/H. Rit From/To selectors are offered', async () => {
+  it('G/H. Trip From/To selectors are offered', async () => {
     const user = userEvent.setup()
     renderPage({
       store: new FakeSampleHandlingStore(
@@ -192,8 +192,8 @@ describe('SampleHandlingPage', () => {
     await user.selectOptions(pileSelect, 'PILE-1')
     await user.selectOptions(screen.getByLabelText('Batch'), '24')
 
-    expect(screen.getByLabelText('Rit From')).toBeInTheDocument()
-    expect(screen.getByLabelText('Rit To')).toBeInTheDocument()
+    expect(screen.getByLabelText('Trip From')).toBeInTheDocument()
+    expect(screen.getByLabelText('Trip To')).toBeInTheDocument()
   })
 
   it('H. a SAP range preview shows Sample Range and Total Bag', async () => {
@@ -207,8 +207,8 @@ describe('SampleHandlingPage', () => {
     const pileSelect = await screen.findByLabelText('Pile')
     await user.selectOptions(pileSelect, 'PILE-1')
     await user.selectOptions(screen.getByLabelText('Batch'), '24')
-    await user.selectOptions(screen.getByLabelText('Rit From'), '2')
-    await user.selectOptions(screen.getByLabelText('Rit To'), '4')
+    await user.selectOptions(screen.getByLabelText('Trip From'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip To'), '4')
 
     expect(screen.getByText('Sample Range')).toBeInTheDocument()
     expect(screen.getByTestId('sample-range-value')).toHaveTextContent('2, 4')
@@ -240,8 +240,8 @@ describe('SampleHandlingPage', () => {
     const pileSelect = await screen.findByLabelText('Pile')
     await user.selectOptions(pileSelect, 'PILE-LIM')
     await user.selectOptions(screen.getByLabelText('Batch'), '1')
-    await user.selectOptions(screen.getByLabelText('Rit From'), '5')
-    await user.selectOptions(screen.getByLabelText('Rit To'), '5')
+    await user.selectOptions(screen.getByLabelText('Trip From'), '5')
+    await user.selectOptions(screen.getByLabelText('Trip To'), '5')
 
     expect(screen.getByTestId('total-bag-value')).toHaveTextContent('0.5')
   })
@@ -276,8 +276,8 @@ describe('SampleHandlingPage', () => {
     const pileSelect = await screen.findByLabelText('Pile')
     await user.selectOptions(pileSelect, 'PILE-1')
     await user.selectOptions(screen.getByLabelText('Batch'), '24')
-    await user.selectOptions(screen.getByLabelText('Rit From'), '2')
-    await user.selectOptions(screen.getByLabelText('Rit To'), '8')
+    await user.selectOptions(screen.getByLabelText('Trip From'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip To'), '8')
 
     expect(await screen.findByText('Sample range overlaps an existing sample position.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save Sample Position' })).toBeDisabled()
@@ -291,8 +291,8 @@ describe('SampleHandlingPage', () => {
     const pileSelect = await screen.findByLabelText('Pile')
     await user.selectOptions(pileSelect, 'PILE-1')
     await user.selectOptions(screen.getByLabelText('Batch'), '24')
-    await user.selectOptions(screen.getByLabelText('Rit From'), '2')
-    await user.selectOptions(screen.getByLabelText('Rit To'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip From'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip To'), '2')
     await user.click(screen.getByRole('button', { name: 'Save Sample Position' }))
 
     expect(await screen.findByText('Sample position saved')).toBeInTheDocument()
@@ -307,8 +307,8 @@ describe('SampleHandlingPage', () => {
     const pileSelect = await screen.findByLabelText('Pile')
     await user.selectOptions(pileSelect, 'PILE-1')
     await user.selectOptions(screen.getByLabelText('Batch'), '24')
-    await user.selectOptions(screen.getByLabelText('Rit From'), '2')
-    await user.selectOptions(screen.getByLabelText('Rit To'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip From'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip To'), '2')
     await user.selectOptions(screen.getByLabelText('Delivery Status'), 'DELIVERED')
 
     expect(screen.getByRole('button', { name: 'Save Sample Position' })).toBeDisabled()
@@ -321,8 +321,8 @@ describe('SampleHandlingPage', () => {
     const pileSelect = await screen.findByLabelText('Pile')
     await user.selectOptions(pileSelect, 'PILE-1')
     await user.selectOptions(screen.getByLabelText('Batch'), '24')
-    await user.selectOptions(screen.getByLabelText('Rit From'), '2')
-    await user.selectOptions(screen.getByLabelText('Rit To'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip From'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip To'), '2')
     await user.selectOptions(screen.getByLabelText('Delivery Status'), 'DELIVERED')
 
     const destinationSelect = screen.getByLabelText('Deliver To')
@@ -337,8 +337,8 @@ describe('SampleHandlingPage', () => {
     const pileSelect = await screen.findByLabelText('Pile')
     await user.selectOptions(pileSelect, 'PILE-1')
     await user.selectOptions(screen.getByLabelText('Batch'), '24')
-    await user.selectOptions(screen.getByLabelText('Rit From'), '2')
-    await user.selectOptions(screen.getByLabelText('Rit To'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip From'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip To'), '2')
     await user.selectOptions(screen.getByLabelText('Delivery Status'), 'DELIVERED')
 
     const dispatcherSelect = screen.getByLabelText('Dispatcher')
@@ -354,8 +354,8 @@ describe('SampleHandlingPage', () => {
     const pileSelect = await screen.findByLabelText('Pile')
     await user.selectOptions(pileSelect, 'PILE-1')
     await user.selectOptions(screen.getByLabelText('Batch'), '24')
-    await user.selectOptions(screen.getByLabelText('Rit From'), '2')
-    await user.selectOptions(screen.getByLabelText('Rit To'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip From'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip To'), '2')
     await user.selectOptions(screen.getByLabelText('Delivery Status'), 'DELIVERED')
     await user.selectOptions(screen.getByLabelText('Deliver To'), 'LAB-A')
     await user.selectOptions(screen.getByLabelText('Dispatcher'), FIXTURE_EMPLOYEE_ID)
@@ -378,14 +378,14 @@ describe('SampleHandlingPage', () => {
     const pileSelect = await screen.findByLabelText('Pile')
     await user.selectOptions(pileSelect, 'PILE-1')
     await user.selectOptions(screen.getByLabelText('Batch'), '24')
-    await user.selectOptions(screen.getByLabelText('Rit From'), '2')
-    await user.selectOptions(screen.getByLabelText('Rit To'), '4')
+    await user.selectOptions(screen.getByLabelText('Trip From'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip To'), '4')
     await user.click(screen.getByRole('button', { name: 'Save Sample Position' }))
 
     expect(await screen.findByText('Sample position saved')).toBeInTheDocument()
     expect(store.addCalls).toHaveLength(1)
     // Pending is recalculated: both sampled Rits are now handled.
-    expect(screen.getByText('No samples to handle yet. Samples appear automatically once a sampling rit is recorded on a Pile.')).toBeInTheDocument()
+    expect(screen.getByText('No samples to handle yet. Samples appear automatically once a sampling Trip is recorded on a Pile.')).toBeInTheDocument()
   })
 
   it('Q. save failure leaves pending unchanged, shows a translated error, and never a raw message', async () => {
@@ -398,8 +398,8 @@ describe('SampleHandlingPage', () => {
     const pileSelect = await screen.findByLabelText('Pile')
     await user.selectOptions(pileSelect, 'PILE-1')
     await user.selectOptions(screen.getByLabelText('Batch'), '24')
-    await user.selectOptions(screen.getByLabelText('Rit From'), '2')
-    await user.selectOptions(screen.getByLabelText('Rit To'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip From'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip To'), '2')
     await user.click(screen.getByRole('button', { name: 'Save Sample Position' }))
 
     expect(await screen.findByText('This sample position was already saved.')).toBeInTheDocument()
@@ -429,8 +429,8 @@ describe('SampleHandlingPage', () => {
     const pileSelect = await screen.findByLabelText('Pile')
     await user.selectOptions(pileSelect, 'PILE-1')
     await user.selectOptions(screen.getByLabelText('Batch'), '24')
-    await user.selectOptions(screen.getByLabelText('Rit From'), '2')
-    await user.selectOptions(screen.getByLabelText('Rit To'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip From'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip To'), '2')
 
     const button = screen.getByRole('button', { name: 'Save Sample Position' })
     await user.click(button)
@@ -488,8 +488,8 @@ describe('SampleHandlingPage', () => {
     const pileSelect = await screen.findByLabelText('Pile')
     await user.selectOptions(pileSelect, 'PILE-1')
     await user.selectOptions(screen.getByLabelText('Batch'), '24')
-    await user.selectOptions(screen.getByLabelText('Rit From'), '2')
-    await user.selectOptions(screen.getByLabelText('Rit To'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip From'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip To'), '2')
     await user.selectOptions(screen.getByLabelText('Delivery Status'), 'DELIVERED')
     await user.selectOptions(screen.getByLabelText('Deliver To'), 'LAB-A')
     expect(screen.getByRole('button', { name: 'Save Sample Position' })).toBeEnabled()
@@ -533,8 +533,8 @@ describe('SampleHandlingPage', () => {
     const pileSelect = await screen.findByLabelText('Pile')
     await user.selectOptions(pileSelect, 'PILE-1')
     await user.selectOptions(screen.getByLabelText('Batch'), '24')
-    await user.selectOptions(screen.getByLabelText('Rit From'), '2')
-    await user.selectOptions(screen.getByLabelText('Rit To'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip From'), '2')
+    await user.selectOptions(screen.getByLabelText('Trip To'), '2')
     await user.selectOptions(screen.getByLabelText('Delivery Status'), 'DELIVERED')
     await user.selectOptions(screen.getByLabelText('Deliver To'), 'LAB-A')
     await user.selectOptions(screen.getByLabelText('Dispatcher'), FIXTURE_EMPLOYEE_ID)
@@ -586,7 +586,7 @@ describe('SampleHandlingPage', () => {
     })
     renderPage({ store: new FakeSampleHandlingStore(ok([]), ok([delivered])) })
 
-    await screen.findByText('No samples to handle yet. Samples appear automatically once a sampling rit is recorded on a Pile.')
+    await screen.findByText('No samples to handle yet. Samples appear automatically once a sampling Trip is recorded on a Pile.')
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })

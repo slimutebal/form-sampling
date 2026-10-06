@@ -34,7 +34,7 @@ function masterData(): MasterData {
 
 function shift(): Shift {
   return createShift({
-    id: must(parseShiftId('SHIFT-1')), date: must(parseShiftDate('2026-09-04')), shiftCode: must(parseShiftCode('DS')),
+    id: must(parseShiftId('SHIFT-1')), date: must(parseShiftDate('2026-09-04')), shiftCode: must(parseShiftCode('D')),
     sectorCode: must(parseSectorCode('S5')), samplingHouseCode: must(parseSamplingHouseCode('SH-1')), status: 'NEW',
   })
 }
@@ -88,7 +88,7 @@ describe('PileRegistrationPage', () => {
     await selectPile(user, 'STOCK-A')
     await fillEntry(user, '008', '006', 'INACTIVE')
     expect(screen.getByLabelText('Sample progress')).toHaveTextContent('3 / 10 Incr')
-    expect(screen.getByLabelText('Sample progress')).toHaveTextContent('3 Samples In House')
+    expect(screen.getByLabelText('Sample progress')).toHaveTextContent('3 Sample In House')
     await user.click(screen.getByRole('button', { name: 'Add Sample' }))
 
     expect(onRegistrationsChange).toHaveBeenLastCalledWith([registration(8, 6, 'INACTIVE')])
@@ -141,11 +141,11 @@ describe('PileRegistrationPage', () => {
     expect(onBack).toHaveBeenCalledOnce()
   })
 
-  it('requires at least one registration before Next is enabled', async () => {
+  it('allows continuing without registrations and remains usable after registrations are removed', async () => {
     const user = userEvent.setup()
     renderPage()
     const next = screen.getByRole('button', { name: /Next/ })
-    expect(next).toBeDisabled()
+    expect(next).toBeEnabled()
 
     await selectPile(user, 'S5_24')
     await fillEntry(user, '002', '002')
@@ -153,7 +153,7 @@ describe('PileRegistrationPage', () => {
     expect(next).toBeEnabled()
 
     await user.click(screen.getByRole('button', { name: 'Remove S5_24 batch 002' }))
-    expect(next).toBeDisabled()
+    expect(next).toBeEnabled()
   })
 
   it('renders registrations in natural Pile, Batch, then Rit order', () => {

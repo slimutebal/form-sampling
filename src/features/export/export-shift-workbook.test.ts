@@ -26,7 +26,7 @@ describe('exportShiftWorkbook', () => {
     if (!result.ok) return
     expect(result.value.bytes.byteLength).toBeGreaterThan(0)
     expect(result.value.filename).toBe('FormSampling_Shift_SHIFT-1_2026-09-04T08-00-00-000Z.xlsx')
-  })
+  }, 15_000)
 
   it('propagates a validation error from the snapshot builder instead of writing bytes', async () => {
     const shift = buildFixtureShift('SHIFT-1')

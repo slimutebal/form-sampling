@@ -29,6 +29,7 @@ import {
   WorkSetupManpower,
   type WorkSetupManpowerSelection,
 } from '@/features/manpower/work-setup-manpower'
+import type { SelectedPerson } from '@/features/manpower/use-manpower-roster'
 import { ResumeShiftCard } from '@/features/shift-registration/resume-shift-card'
 import { ShiftRegistrationForm } from '@/features/shift-registration/shift-registration-form'
 import { workspaceErrorTranslationKey } from '@/features/shift-registration/workspace-error-messages'
@@ -83,37 +84,35 @@ function restoreManpowerSelection(
   draft: PersistedWorkSetupDraft,
   masterData: MasterData,
 ): WorkSetupManpowerSelection {
-  const selected = draft.manpowerPersonIds.flatMap((personId) => {
+  const selected: SelectedPerson[] = []
+  for (const personId of draft.manpowerPersonIds) {
     const employee = masterData.employees.find(
       (candidate) => candidate.id === personId,
     )
 
     if (employee) {
-      return [
-        {
-          personId: employee.id as string,
-          name: employee.name,
-          source: 'EMPLOYEE' as const,
-          jobDeskCode: '',
-        },
-      ]
+      selected.push({
+        personId: employee.id as string,
+        name: employee.name,
+        source: 'EMPLOYEE',
+        jobDeskCode: '',
+      })
+      continue
     }
 
     const crew = masterData.crews.find(
       (candidate) => candidate.code === personId,
     )
 
-    return crew
-      ? [
-          {
-            personId: crew.code as string,
-            name: crew.name,
-            source: 'CREW' as const,
-            jobDeskCode: crew.jobCode ?? '',
-          },
-        ]
-      : []
-  })
+    if (crew) {
+      selected.push({
+        personId: crew.code as string,
+        name: crew.name,
+        source: 'CREW',
+        jobDeskCode: crew.jobCode ?? '',
+      })
+    }
+  }
 
   const checkerPersonId = selected.some(
     (person) => person.personId === draft.checkerPersonId,
@@ -729,24 +728,6 @@ export function ShiftStartPage({
             WORK SETUP
           </h1>
 
-          {/*
-            Hidden submit target retained for form semantics.
-            Visible navigation lives at the bottom.
-          */}
-          <button
-            type="submit"
-            form="work-setup-form"
-            aria-label={t(
-              'shiftStart.form.submit',
-            )}
-            className="hidden"
-            disabled={
-              masterDataPhase.kind === 'ready' &&
-              isSupervisorMissing
-            }
-          >
-            →
-          </button>
         </div>
       ) : null}
 

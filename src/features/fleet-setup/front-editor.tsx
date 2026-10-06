@@ -38,12 +38,12 @@ export function FrontEditor({ initialEntry, entries, shift, masterData, onSave, 
   const excaId = useId()
   const existingIndex = entries.findIndex((entry) => entry.fleetId === initialEntry.fleetId)
   const referenceOptions = existingIndex < 0 ? entries : entries.slice(0, existingIndex)
-  const usedFrontNumbers = new Set(entries.filter((entry) => entry.fleetId !== draft.fleetId).map((entry) => entry.frontNumber))
   const frontCandidates = useMemo(() => {
     const query = frontQuery.trim().toLowerCase()
+    const usedFrontNumbers = new Set(entries.filter((entry) => entry.fleetId !== draft.fleetId).map((entry) => entry.frontNumber))
     return FRONT_NUMBER_OPTIONS.filter((number) => number === draft.frontNumber || !usedFrontNumbers.has(number))
       .filter((number) => !query || number.includes(query) || formatFrontId(shift.sectorCode, number).toLowerCase().includes(query))
-  }, [draft.frontNumber, frontQuery, shift.sectorCode, usedFrontNumbers])
+  }, [draft.fleetId, draft.frontNumber, entries, frontQuery, shift.sectorCode])
 
   const destinationCandidates: readonly SearchableComboboxOption[] = useMemo(() => {
     const query = destinationQuery.trim().toLowerCase()
@@ -54,14 +54,20 @@ export function FrontEditor({ initialEntry, entries, shift, masterData, onSave, 
   }, [destinationQuery, eligibleDestinationPileIds, masterData.pileAreas, shift.sectorCode])
 
   const selectedDestination = draft.destinationPileId ? masterData.pileAreas.find((pileArea) => pileArea.pileId === draft.destinationPileId) : undefined
-  const candidateEntries = existingIndex < 0 ? [...entries, draft] : entries.map((entry, index) => index === existingIndex ? draft : entry)
+  const candidateEntries = useMemo(
+    () => existingIndex < 0 ? [...entries, draft] : entries.map((entry, index) => index === existingIndex ? draft : entry),
+    [draft, entries, existingIndex],
+  )
   const inheritedTruckIds = useMemo(() => {
     if (draft.kind !== 'DERIVED' || !draft.referenceFleetId) return []
     const preview = previewEffectiveFleet(entries, shift, masterData, draft.referenceFleetId)
     return preview.ok ? preview.value : []
   }, [draft.kind, draft.referenceFleetId, entries, masterData, shift])
   const effectivePreview = useMemo(() => previewEffectiveFleet(candidateEntries, shift, masterData, draft.fleetId), [candidateEntries, draft.fleetId, masterData, shift])
-  const operatingTrucks = effectivePreview.ok ? effectivePreview.value : draft.kind === 'BASE' ? draft.truckIds : [...inheritedTruckIds, ...draft.addedTruckIds]
+  const operatingTrucks = useMemo(
+    () => effectivePreview.ok ? effectivePreview.value : draft.kind === 'BASE' ? draft.truckIds : [...inheritedTruckIds, ...draft.addedTruckIds],
+    [draft.addedTruckIds, draft.kind, draft.truckIds, effectivePreview, inheritedTruckIds],
+  )
   const sortedOperatingTrucks = useMemo(
     () => [...operatingTrucks].sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' })),
     [operatingTrucks],

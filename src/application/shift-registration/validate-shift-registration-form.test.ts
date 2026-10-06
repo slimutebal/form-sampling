@@ -32,7 +32,7 @@ const MASTER_DATA = buildTestMasterData()
 
 const VALID_VALUES: ShiftRegistrationFormValues = {
   shiftDate: '2026-09-04',
-  shiftCode: 'DS',
+  shiftCode: 'D',
   sectorCode: 'SEC',
   samplingHouseCode: 'HOUSE',
 }
@@ -69,20 +69,20 @@ describe('validateShiftRegistrationForm', () => {
     expect(result.valid).toBe(true)
     if (!result.valid) return
     expect(result.fields.shiftDate).toBe('2026-09-04')
-    expect(result.fields.shiftCode).toBe('DS')
+    expect(result.fields.shiftCode).toBe('D')
     expect(result.fields.sectorCode).toBe('SEC')
     expect(result.fields.samplingHouseCode).toBe('HOUSE')
   })
 
   it('E. trims surrounding whitespace on code fields, matching existing parser behavior', () => {
     const result = validateShiftRegistrationForm(
-      { ...VALID_VALUES, shiftCode: '  DS  ', sectorCode: '  SEC  ', samplingHouseCode: '  HOUSE  ' },
+      { ...VALID_VALUES, shiftCode: '  D  ', sectorCode: '  SEC  ', samplingHouseCode: '  HOUSE  ' },
       MASTER_DATA,
     )
 
     expect(result.valid).toBe(true)
     if (!result.valid) return
-    expect(result.fields.shiftCode).toBe('DS')
+    expect(result.fields.shiftCode).toBe('D')
     expect(result.fields.sectorCode).toBe('SEC')
     expect(result.fields.samplingHouseCode).toBe('HOUSE')
   })
@@ -95,8 +95,8 @@ describe('validateShiftRegistrationForm', () => {
     expect(result.fieldErrors.shiftDate).toBe('REQUIRED_SHIFT_DATE')
   })
 
-  it('F. rejects a shiftCode outside the closed DS/NS set', () => {
-    const result = validateShiftRegistrationForm({ ...VALID_VALUES, shiftCode: 'D' }, MASTER_DATA)
+  it('F. rejects a shiftCode outside the closed D/N set', () => {
+    const result = validateShiftRegistrationForm({ ...VALID_VALUES, shiftCode: 'DS' }, MASTER_DATA)
 
     expect(result.valid).toBe(false)
     if (result.valid) return

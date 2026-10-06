@@ -197,7 +197,7 @@ describe('PileHaulagePage', () => {
     await user.click(screen.getByRole('button', { name: FIXTURE_IN_FLEET_TRUCK_ID }))
     await user.click(screen.getByRole('button', { name: 'Record Haulage' }))
 
-    expect(await screen.findByText('Rit 1 recorded')).toBeInTheDocument()
+    expect(await screen.findByText('Trip 1 recorded')).toBeInTheDocument()
     expect(store.addCalls).toHaveLength(1)
     expect(screen.getByText('2 / 20')).toBeInTheDocument()
     expect(screen.getByText(FIXTURE_FRONT_ID)).toBeInTheDocument()
@@ -215,7 +215,7 @@ describe('PileHaulagePage', () => {
     await user.click(await screen.findByRole('button', { name: FIXTURE_WRONG_TRUCK_TRUCK_ID }))
     await user.click(screen.getByRole('button', { name: 'Record Haulage' }))
 
-    expect(await screen.findByText('Rit 1 recorded')).toBeInTheDocument()
+    expect(await screen.findByText('Trip 1 recorded')).toBeInTheDocument()
     expect(store.addCalls).toHaveLength(1)
     expect(store.addCalls[0]?.truckValidation.status).toBe('WRONG_TRUCK')
   })
@@ -367,7 +367,7 @@ describe('PileHaulagePage', () => {
     await user.click(screen.getByRole('button', { name: FIXTURE_IN_FLEET_TRUCK_ID }))
     await user.click(screen.getByRole('button', { name: 'Record Sample Haulage' }))
 
-    await screen.findByText('Rit 2 recorded')
+    await screen.findByText('Trip 2 recorded')
     expect(screen.getByText('1 / 10')).toBeInTheDocument()
   })
 
@@ -397,7 +397,7 @@ describe('PileHaulagePage — fresh pile initial position (post-inspection corre
 
     expect(await screen.findByRole('heading', { name: 'Initial Position' })).toBeInTheDocument()
     expect(screen.getByLabelText('Batch Awal')).toHaveValue('001')
-    expect(screen.getByLabelText('Rit Awal')).toHaveValue('001')
+    expect(screen.getByLabelText('Trip Awal')).toHaveValue('001')
     expect(screen.queryByLabelText('Truck')).not.toBeInTheDocument()
     expect(
       screen.queryByText(
@@ -438,8 +438,8 @@ describe('PileHaulagePage — fresh pile initial position (post-inspection corre
     await screen.findByRole('heading', { name: 'Initial Position' })
     await user.clear(screen.getByLabelText('Batch Awal'))
     await user.type(screen.getByLabelText('Batch Awal'), '25')
-    await user.clear(screen.getByLabelText('Rit Awal'))
-    await user.type(screen.getByLabelText('Rit Awal'), '11')
+    await user.clear(screen.getByLabelText('Trip Awal'))
+    await user.type(screen.getByLabelText('Trip Awal'), '11')
     await user.click(screen.getByRole('button', { name: 'Confirm' }))
 
     await waitFor(() => {

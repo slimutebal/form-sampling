@@ -32,7 +32,7 @@ describe('SampleProgressSummary', () => {
     )
 
     expect(screen.getByText('6 / 10 Incr')).toBeInTheDocument()
-    expect(screen.getByText('2 Samples In House')).toBeInTheDocument()
+    expect(screen.getByText('2 Sample In House')).toBeInTheDocument()
     expect(screen.getByTestId('sample-progress-delivered')).toHaveClass('bg-emerald-600')
     expect(screen.getByTestId('sample-progress-delivered')).toHaveStyle({ width: '40%' })
     expect(screen.getByTestId('sample-progress-in-house')).toHaveClass('bg-red-500')
@@ -67,6 +67,6 @@ describe('SampleProgressSummary', () => {
     expect(screen.getByTestId('sample-progress-delivered')).toHaveStyle({ width: '30%' })
     expect(screen.getByTestId('sample-progress-in-house')).toHaveStyle({ width: '15%' })
     expect(screen.getByTestId('sample-progress-remaining')).toHaveStyle({ width: '55%' })
-    expect(screen.getByText('2 Samples In House')).toBeInTheDocument()
+    expect(screen.getByText('2 Sample In House')).toBeInTheDocument()
   })
 })

@@ -97,6 +97,7 @@ function buildWorkspace(activePiles: readonly Pile[] = [], fleetSetupOverride?: 
     pendingBatches: [],
     pendingSamples: [],
     manpower: [],
+    pileRegistrations: [],
   }
 }
 

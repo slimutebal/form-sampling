@@ -15,7 +15,7 @@ import type { FleetSetupDraftEntry } from '@/application/fleet-setup/fleet-setup
 import type { ShiftRegistrationFormValues } from '@/application/shift-registration/shift-registration-form-values'
 import type { ExpectedPreviousShift } from '@/domain/handover/expected-previous-shift'
 import type { PendingBatchCarryOver } from '@/domain/handover/carry-over-pending-batch'
-import type { HandoverPendingSample } from '@/domain/handover/handover-pending-sample'
+import type { HandoverPendingSample } from '@/domain/handover/carry-over-pending-sample'
 import type { FleetSetup } from '@/domain/fleet/fleet-setup'
 import type { ManpowerAssignment } from '@/domain/manpower/manpower-assignment'
 import type { MasterData } from '@/domain/master/master-data'

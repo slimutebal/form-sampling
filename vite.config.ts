@@ -74,6 +74,10 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // The local-first landing screen depends on its 2.49 MiB hero image;
+        // keep it in the precache rather than silently omitting it at the
+        // default 2 MiB Workbox limit.
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         // Application shell + versioned static assets only (ROADMAP Phase
         // 18 §4/§38) — no runtimeCaching entries are configured here, so
         // Google Sheets responses/generated XLSX/uploaded handover files

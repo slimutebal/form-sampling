@@ -101,10 +101,10 @@ describe('ProductionPage Record workspace', () => {
     renderProduction(workspace)
 
     expect(await screen.findByText('01')).toBeInTheDocument()
-    expect(screen.getByText('06')).toBeInTheDocument()
+    expect(screen.getAllByText('06')).not.toHaveLength(0)
     expect(screen.queryByText('Condition')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /01.*F1.*T1.*06.*\/017/i }))
+    await user.click(screen.getByRole('button', { name: /01.*F1.*T1.*06.*017/i }))
     expect(screen.getByText('Time')).toBeInTheDocument()
     expect(screen.getByText('Fleet')).toBeInTheDocument()
     expect(screen.getByText('Condition')).toBeInTheDocument()
@@ -115,9 +115,9 @@ describe('ProductionPage Record workspace', () => {
     expect(screen.queryByRole('link', { name: 'Switch' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Void' })).toHaveClass('text-red-700')
 
-    await user.click(screen.getByRole('button', { name: /02.*F1.*T1.*06.*\/018/i }))
+    await user.click(screen.getByRole('button', { name: /02.*F1.*T1.*06.*018/i }))
     expect(screen.getAllByText('Condition')).toHaveLength(1)
-    await user.click(screen.getByRole('button', { name: /02.*F1.*T1.*06.*\/018/i }))
+    await user.click(screen.getByRole('button', { name: /02.*F1.*T1.*06.*018/i }))
     expect(screen.queryByText('Condition')).not.toBeInTheDocument()
   })
 
@@ -133,9 +133,9 @@ describe('ProductionPage Record workspace', () => {
     const user = userEvent.setup()
     renderProduction(workspace)
 
-    await screen.findByText('07')
+    await screen.findAllByText('07')
     expect(screen.getByRole('button', { name: 'Rec ▼' })).toHaveAttribute('aria-pressed', 'true')
-    const historyRows = () => screen.getAllByRole('button', { name: /F1.*T1.*(05|07)\// })
+    const historyRows = () => screen.getAllByRole('button', { name: /F1.*T1.*(05|07).*\// })
     expect(historyRows()[0]).toHaveTextContent('07/008')
     await user.click(screen.getByRole('button', { name: 'Rec ▼' }))
     expect(screen.getByRole('button', { name: 'Rec ▲' })).toHaveAttribute('aria-pressed', 'true')
@@ -148,11 +148,11 @@ describe('ProductionPage Record workspace', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
 
-  it('shows exactly three active Pile cards per page and changes selected Pile in place', async () => {
+  it('shows exactly four active Pile cards per page and changes selected Pile in place', async () => {
     const workspace = buildWorkspace(['S5_01', 'S5_02', 'S5_03', 'S5_04', 'S5_05'])
     const user = userEvent.setup()
     renderProduction(workspace)
-    await screen.findByText('S5_01')
+    await screen.findByRole('button', { name: /^S5_01/ })
     const pager = screen.getByLabelText('Active Pile pager')
     expect(within(pager).getAllByRole('button', { name: /S5_0[1234]/ })).toHaveLength(4)
     expect(screen.queryByRole('button', { name: 'S5_05' })).not.toBeInTheDocument()
@@ -194,10 +194,10 @@ describe('ProductionPage Record workspace', () => {
     renderProduction(workspace)
     const search = await screen.findByLabelText('Search Batch')
     await user.type(search, '05')
-    expect(screen.getByRole('button', { name: /01.*05\/007/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /02.*07\/008/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /01.*05.*007/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /02.*07.*008/ })).not.toBeInTheDocument()
     await user.clear(search)
-    expect(screen.getByRole('button', { name: /02.*07\/008/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /02.*07.*008/ })).toBeInTheDocument()
     expect(screen.queryByLabelText('Search Pile_ID')).not.toBeInTheDocument()
   })
 })

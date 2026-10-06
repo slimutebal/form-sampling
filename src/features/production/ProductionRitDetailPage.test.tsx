@@ -36,6 +36,7 @@ function buildWorkspace(): LocalShiftWorkspace {
     pendingBatches: [],
     pendingSamples: [],
     manpower: [createManpowerAssignment('12345', 'John Doe', 'Checker', true)],
+    pileRegistrations: [],
   }
 }
 
@@ -112,7 +113,7 @@ describe('ProductionRitDetailPage', () => {
   it('uses the full "{Pile_ID} Batch {N} Rit {R}" header text', async () => {
     mockRecords([record('TX-5', 5, 'ACCEPT', 4)])
     renderPage(4, 5)
-    expect(await screen.findByRole('heading', { name: 'S5_02 Batch 4 Rit 5' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'S5_02 Batch 4 Trip 5' })).toBeInTheDocument()
   })
 
   it('renders every ACCEPT record field: truck, front, physical condition, contamination, disposition, sampling, truck validation, remark, recorder', async () => {
@@ -296,7 +297,7 @@ describe('ProductionRitDetailPage', () => {
     ])
     renderPage(4, 2)
 
-    expect(await screen.findByText('⚠ MISSED RITASE')).toBeInTheDocument()
+    expect(await screen.findByText('⚠ MISSED TRIP')).toBeInTheDocument()
     expect(screen.getByText(`${FIXTURE_IN_FLEET_TRUCK_ID} • REJECT • WET • OVR`)).toBeInTheDocument()
     expect(screen.getByText(`${FIXTURE_IN_FLEET_TRUCK_ID} • REJECT • MUDDY • CLN`)).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Edit' })).not.toBeInTheDocument()
@@ -307,7 +308,7 @@ describe('ProductionRitDetailPage', () => {
     mockRecords([record('TX-1', 1, 'ACCEPT', 4), record('TX-2', 2, 'REJECT', 4), record('TX-3', 3, 'ACCEPT', 4)])
     renderPage(4, 2)
 
-    const recordHereLink = await screen.findByRole('link', { name: 'Record This Rit' })
+    const recordHereLink = await screen.findByRole('link', { name: 'Record This Trip' })
     expect(recordHereLink).toHaveAttribute('href', '/production/record/S5_02?batch=4&rit=2&mode=missed')
 
     const switchExistingLink = screen.getByRole('link', { name: 'Switch Existing Record' })

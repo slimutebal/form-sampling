@@ -49,12 +49,19 @@ export function WelcomePage() {
   const navigate = useNavigate()
   const location = useLocation()
   const returnedSetupDraft = (location.state as { readonly setupDraft?: ReturnedWorkSetupDraft } | null)?.setupDraft
+  const returnedChecker = returnedSetupDraft?.manpower.selected.find(
+    (person) => person.personId === returnedSetupDraft.manpower.checkerPersonId,
+  )
   const defaults = useMemo(() => createDefaultShiftRegistrationFormValues(new Date()), [])
-  const [mode, setMode] = useState<LandingMode>()
+  const [mode, setMode] = useState<LandingMode>(() => (returnedChecker ? 'new' : undefined))
   const [masterData, setMasterData] = useState<MasterData>()
   const [newQuery, setNewQuery] = useState('')
   const [resumeQuery, setResumeQuery] = useState('')
-  const [newChecker, setNewChecker] = useState<PersonnelSearchResult>()
+  const [newChecker, setNewChecker] = useState<PersonnelSearchResult | undefined>(() =>
+    returnedChecker
+      ? { personId: returnedChecker.personId, name: returnedChecker.name, source: returnedChecker.source }
+      : undefined,
+  )
   const [resumeChecker, setResumeChecker] = useState<PersonnelSearchResult>()
   const [resumeDate, setResumeDate] = useState(defaults.shiftDate)
   const [resumeShift, setResumeShift] = useState(defaults.shiftCode)
@@ -72,13 +79,6 @@ export function WelcomePage() {
     })
     return () => { cancelled = true }
   }, [t])
-  useEffect(() => {
-    const checkerId = returnedSetupDraft?.manpower.checkerPersonId
-    const checker = returnedSetupDraft?.manpower.selected.find((person) => person.personId === checkerId)
-    if (!checker) return
-    setMode('new')
-    setNewChecker({ personId: checker.personId, name: checker.name, source: checker.source })
-  }, [returnedSetupDraft])
   const newCandidates = useMemo(() => (masterData ? searchPersonnel(masterData, newQuery) : []), [masterData, newQuery])
   const resumeCandidates = useMemo(() => (masterData ? searchPersonnel(masterData, resumeQuery) : []), [masterData, resumeQuery])
 

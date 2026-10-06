@@ -22,43 +22,43 @@ function buildShift(date: string, shiftCode: string): Shift {
 }
 
 describe('deriveExpectedPreviousShift', () => {
-  it('A. an NS shift expects the same calendar day DS as its previous shift', () => {
-    const result = deriveExpectedPreviousShift(buildShift('2026-09-04', 'NS'))
+  it('A. an N shift expects the same calendar day D as its previous shift', () => {
+    const result = deriveExpectedPreviousShift(buildShift('2026-09-04', 'N'))
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.value.date).toBe('2026-09-04')
-    expect(result.value.shiftCode).toBe('DS')
+    expect(result.value.shiftCode).toBe('D')
   })
 
-  it('B. a DS shift expects the prior calendar day NS as its previous shift', () => {
-    const result = deriveExpectedPreviousShift(buildShift('2026-09-04', 'DS'))
+  it('B. a D shift expects the prior calendar day N as its previous shift', () => {
+    const result = deriveExpectedPreviousShift(buildShift('2026-09-04', 'D'))
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.value.date).toBe('2026-09-03')
-    expect(result.value.shiftCode).toBe('NS')
+    expect(result.value.shiftCode).toBe('N')
   })
 
-  it('C. a DS shift on the first day of a month rolls back to the last day of the previous month', () => {
-    const result = deriveExpectedPreviousShift(buildShift('2026-03-01', 'DS'))
+  it('C. a D shift on the first day of a month rolls back to the last day of the previous month', () => {
+    const result = deriveExpectedPreviousShift(buildShift('2026-03-01', 'D'))
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.value.date).toBe('2026-02-28')
-    expect(result.value.shiftCode).toBe('NS')
+    expect(result.value.shiftCode).toBe('N')
   })
 
-  it('D. a DS shift on Jan 1 rolls back across a year boundary', () => {
-    const result = deriveExpectedPreviousShift(buildShift('2026-01-01', 'DS'))
+  it('D. a D shift on Jan 1 rolls back across a year boundary', () => {
+    const result = deriveExpectedPreviousShift(buildShift('2026-01-01', 'D'))
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.value.date).toBe('2025-12-31')
   })
 
-  it('E. an unsupported shift code (outside the closed DS/NS set) fails explicitly rather than guessing', () => {
-    const result = deriveExpectedPreviousShift(buildShift('2026-09-04', 'D'))
+  it('E. an unsupported shift code (outside the closed D/N set) fails explicitly rather than guessing', () => {
+    const result = deriveExpectedPreviousShift(buildShift('2026-09-04', 'DS'))
 
     expect(result.ok).toBe(false)
     if (result.ok) return

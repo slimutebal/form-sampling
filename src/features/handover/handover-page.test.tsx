@@ -126,8 +126,8 @@ describe('HandoverPage', () => {
     await waitFor(() => expect(screen.getByTestId('pending-pile-count')).toHaveTextContent('1'))
     expect(screen.getByTestId('pending-sample-count')).toHaveTextContent('1')
     expect(screen.getByText('L18_S09')).toBeInTheDocument()
-    expect(screen.getByText('Batch 24 → last Rit 10')).toBeInTheDocument()
-    expect(screen.getByText('Batch 25 → last Rit 3')).toBeInTheDocument()
+    expect(screen.getByText('Batch 24 → last Trip 10')).toBeInTheDocument()
+    expect(screen.getByText('Batch 25 → last Trip 3')).toBeInTheDocument()
     expect(screen.getByText('CONTINUE')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Confirm Import' }))
@@ -245,9 +245,10 @@ describe('HandoverPage', () => {
     })
     await selectAnyFile()
 
-    await waitFor(() => expect(screen.getByText('Shift Mismatch')).toBeInTheDocument())
-    expect(screen.getByText('2026-09-03 · D')).toBeInTheDocument()
-    expect(screen.getByText('2026-09-01 · N')).toBeInTheDocument()
+    const mismatchAlert = await screen.findByRole('alert')
+    expect(mismatchAlert).toHaveTextContent('2026-09-03')
+    expect(mismatchAlert).toHaveTextContent('2026-09-01')
+    expect(mismatchAlert).toHaveTextContent('This file may not be the previous shift.')
     // No Confirm Import button, no checkbox, no override of any kind —
     // the only actions are choosing another file or starting without one.
     expect(screen.queryByRole('button', { name: 'Confirm Import' })).not.toBeInTheDocument()
