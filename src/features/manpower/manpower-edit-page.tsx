@@ -28,7 +28,7 @@ export interface ManpowerEditPageProps {
  * add/remove personnel and change Job Desk for the CURRENT shift's
  * roster after the shift is already active — crew replacement,
  * additional crew, Staff/PIC change, dispatcher change, job assignment
- * change. Launched from Home, never from Start/Registrasi
+ * change. Launched from the active shift, never from Start/Registrasi
  * Shift/Fleet Setup, and never touches shift date/code/sector/Sampling
  * House, fleet, pile workspace, haulage, or sample handling — this
  * screen only ever calls back with a revalidated Manpower array via

@@ -9,7 +9,7 @@ export type CurrentWorkspacePhase =
 
 /**
  * Loads the current local Shift workspace (Phase 18 wiring correction
- * §15/§16) — the one read every active route (`/home`, `/piles`,
+ * §15/§16) — the one read every active route (`/production`, `/piles`,
  * `/piles/:pileId`, `/samples`, `/report`) and the `AppLayout` route
  * guard need. Deliberately a plain local read via
  * `LocalOperationalStore.loadCurrentShiftWorkspace` (mirrors

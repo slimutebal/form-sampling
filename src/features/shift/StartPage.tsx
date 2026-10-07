@@ -127,7 +127,7 @@ export function StartPage() {
     })
     if (result.ok) {
       clearWorkSetupDraft()
-      navigate('/home')
+      navigate('/production')
     }
   }, [navigate])
 

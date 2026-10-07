@@ -8,20 +8,21 @@ import { ManpowerEditPage } from '@/features/manpower/manpower-edit-page'
 
 /**
  * Router adapter for `/manpower/edit` (Field Finding 1 — mid-shift
- * Manpower roster edit, launched from Home). Wires the real workspace/
+ * Manpower roster edit). Wires the real workspace/
  * store: on Save, revalidated Manpower is persisted via
  * `LocalOperationalStore.updateShiftManpower` — which only ever replaces
  * the `manpower` field, leaving shift/piles/masterData/fleetSetup/
  * pendingBatches/pendingSamples untouched — then the shared workspace
- * context is refreshed and the operator is returned to Home. Cancel
- * discards the in-progress edit and returns to Home without writing
- * anything.
+ * context is refreshed and the operator is returned to the caller's
+ * `returnTo` target: `/regist` when given explicitly, otherwise
+ * `/production`. Cancel discards the in-progress edit and returns to that
+ * same target without writing anything.
  */
 export function ManpowerEditRoute() {
   const { workspace, refreshWorkspace } = useOutletContext<ActiveWorkspaceContext>()
   const navigate = useNavigate()
   const location = useLocation()
-  const returnTo = (location.state as { readonly returnTo?: string } | null)?.returnTo === '/regist' ? '/regist' : '/home'
+  const returnTo = (location.state as { readonly returnTo?: string } | null)?.returnTo === '/regist' ? '/regist' : '/production'
   const [saving, setSaving] = useState(false)
   const [saveErrorKey, setSaveErrorKey] = useState<string>()
 

@@ -61,7 +61,7 @@ function renderStartPage() {
       <MemoryRouter initialEntries={['/start']}>
         <Routes>
           <Route path="/start/*" element={<StartPage />} />
-          <Route path="/home" element={<div>HOME_PAGE_MARKER</div>} />
+          <Route path="/production" element={<div>PRODUCTION_PAGE_MARKER</div>} />
         </Routes>
       </MemoryRouter>
     </I18nextProvider>,
@@ -108,7 +108,7 @@ describe('StartPage setup orchestration — large master pile catalog', () => {
 
     await user.click(await screen.findByRole('button', { name: /^Next/ }))
 
-    await screen.findByText('HOME_PAGE_MARKER')
+    await screen.findByText('PRODUCTION_PAGE_MARKER')
 
     const workspace = await localOperationalStore.loadCurrentShiftWorkspace()
     if (!workspace.ok || !workspace.value) throw new Error('expected an initialized workspace')

@@ -146,7 +146,7 @@ function renderPage(overrides: {
               />
             }
           />
-          <Route path="/home" element={<div>HOME_PAGE_MARKER</div>} />
+          <Route path="/production" element={<div>PRODUCTION_PAGE_MARKER</div>} />
         </Routes>
       </MemoryRouter>
     </I18nextProvider>,
@@ -208,13 +208,13 @@ describe('ShiftStartPage', () => {
     expect(screen.getByText('Active')).toBeInTheDocument()
   })
 
-  it('C. clicking Resume Shift navigates to /home without any workspace write', async () => {
+  it('C. clicking Resume Shift navigates to /production without any workspace write', async () => {
     const user = userEvent.setup()
     renderPage({ store: new FakeShiftWorkspaceReader(ok(buildTestWorkspace())) })
 
     await user.click(await screen.findByRole('button', { name: 'Resume Shift' }))
 
-    expect(await screen.findByText('HOME_PAGE_MARKER')).toBeInTheDocument()
+    expect(await screen.findByText('PRODUCTION_PAGE_MARKER')).toBeInTheDocument()
   })
 
   it('D. Start New Shift with an existing current shift opens the registration form', async () => {

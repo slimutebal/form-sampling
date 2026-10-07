@@ -1,8 +1,7 @@
-import { render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { I18nextProvider } from 'react-i18next'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, useLocation } from 'react-router'
 import { localOperationalStore } from '@/app/local-operational-store'
 import { AppRouter } from '@/app/router/AppRouter'
 import {
@@ -13,11 +12,17 @@ import {
 } from '@/infrastructure/local-db/local-db-test-fixtures'
 import i18n from '@/i18n'
 
+function LocationProbe() {
+  const location = useLocation()
+  return <div data-testid="location-probe">{location.pathname}</div>
+}
+
 function renderApp(initialEntries: string[]) {
   return render(
     <I18nextProvider i18n={i18n}>
       <MemoryRouter initialEntries={initialEntries}>
         <AppRouter />
+        <LocationProbe />
       </MemoryRouter>
     </I18nextProvider>,
   )
@@ -53,13 +58,20 @@ describe('application shell — active workspace', () => {
   })
 
   it('renders the bottom navigation shell with all primary destinations', async () => {
-    renderApp(['/home'])
+    renderApp(['/production'])
 
     const nav = await screen.findByRole('navigation')
     expect(within(nav).getByRole('link', { name: 'SETUP' })).toBeInTheDocument()
-    expect(within(nav).getByRole('button', { name: 'REC' })).toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'Add' })).toBeInTheDocument()
     expect(within(nav).getByRole('link', { name: 'REPORT' })).toBeInTheDocument()
     expect(within(nav).getAllByRole('link')).toHaveLength(2)
+  })
+
+  it('redirects the legacy /home route to /production without mounting a Home page', async () => {
+    renderApp(['/home'])
+
+    await waitFor(() => expect(screen.getByTestId('location-probe')).toHaveTextContent(/^\/production$/))
+    expect(await screen.findByRole('navigation')).toBeInTheDocument()
   })
 
   it('renders the real Piles screen (not a placeholder)', async () => {
@@ -72,16 +84,5 @@ describe('application shell — active workspace', () => {
     renderApp(['/fleet'])
 
     expect(await screen.findByText('F1')).toBeInTheDocument()
-  })
-
-  it('switches translated shell text without reloading', async () => {
-    const user = userEvent.setup()
-    renderApp(['/home'])
-
-    expect(await screen.findByRole('heading', { name: 'Bahasa' })).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'EN' }))
-
-    expect(await screen.findByRole('heading', { name: 'Language' })).toBeInTheDocument()
   })
 })

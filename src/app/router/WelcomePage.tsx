@@ -88,7 +88,7 @@ export function WelcomePage() {
     if (mode === 'new' && newChecker) { navigate('/start', { state: { forceNew: true, setupChecker: newChecker, setupDraft: returnedSetupDraft } }); return }
     if (mode === 'resume' && resumeChecker && resumeDate && resumeShift) {
       const result = await localOperationalStore.resumeLocalWorkspace(resumeDate, resumeShift, resumeChecker.personId)
-      if (result.ok && result.value) navigate('/home')
+      if (result.ok && result.value) navigate('/production')
       else setError(t('landing.resumeNotFound'))
     }
   }

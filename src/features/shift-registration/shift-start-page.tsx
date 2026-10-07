@@ -556,7 +556,7 @@ export function ShiftStartPage({
   ])
 
   const handleResume = useCallback(() => {
-    navigate('/home')
+    navigate('/production')
   }, [navigate])
 
   const handleStartNew = useCallback(() => {

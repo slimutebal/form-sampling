@@ -18,7 +18,7 @@ export interface ActiveWorkspaceContext {
 
 /**
  * The active application shell (Phase 18 wiring correction §9/§15/§16):
- * every route nested here (`/home`, `/piles`, `/piles/:pileId`,
+ * every route nested here (`/production`, `/piles`, `/piles/:pileId`,
  * `/samples`, `/report`, `/more`) requires an active local Shift
  * workspace. Loaded once, here, and handed down via Outlet context so
  * no nested page re-implements its own workspace-presence guard —

@@ -66,7 +66,7 @@ function renderStartPage() {
         <BrowserBackControl />
         <Routes>
           <Route path="/start/*" element={<StartPage />} />
-          <Route path="/home" element={<div>HOME_PAGE_MARKER</div>} />
+          <Route path="/production" element={<div>PRODUCTION_PAGE_MARKER</div>} />
         </Routes>
       </MemoryRouter>
     </I18nextProvider>,
@@ -132,7 +132,7 @@ describe('StartPage setup orchestration', () => {
     expect(await screen.findByRole('heading', { name: 'SHIFT HANDOVER' })).toBeInTheDocument()
   })
 
-  it('B. the Start Without Previous Shift path continues through Pile Registration to Fleet Setup, then initializes and navigates to /home', async () => {
+  it('B. the Start Without Previous Shift path continues through Pile Registration to Fleet Setup, then initializes and navigates to /production', async () => {
     const user = userEvent.setup()
     renderStartPage()
 
@@ -145,7 +145,7 @@ describe('StartPage setup orchestration', () => {
     await addFleet(user)
     await completeFleetSetupAndInitialize(user)
 
-    expect(await screen.findByText('HOME_PAGE_MARKER')).toBeInTheDocument()
+    expect(await screen.findByText('PRODUCTION_PAGE_MARKER')).toBeInTheDocument()
 
     const workspace = await localOperationalStore.loadCurrentShiftWorkspace()
     expect(workspace.ok).toBe(true)
