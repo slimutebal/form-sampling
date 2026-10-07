@@ -1,9 +1,14 @@
 import type { MasterDataRemoteReader } from '@/application/google/google-ports'
+import type { MasterDataInvalidDetail, MasterDataRefreshError } from '@/application/google/master-data-refresh-diagnostics'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err } from '@/domain/common/result'
 import type { MasterData } from '@/domain/master/master-data'
 import { GOOGLE_MASTER_HEADERS } from './google-sheet-contract'
-import { parseMasterDataFromRanges, type RawMasterDataRanges } from './master-data-sheet-reader'
+import {
+  parseMasterDataFromRanges,
+  type MasterDataValidationError,
+  type RawMasterDataRanges,
+} from './master-data-sheet-reader'
 
 type Rows = readonly (readonly unknown[])[]
 type JsonpGlobal = Record<string, unknown>
@@ -34,10 +39,12 @@ export class AppsScriptMasterDataRemoteReader implements MasterDataRemoteReader 
     }
 
     const ranges = toRanges(body)
-    if (!ranges) return remoteInvalid()
+    if ('invalidTable' in ranges) {
+      return remoteInvalid({ stage: 'REMOTE_PAYLOAD', causeCode: 'MASTER_DATA_PAYLOAD_SHAPE_INVALID', table: ranges.invalidTable })
+    }
 
     const parsed = parseMasterDataFromRanges(ranges)
-    return parsed.ok ? parsed : remoteInvalid()
+    return parsed.ok ? parsed : remoteInvalid(validationDetail(parsed.error))
   }
 
   private loadJsonp(): Promise<unknown> {
@@ -108,8 +115,19 @@ function jsonpFailure(failure: unknown): DomainError {
     : { code: 'APPS_SCRIPT_UNAVAILABLE', message: 'Apps Script master-data is unavailable' }
 }
 
-function remoteInvalid(): Result<never, DomainError> {
-  return err({ code: 'MASTER_DATA_REMOTE_INVALID', message: 'Apps Script master-data payload is invalid' })
+/** The public code stays `MASTER_DATA_REMOTE_INVALID`; `detail` keeps the original cause for diagnostics. */
+function remoteInvalid(detail: MasterDataInvalidDetail): Result<never, MasterDataRefreshError> {
+  return err({ code: 'MASTER_DATA_REMOTE_INVALID', message: 'Apps Script master-data payload is invalid', detail })
+}
+
+/** Copies only codes and the sheet location — never the parser's `message`, which can echo a cell value. */
+function validationDetail(error: MasterDataValidationError): MasterDataInvalidDetail {
+  return {
+    stage: 'REMOTE_VALIDATION',
+    causeCode: error.causeCode ? `${error.code}/${error.causeCode}` : error.code,
+    ...(error.table !== undefined ? { table: error.table } : {}),
+    ...(error.rowNumber !== undefined ? { rowNumber: error.rowNumber } : {}),
+  }
 }
 
 function isRows(value: unknown): value is Rows {
@@ -133,15 +151,31 @@ function projectLeadingContractColumns(rows: Rows, headers: readonly string[]): 
   return hasExpectedLeadingHeaders ? rows.map((row) => row.slice(0, headers.length)) : rows
 }
 
-/** Accepts the documented `{ tables: { Sheet_Name: rows } }` payload only. */
-function toRanges(body: unknown): RawMasterDataRanges | undefined {
-  if (typeof body !== 'object' || body === null || !('tables' in body)) return undefined
+const PAYLOAD_TABLES = [
+  'Employees',
+  'Crews',
+  'Sectors',
+  'Sampling_Houses',
+  'Pile_Areas',
+  'Haulers',
+  'Trucks',
+  'Ore_Sampling_Config',
+] as const
+
+/**
+ * Accepts the documented `{ tables: { Sheet_Name: rows } }` payload only.
+ * On rejection, names the first missing/non-row table (or `tables` itself).
+ */
+function toRanges(body: unknown): RawMasterDataRanges | { readonly invalidTable: string } {
+  if (typeof body !== 'object' || body === null || !('tables' in body)) return { invalidTable: 'tables' }
   const tables = body.tables
-  if (typeof tables !== 'object' || tables === null) return undefined
+  if (typeof tables !== 'object' || tables === null) return { invalidTable: 'tables' }
   const read = (name: string): Rows | undefined => {
     const value = (tables as Record<string, unknown>)[name]
     return isRows(value) ? value : undefined
   }
+  const invalidTable = PAYLOAD_TABLES.find((name) => !read(name))
+  if (invalidTable) return { invalidTable }
   const employees = read('Employees')
   const crews = read('Crews')
   const sectors = read('Sectors')
@@ -150,7 +184,7 @@ function toRanges(body: unknown): RawMasterDataRanges | undefined {
   const haulers = read('Haulers')
   const trucks = read('Trucks')
   const oreSamplingConfigs = read('Ore_Sampling_Config')
-  if (!employees || !crews || !sectors || !samplingHouses || !pileAreas || !haulers || !trucks || !oreSamplingConfigs) return undefined
+  if (!employees || !crews || !sectors || !samplingHouses || !pileAreas || !haulers || !trucks || !oreSamplingConfigs) return { invalidTable: 'tables' }
   return {
     employees: projectLeadingContractColumns(employees, GOOGLE_MASTER_HEADERS.employees),
     crews: projectLeadingContractColumns(crews, GOOGLE_MASTER_HEADERS.crews),

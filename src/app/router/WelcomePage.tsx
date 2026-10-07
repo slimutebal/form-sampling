@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router'
 import { localOperationalStore } from '@/app/local-operational-store'
-import { refreshAppsScriptMasterData } from '@/app/google/google-master-data-sync'
+import { refreshAppsScriptMasterData, subscribeToMasterDataRefreshed } from '@/app/google/google-master-data-sync'
+import { reportMasterDataDiagnostic } from '@/app/google/master-data-diagnostics'
+import { describeMasterDataRefreshFailure } from '@/application/google/master-data-refresh-diagnostics'
 import { searchPersonnel, type PersonnelSearchResult } from '@/application/manpower/personnel-search'
 import { createDefaultShiftRegistrationFormValues } from '@/application/shift-registration/shift-registration-form-values'
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher'
+import { err, ok, type DomainError, type Result } from '@/domain/common/result'
 import type { MasterData } from '@/domain/master/master-data'
 import { ChevronRight, ChartNoAxesCombined, FilePlus2, FileSearch, FlaskConical, ShieldCheck, Truck } from 'lucide-react'
 
@@ -43,6 +46,91 @@ function CheckerSearch({ query, onQueryChange, candidates, selected, onSelect }:
   )
 }
 
+/** Why Landing has no master data. Codes/table/row only — never a name, ID or error message. */
+interface MasterDataFailure {
+  readonly offline?: boolean
+  readonly code?: string
+  readonly table?: string
+  readonly rowNumber?: number
+}
+
+function failureFrom(error: DomainError, stage?: 'CACHE_READ'): MasterDataFailure {
+  const { code, table, rowNumber } = describeMasterDataRefreshFailure(error, stage, new Date())
+  return { code, table, rowNumber }
+}
+
+/**
+ * Cached snapshot first (offline-first); otherwise waits for the shared,
+ * single-flight refresh and uses its already-validated result directly.
+ * Never writes or clears anything itself — only the refresh replaces the
+ * cache, and only after the full payload validates.
+ */
+async function loadLandingMasterData(): Promise<Result<MasterData, MasterDataFailure>> {
+  const cached = await localOperationalStore.readCachedMasterData()
+  if (cached.ok && cached.value) return ok(cached.value.masterData)
+  if (!cached.ok) {
+    reportMasterDataDiagnostic(describeMasterDataRefreshFailure(cached.error, 'CACHE_READ', new Date()))
+  }
+  if (!navigator.onLine) {
+    return err(cached.ok ? { offline: true } : { ...failureFrom(cached.error, 'CACHE_READ'), offline: true })
+  }
+  const refreshed = await refreshAppsScriptMasterData()
+  return refreshed.ok ? ok(refreshed.value.masterData) : err(failureFrom(refreshed.error))
+}
+
+/**
+ * Loads Landing master data once per mount (not per language), adopts any
+ * later successful shared refresh, and exposes a guarded manual retry.
+ * No state is set after unmount.
+ */
+function useLandingMasterData() {
+  const [masterData, setMasterData] = useState<MasterData>()
+  const [failure, setFailure] = useState<MasterDataFailure>()
+  const [retrying, setRetrying] = useState(false)
+  const mounted = useRef(false)
+  const loading = useRef(false)
+
+  const load = useCallback(async () => {
+    if (loading.current) return
+    loading.current = true
+    try {
+      const loaded = await loadLandingMasterData()
+      if (!mounted.current) return
+      if (loaded.ok) {
+        setMasterData(loaded.value)
+        setFailure(undefined)
+      } else {
+        setFailure(loaded.error)
+      }
+    } finally {
+      loading.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    mounted.current = true
+    void load()
+    const unsubscribe = subscribeToMasterDataRefreshed((entry) => {
+      if (!mounted.current) return
+      setMasterData(entry.masterData)
+      setFailure(undefined)
+    })
+    return () => {
+      mounted.current = false
+      unsubscribe()
+    }
+  }, [load])
+
+  const retry = useCallback(async () => {
+    if (loading.current) return
+    setRetrying(true)
+    await load()
+    if (mounted.current) setRetrying(false)
+  }, [load])
+
+  return { masterData, failure, retrying, retry }
+}
+
 /** Local-only Landing. It selects a Checker then delegates all setup validation to the existing Start flow. */
 export function WelcomePage() {
   const { t } = useTranslation()
@@ -54,7 +142,7 @@ export function WelcomePage() {
   )
   const defaults = useMemo(() => createDefaultShiftRegistrationFormValues(new Date()), [])
   const [mode, setMode] = useState<LandingMode>(() => (returnedChecker ? 'new' : undefined))
-  const [masterData, setMasterData] = useState<MasterData>()
+  const { masterData, failure: masterDataFailure, retrying, retry } = useLandingMasterData()
   const [newQuery, setNewQuery] = useState('')
   const [resumeQuery, setResumeQuery] = useState('')
   const [newChecker, setNewChecker] = useState<PersonnelSearchResult | undefined>(() =>
@@ -65,20 +153,9 @@ export function WelcomePage() {
   const [resumeChecker, setResumeChecker] = useState<PersonnelSearchResult>()
   const [resumeDate, setResumeDate] = useState(defaults.shiftDate)
   const [resumeShift, setResumeShift] = useState(defaults.shiftCode)
+  /** A translation key, so the message follows a language switch. */
   const [error, setError] = useState<string>()
 
-  useEffect(() => {
-    let cancelled = false
-    void localOperationalStore.readCachedMasterData().then(async (result) => {
-      if (result.ok && result.value) { if (!cancelled) setMasterData(result.value.masterData); return }
-      if (!navigator.onLine) { if (!cancelled) setError(t('shiftStart.masterData.offlineFirstUse')); return }
-      const refresh = await refreshAppsScriptMasterData()
-      if (!refresh.ok) { if (!cancelled) setError(t('shiftStart.masterData.remoteFailed')); return }
-      const cached = await localOperationalStore.readCachedMasterData()
-      if (cached.ok && cached.value && !cancelled) setMasterData(cached.value.masterData)
-    })
-    return () => { cancelled = true }
-  }, [t])
   const newCandidates = useMemo(() => (masterData ? searchPersonnel(masterData, newQuery) : []), [masterData, newQuery])
   const resumeCandidates = useMemo(() => (masterData ? searchPersonnel(masterData, resumeQuery) : []), [masterData, resumeQuery])
 
@@ -89,7 +166,7 @@ export function WelcomePage() {
     if (mode === 'resume' && resumeChecker && resumeDate && resumeShift) {
       const result = await localOperationalStore.resumeLocalWorkspace(resumeDate, resumeShift, resumeChecker.personId)
       if (result.ok && result.value) navigate('/production')
-      else setError(t('landing.resumeNotFound'))
+      else setError('landing.resumeNotFound')
     }
   }
   const canContinue = (mode === 'new' && !!newChecker) || (mode === 'resume' && !!resumeChecker && !!resumeDate && !!resumeShift)
@@ -155,7 +232,16 @@ export function WelcomePage() {
             <ChevronRight aria-hidden size={30} strokeWidth={2.2} />
           </button>
           {mode === 'new' ? <div className="rounded-2xl border border-white/30 bg-emerald-950/75 p-3 shadow-lg backdrop-blur-md"><CheckerSearch query={newQuery} onQueryChange={(query) => { setNewChecker(undefined); setNewQuery(query) }} candidates={newCandidates} selected={newChecker} onSelect={(checker) => { setNewChecker(checker); setNewQuery('') }} /></div> : null}
-          {error ? <p role="alert" className="rounded-xl bg-red-950/85 p-3 text-sm text-white">{error}</p> : null}
+          {masterDataFailure ? <div role="alert" className="rounded-xl bg-red-950/85 p-3 text-sm text-white">
+            <p>{t('landing.masterDataUnavailable')}</p>
+            {masterDataFailure.offline ? <p className="mt-1 text-white/80">{t('shiftStart.masterData.offlineFirstUse')}</p> : null}
+            {masterDataFailure.code ? <p className="mt-1 font-mono text-xs text-white/70" data-testid="master-data-diagnostic">
+              <span className="block">{masterDataFailure.code}</span>
+              {masterDataFailure.table ? <span className="block">{masterDataFailure.rowNumber !== undefined ? t('landing.masterDataRow', { table: masterDataFailure.table, row: masterDataFailure.rowNumber }) : masterDataFailure.table}</span> : null}
+            </p> : null}
+            <button type="button" disabled={retrying} onClick={() => void retry()} className="mt-2 min-h-11 rounded-lg border border-white/40 bg-white/15 px-4 font-semibold disabled:cursor-not-allowed disabled:opacity-50">{retrying ? t('landing.masterDataRetrying') : t('landing.masterDataRetry')}</button>
+          </div> : null}
+          {error ? <p role="alert" className="rounded-xl bg-red-950/85 p-3 text-sm text-white">{t(error)}</p> : null}
           {mode ? <button type="button" className="min-h-12 w-full rounded-xl bg-lime-300 px-4 font-bold text-emerald-950 shadow-lg disabled:cursor-not-allowed disabled:opacity-50" disabled={!canContinue} onClick={() => void continueLanding()}>{t('landing.continue')}</button> : null}
         </section>
 

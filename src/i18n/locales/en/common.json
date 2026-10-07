@@ -35,6 +35,10 @@
     ,"production": "Production Record"
     ,"sampling": "Sampling Record"
     ,"monitoring": "Monitoring & Report"
+    ,"masterDataUnavailable": "Master data is unavailable."
+    ,"masterDataRetry": "Try Again"
+    ,"masterDataRetrying": "Loading…"
+    ,"masterDataRow": "{{table}} · row {{row}}"
   },
   "placeholder": {
     "screenNotice": "This screen is a navigation placeholder for Phase 1. No operational features yet."

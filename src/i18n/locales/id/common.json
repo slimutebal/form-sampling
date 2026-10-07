@@ -35,6 +35,10 @@
     ,"production": "Catatan Produksi"
     ,"sampling": "Catatan Sampling"
     ,"monitoring": "Monitoring & Laporan"
+    ,"masterDataUnavailable": "Master data belum tersedia."
+    ,"masterDataRetry": "Coba Lagi"
+    ,"masterDataRetrying": "Memuat…"
+    ,"masterDataRow": "{{table}} · baris {{row}}"
   },
   "placeholder": {
     "screenNotice": "Layar ini adalah placeholder navigasi untuk Fase 1. Belum ada fitur operasional."
