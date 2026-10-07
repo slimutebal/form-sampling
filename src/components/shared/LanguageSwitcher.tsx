@@ -15,9 +15,9 @@ export function LanguageSwitcher({ compact = false }: LanguageSwitcherProps) {
         value={current}
         onChange={(event) => void i18n.changeLanguage(event.target.value)}
         aria-label={t('settings.language')}
-        className="h-11 rounded-md border border-border bg-background px-2 text-sm font-medium"
+        className="h-11 min-w-16 cursor-pointer rounded-md border border-transparent bg-transparent pl-3 pr-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-lime-300"
       >
-        {supportedLanguages.map((lang) => <option key={lang} value={lang}>{lang.toUpperCase()}</option>)}
+        {supportedLanguages.map((lang) => <option key={lang} value={lang} className="bg-emerald-950 text-white">{lang.toUpperCase()}</option>)}
       </select>
     )
   }

@@ -29,7 +29,7 @@ values in `Ore_Sampling_Config` as JavaScript numbers.
 ```js
 callbackName({
   "tables": {
-    "Employees": [["Employee_ID", "Name"]],
+    "Employees": [["Employee_ID", "Name", "Initial", "Level"]],
     "Crews": [["Crew_ID", "Name", "Job"]],
     "Sectors": [["Sector_Code"]],
     "Sampling_Houses": [["Sector_Code", "Sampling_House_Code"]],
@@ -47,6 +47,10 @@ before interpolating it into a response. Permit only a JavaScript identifier:
 error response and do not emit it. For a valid callback, use
 `ContentService.createTextOutput(callback + '(' + JSON.stringify(payload) + ');')`
 and set its MIME type to `ContentService.MimeType.JAVASCRIPT`.
+
+The `Employees` table mirrors the Google Sheet `Employees!A:D` exactly: column A
+`Employee_ID` (required), B `Name` (required), C `Initial` (part of the contract,
+not stored by the PWA yet), D `Level` (optional). Level is read from column D only.
 
 All eight tables are required. The PWA passes rows through its existing header, row, duplicate, and cross-reference validation before replacing IndexedDB cache. An invalid or failed response never replaces a valid cache.
 

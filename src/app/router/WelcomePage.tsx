@@ -33,7 +33,7 @@ function CheckerSearch({ query, onQueryChange, candidates, selected, onSelect }:
   const { t } = useTranslation()
   return (
     <div className="flex flex-col gap-2">
-      <input value={selected ? `${selected.name} - ${selected.personId}` : query} onChange={(event) => onQueryChange(event.target.value)} placeholder={t('landing.searchChecker')} aria-label={t('landing.searchChecker')} className="h-11 rounded-md border border-border bg-background px-3 text-base" />
+      <input value={selected ? `${selected.name} - ${selected.personId}` : query} onChange={(event) => onQueryChange(event.target.value)} placeholder={t('landing.searchChecker')} aria-label={t('landing.searchChecker')} className="h-11 rounded-md border border-border bg-background px-3 text-base text-foreground placeholder:text-muted-foreground" />
       {query.trim() && !selected ? <div className="flex max-h-44 flex-col gap-1 overflow-y-auto">
         {candidates.map((candidate) => <button key={`${candidate.source}-${candidate.personId}`} type="button" onClick={() => onSelect(candidate)} className="min-h-11 rounded-md border border-border px-3 text-left text-sm">
           {candidate.name} <span className="text-muted-foreground">- {candidate.personId}</span>

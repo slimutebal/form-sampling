@@ -98,10 +98,13 @@ function parseEmployeeRows(dataRows: GoogleRows): Result<readonly EmployeeRefere
   const employees: EmployeeReference[] = []
   for (let index = 0; index < dataRows.length; index++) {
     const row = dataRows[index]
-    if (isRowBlank(row, 3)) continue
+    // Employees!A:D is Employee_ID | Name | Initial | Level. Initial (C) is part of the
+    // Google contract but has no domain field yet, so it is read only to keep the column
+    // positions honest — it is never stored as Level.
+    if (isRowBlank(row, 4)) continue
     const idText = cellText(row[0])
     const name = cellText(row[1])
-    const level = cellText(row[2])
+    const level = cellText(row[3])
     if (idText.length === 0 || name.length === 0) {
       return { ok: false, error: requiredCellsMissing('Employees', index) }
     }

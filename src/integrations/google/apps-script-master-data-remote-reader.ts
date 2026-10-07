@@ -119,10 +119,11 @@ function isRows(value: unknown): value is Rows {
 /**
  * Apps Script currently returns complete sheet rows for `tables`, even for
  * sheets whose app contract only consumes a leading range (for example,
- * `Employees!A:C` while the sheet also has columns beyond `Level`). Project
- * only a verified leading contract range here; the parser below still checks
- * every required header and every required data value. A renamed, reordered,
- * missing, or extra column inside the documented range is never accepted.
+ * `Employees!A:D` projects `Employee_ID | Name | Initial | Level` out of any
+ * further columns the sheet may gain). Project only a verified leading
+ * contract range here, and only when its header row matches; the parser below
+ * still checks every required header and every required data value. A renamed,
+ * reordered, or missing column inside the documented range is never accepted.
  */
 function projectLeadingContractColumns(rows: Rows, headers: readonly string[]): Rows {
   const firstRow = rows[0]

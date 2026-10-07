@@ -3,7 +3,7 @@ import { AppsScriptMasterDataRemoteReader } from './apps-script-master-data-remo
 
 const validPayload = {
   tables: {
-    Employees: [['Employee_ID', 'Name', 'Level']],
+    Employees: [['Employee_ID', 'Name', 'Initial', 'Level']],
     Crews: [['Crew_ID', 'Name', 'Job']],
     Sectors: [['Sector_Code'], ['BR1']],
     Sampling_Houses: [['Sector_Code', 'Sampling_House_Code'], ['BR1', 'SH1']],
@@ -54,7 +54,27 @@ describe('AppsScriptMasterDataRemoteReader', () => {
     expect((window as unknown as Record<string, unknown>)[url.searchParams.get('callback') ?? '']).toBeUndefined()
   })
 
-  it('retains Level while projecting verified leading contract columns from Apps Script rows', async () => {
+  it('takes Level from column D while projecting verified leading contract columns from Apps Script rows', async () => {
+    const reader = new AppsScriptMasterDataRemoteReader('https://example.test/exec')
+    const pending = reader.readMasterData()
+    callbackFor(jsonpScript())({
+      ...validPayload,
+      tables: {
+        ...validPayload.tables,
+        Employees: [
+          ['Employee_ID', 'Name', 'Initial', 'Level', 'Notes'],
+          ['SCM0268', 'Mega Putri', 'Mega', 'Supervisor', 'extra column beyond Employees!A:D'],
+        ],
+      },
+    })
+
+    await expect(pending).resolves.toMatchObject({
+      ok: true,
+      value: { employees: [{ id: 'SCM0268', name: 'Mega Putri', level: 'Supervisor' }] },
+    })
+  })
+
+  it('rejects an Employees header that does not match the real Employee_ID, Name, Initial, Level order', async () => {
     const reader = new AppsScriptMasterDataRemoteReader('https://example.test/exec')
     const pending = reader.readMasterData()
     callbackFor(jsonpScript())({
@@ -65,10 +85,7 @@ describe('AppsScriptMasterDataRemoteReader', () => {
       },
     })
 
-    await expect(pending).resolves.toMatchObject({
-      ok: true,
-      value: { employees: [{ id: 'SCM0268', name: 'Mega Putri', level: 'Supervisor' }] },
-    })
+    await expect(pending).resolves.toMatchObject({ ok: false, error: { code: 'MASTER_DATA_REMOTE_INVALID' } })
   })
 
   it('maps a script error to the stable unavailable error and cleans up', async () => {
