@@ -81,6 +81,13 @@ export class AppsScriptMasterDataRemoteReader implements MasterDataRemoteReader 
       try {
         script = document.createElement('script')
         script.async = true
+        // Credential-free CORS load: without it the browser sends Google
+        // session cookies, and with several signed-in accounts Google
+        // rewrites the URL to /macros/u/N/… which returns 404. Both the
+        // /exec redirect and the final googleusercontent response send
+        // `Access-Control-Allow-Origin: *`. Set before `src` so the request
+        // starts in CORS mode.
+        script.crossOrigin = 'anonymous'
         script.src = this.masterDataUrl(callbackName)
         script.onerror = () => fail('APPS_SCRIPT_UNAVAILABLE')
         document.head.append(script)

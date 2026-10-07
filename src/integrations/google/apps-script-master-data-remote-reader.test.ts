@@ -88,11 +88,27 @@ describe('AppsScriptMasterDataRemoteReader', () => {
     await expect(pending).resolves.toMatchObject({ ok: false, error: { code: 'MASTER_DATA_REMOTE_INVALID' } })
   })
 
+  it('loads the JSONP script credential-free (crossOrigin anonymous) from the moment it is appended', async () => {
+    const appendSpy = vi.spyOn(document.head, 'append')
+    const reader = new AppsScriptMasterDataRemoteReader('https://example.test/exec')
+    const pending = reader.readMasterData()
+
+    expect(appendSpy).toHaveBeenCalledTimes(1)
+    const appended = appendSpy.mock.calls[0]?.[0] as HTMLScriptElement
+    expect(appended.crossOrigin).toBe('anonymous')
+    expect(appended.getAttribute('crossorigin')).toBe('anonymous')
+    appendSpy.mockRestore()
+
+    callbackFor(jsonpScript())(validPayload)
+    await expect(pending).resolves.toMatchObject({ ok: true })
+  })
+
   it('maps a script error to the stable unavailable error and cleans up', async () => {
     const reader = new AppsScriptMasterDataRemoteReader('https://example.test/exec')
     const pending = reader.readMasterData()
     const script = jsonpScript()
     const callbackName = new URL(script.src).searchParams.get('callback') ?? ''
+    expect(script.crossOrigin).toBe('anonymous')
 
     script.dispatchEvent(new Event('error'))
 

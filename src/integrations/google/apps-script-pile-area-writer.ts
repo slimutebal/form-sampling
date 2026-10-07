@@ -41,6 +41,9 @@ export class AppsScriptPileAreaWriter implements PileAreaRemoteWriter {
       await fetch(this.endpoint, {
         method: 'POST',
         mode: 'no-cors',
+        // Never send Google session cookies; with several signed-in
+        // accounts they make Google rewrite the URL to /macros/u/N/… (404).
+        credentials: 'omit',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
           action: 'addPileArea',
