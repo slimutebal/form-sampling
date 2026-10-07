@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { I18nextProvider } from 'react-i18next'
 import { MemoryRouter } from 'react-router'
@@ -40,7 +40,14 @@ describe('application shell', () => {
     expect(await localOperationalStore.loadCurrentShiftWorkspace()).toEqual({ ok: true, value: undefined })
 
     renderApp(['/piles'])
-    expect(await screen.findByRole('heading', { name: 'WORK SETUP' }, { timeout: 5_000 })).toBeInTheDocument()
+    // Wait for the settled Work Setup form. The loading placeholder renders its own
+    // "WORK SETUP" heading that is unmounted once the workspace read completes, so
+    // querying the heading inside waitFor (rather than keeping a stale element) keeps
+    // the assertion on the attached node.
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'WORK SETUP' })).toBeInTheDocument()
+      expect(screen.queryByText(i18n.t('shiftStart.loading'))).not.toBeInTheDocument()
+    }, { timeout: 5_000 })
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
 })
