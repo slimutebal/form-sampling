@@ -22,6 +22,34 @@ function renderWelcome() {
   )
 }
 
+describe('WelcomePage — background image base path', () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('en')
+    vi.spyOn(localOperationalStore, 'readCachedMasterData').mockResolvedValue({
+      ok: true,
+      value: { masterData: buildFixtureMasterData() },
+    } as Awaited<ReturnType<typeof localOperationalStore.readCachedMasterData>>)
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+  })
+
+  it('resolves the landing background at the app root in development', () => {
+    const { container } = renderWelcome()
+
+    expect(container.querySelector('img[src$="ops-mine-landing.png"]')).toHaveAttribute('src', '/images/ops-mine-landing.png')
+  })
+
+  it('resolves the landing background under the GitHub Pages subpath', () => {
+    vi.stubEnv('BASE_URL', '/form-sampling/')
+    const { container } = renderWelcome()
+
+    expect(container.querySelector('img[src$="ops-mine-landing.png"]')).toHaveAttribute('src', '/form-sampling/images/ops-mine-landing.png')
+  })
+})
+
 describe('WelcomePage — Continue Record', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en')

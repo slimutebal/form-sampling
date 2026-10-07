@@ -174,7 +174,7 @@ export function WelcomePage() {
   return (
     <main className="safe-top safe-bottom safe-x relative isolate min-h-dvh overflow-hidden bg-[#003d32] text-white">
       <img
-        src="/images/ops-mine-landing.png"
+        src={`${import.meta.env.BASE_URL}images/ops-mine-landing.png`}
         alt=""
         className="absolute inset-0 -z-20 h-full w-full object-cover"
       />
