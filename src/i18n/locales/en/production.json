@@ -86,6 +86,7 @@
       "duplicateTransaction": "This production entry has already been recorded.",
       "checkerNotAssigned": "No Checker is assigned to this shift yet. Contact a supervisor.",
       "checkerAmbiguous": "More than one Checker is assigned to this shift. Contact a supervisor.",
+      "observationsRequired": "Physical Condition and Contamination are required for this record.",
       "loadFailed": "Unable to load production data for this Pile.",
       "generic": "Something went wrong. Please try again."
     }

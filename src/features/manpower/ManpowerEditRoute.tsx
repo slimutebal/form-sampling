@@ -21,7 +21,7 @@ export function ManpowerEditRoute() {
   const { workspace, refreshWorkspace } = useOutletContext<ActiveWorkspaceContext>()
   const navigate = useNavigate()
   const location = useLocation()
-  const returnTo = (location.state as { readonly returnTo?: string } | null)?.returnTo === '/regist' ? '/regist' : '/home'
+  const returnTo = (location.state as { readonly returnTo?: string } | null)?.returnTo === '/regist' ? '/regist' : '/production'
   const [saving, setSaving] = useState(false)
   const [saveErrorKey, setSaveErrorKey] = useState<string>()
 

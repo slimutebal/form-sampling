@@ -6,7 +6,6 @@ import { AppLayout } from '@/app/router/AppLayout'
 import { WelcomePage } from '@/app/router/WelcomePage'
 import { PreShiftShell } from '@/components/shared/PreShiftShell'
 import { FleetPage } from '@/features/fleet/FleetPage'
-import { HomePage } from '@/features/home/HomePage'
 import { ManpowerEditRoute } from '@/features/manpower/ManpowerEditRoute'
 import { PilesPage } from '@/features/piles/PilesPage'
 import { ProductionBatchDetailPage } from '@/features/production/ProductionBatchDetailPage'
@@ -21,6 +20,7 @@ import { RegistrationPage } from '@/features/registration/RegistrationPage'
 import { ReportPage } from '@/features/report/ReportPage'
 import { SamplesPage } from '@/features/samples/SamplesPage'
 import { StartPage } from '@/features/shift/StartPage'
+import { WorkspaceBackupPage } from '@/features/workspace-backup/WorkspaceBackupPage'
 
 /**
  * `/piles/:pileId` (the old per-Pile haulage checker, Phase 18) is
@@ -55,6 +55,7 @@ export function AppRouter() {
       <MasterDataRefreshLifecycle />
       <Routes>
       <Route path="/" element={<WelcomePage />} />
+      <Route path="/workspace-backup" element={<WorkspaceBackupPage />} />
       <Route
         path="/start/*"
         element={
@@ -64,7 +65,7 @@ export function AppRouter() {
         }
       />
       <Route element={<AppLayout />}>
-        <Route path="/home" element={<HomePage />} />
+        <Route path="/home" element={<Navigate to="/production" replace />} />
         <Route path="/regist" element={<RegistrationPage />} />
         <Route path="/manpower/edit" element={<ManpowerEditRoute />} />
         <Route path="/fleet" element={<FleetPage />} />

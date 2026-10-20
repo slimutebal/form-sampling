@@ -246,8 +246,8 @@ describe('HandoverPage', () => {
     await selectAnyFile()
 
     const mismatchAlert = await screen.findByRole('alert')
-    expect(mismatchAlert).toHaveTextContent('2026-09-03')
-    expect(mismatchAlert).toHaveTextContent('2026-09-01')
+      expect(mismatchAlert).toHaveTextContent('03-Sept-2026')
+      expect(mismatchAlert).toHaveTextContent('01-Sept-2026')
     expect(mismatchAlert).toHaveTextContent('This file may not be the previous shift.')
     // No Confirm Import button, no checkbox, no override of any kind —
     // the only actions are choosing another file or starting without one.

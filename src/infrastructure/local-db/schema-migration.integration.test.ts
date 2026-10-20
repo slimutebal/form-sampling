@@ -222,6 +222,16 @@ describe('LocalOperationalStore — v2 to v3 schema migration (Phase 12 rule 9)'
     expect(loadedWorkspace.value?.pendingBatches).toEqual([])
     expect(loadedWorkspace.value?.pendingSamples).toEqual([])
 
+    // A pre-manpower workspace must remain discoverable by the explicit
+    // recovery path. Discovery is read-only and does not require inventing a
+    // Checker assignment for the legacy row.
+    const discovered = await store.listLocalWorkspaces()
+    expect(discovered.ok).toBe(true)
+    if (!discovered.ok) return
+    expect(discovered.value).toHaveLength(1)
+    expect(discovered.value[0]?.shiftId).toBe('SHIFT-1')
+    expect(discovered.value[0]?.manpower).toEqual([])
+
     const loadedSamplePosition = await store.getSamplePosition(fixtureSamplePositionId('SP-LEGACY-1'))
     expect(loadedSamplePosition.ok).toBe(true)
     if (!loadedSamplePosition.ok) return

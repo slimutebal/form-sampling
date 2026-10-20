@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { LucideProps } from 'lucide-react'
+import truckIconUrl from '@/assets/icons/truck.svg'
 
 type SafetyIconProps = LucideProps & { readonly children: ReactNode }
 
@@ -59,18 +60,11 @@ export function SampleSafetyIcon(props: LucideProps) {
   )
 }
 
-/** One loaded mining dump truck, simplified for a small mobile header. */
+/** The supplied Fleet icon is kept as an external SVG asset so Vite bundles it. */
 export function FleetSafetyIcon(props: LucideProps) {
   return (
     <SafetyIconFrame data-icon="fleet-safety" {...props}>
-      <g data-vehicle="mining-dump-truck">
-        <path d="M2.2 10.9h9.2l1.5 3.6H3.1z" />
-        <path d="m3.5 10.9 1.7-1.8 1.8.8 1.5-1 1.7 2" />
-        <path d="M3.1 14.5h9.8l1.8-3.6h4.1l1.4 3.2 1.8 1.3v3.3h-2.4M14.2 18.8H8.5" />
-        <path d="M16.7 10.9v3h3.5" />
-        <circle cx="6.2" cy="18.8" r="2.1" />
-        <circle cx="17.8" cy="18.8" r="2.1" />
-      </g>
+      <image data-asset="truck-icon" href={truckIconUrl} x="0" y="2.4" width="24" height="19.2" preserveAspectRatio="xMidYMid meet" />
     </SafetyIconFrame>
   )
 }

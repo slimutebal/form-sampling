@@ -46,6 +46,7 @@ describe('GlobalStatusBar', () => {
     setNavigatorOnLine(true)
     renderBar(fakeSyncReader([]), fakeActiveShiftReader(false))
     expect(screen.getByText('Online')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
     await act(async () => {
       await Promise.resolve()
     })

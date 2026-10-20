@@ -1,6 +1,7 @@
 import type { FleetId, FrontId } from '../common/identifiers'
 import type { FleetDefinition } from './fleet-definition'
 import type { FrontDefinition } from './front'
+import { temporalFleetActive, type FleetOperationalState } from './fleet-operational-state'
 
 /**
  * The subset of a FleetSetup (or raw FleetSetupInput) this module needs.
@@ -10,6 +11,7 @@ import type { FrontDefinition } from './front'
 export interface FrontLineageInput {
   readonly fronts: readonly FrontDefinition[]
   readonly fleets: readonly FleetDefinition[]
+  readonly operationalState?: FleetOperationalState
 }
 
 /**
@@ -93,8 +95,14 @@ export function deriveFrontLineage(input: FrontLineageInput): FrontLineage {
 
   const activeFrontIds: FrontId[] = []
   const historicalFrontIds: FrontId[] = []
+  const fleetByFrontId = new Map(input.fleets.map((fleet) => [fleet.frontId, fleet]))
   for (const front of input.fronts) {
-    if (successorFrontIdByFrontId.has(front.frontId)) {
+    // An event-based Fleet has an explicit current operational state. A
+    // Fleet without an event remains fully compatible with legacy lineage.
+    const temporal = fleetByFrontId.get(front.frontId)
+      ? temporalFleetActive(input.operationalState, fleetByFrontId.get(front.frontId)!.fleetId)
+      : undefined
+    if (temporal === false || (temporal === undefined && successorFrontIdByFrontId.has(front.frontId))) {
       historicalFrontIds.push(front.frontId)
     } else {
       activeFrontIds.push(front.frontId)

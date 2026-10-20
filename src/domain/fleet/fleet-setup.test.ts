@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseSectorCode } from '../common/codes'
-import { parseFleetId, parseFrontId, parseTruckId } from '../common/identifiers'
-import type { FleetId, FrontId, TruckId } from '../common/identifiers'
+import { parseFleetId, parseFrontId, parsePileId, parseTruckId } from '../common/identifiers'
+import type { FleetId, FrontId, PileId, TruckId } from '../common/identifiers'
 import { createMasterData, type MasterData } from '../master/master-data'
 import { parseHaulerCode } from '../master/master-codes'
 import { createHaulerReference, createSectorReference, createTruckReference } from '../master/references'
@@ -9,6 +9,7 @@ import { createFrontDefinition, type FrontDefinition } from './front'
 import { createBaseFleetDefinition, createDerivedFleetDefinition, type FleetDefinition } from './fleet-definition'
 import { createFleetSetup } from './fleet-setup'
 import { resolveEffectiveFleet } from './fleet-resolution'
+import { buildExcaCode } from './exca-code'
 
 function truckId(value: string): TruckId {
   const parsed = parseTruckId(value)
@@ -24,6 +25,12 @@ function fleetId(value: string): FleetId {
 
 function frontId(value: string): FrontId {
   const parsed = parseFrontId(value)
+  if (!parsed.ok) throw new Error('invalid test fixture')
+  return parsed.value
+}
+
+function pileId(value: string): PileId {
+  const parsed = parsePileId(value)
   if (!parsed.ok) throw new Error('invalid test fixture')
   return parsed.value
 }
@@ -67,6 +74,23 @@ function baseFleetA(): FleetDefinition {
     fleetId: fleetId('FLEET-A'),
     frontId: frontId('F1'),
     truckIds: [truckId('T1'), truckId('T2'), truckId('T3')],
+  })
+  if (!result.ok) throw new Error('invalid test fixture')
+  return result.value
+}
+
+function destinationFront(frontValue: string, haulerValue: string, pileValue: string): FrontDefinition {
+  const sector = parseSectorCode('S1')
+  const hauler = parseHaulerCode(haulerValue)
+  if (!sector.ok || !hauler.ok) throw new Error('invalid test fixture')
+  return createFrontDefinition(frontId(frontValue), sector.value, hauler.value, pileId(pileValue))
+}
+
+function baseFleet(fleetValue: string, frontValue: string): FleetDefinition {
+  const result = createBaseFleetDefinition({
+    fleetId: fleetId(fleetValue),
+    frontId: frontId(frontValue),
+    truckIds: [],
   })
   if (!result.ok) throw new Error('invalid test fixture')
   return result.value
@@ -145,6 +169,79 @@ describe('createFleetSetup', () => {
       { fronts: [buildFrontF1()], fleets: [fleetA, fleetOther.value] },
       buildMasterData(),
     )
+    expect(result.ok).toBe(true)
+  })
+
+  it('allows active fleets from the same Company to share a Pile_Id', () => {
+    const result = createFleetSetup(
+      {
+        fronts: [destinationFront('F1', 'H1', 'S5_02'), destinationFront('F2', 'H1', 'S5_02')],
+        fleets: [baseFleet('FLEET-A', 'F1'), baseFleet('FLEET-B', 'F2')],
+      },
+      buildMasterData(),
+    )
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('rejects an Exca that is effective on two active Fleets', () => {
+    const exca = buildExcaCode('H1', '234')
+    expect(exca.ok).toBe(true)
+    if (!exca.ok) return
+    const sector = parseSectorCode('S1')
+    const hauler = parseHaulerCode('H1')
+    if (!sector.ok || !hauler.ok) throw new Error('invalid test fixture')
+    const first = createFrontDefinition(frontId('F-EXCA-1'), sector.value, hauler.value, undefined, exca.value)
+    const second = createFrontDefinition(frontId('F-EXCA-2'), sector.value, hauler.value, undefined, exca.value)
+    const result = createFleetSetup({ fronts: [first, second], fleets: [baseFleet('FLEET-EXCA-1', 'F-EXCA-1'), baseFleet('FLEET-EXCA-2', 'F-EXCA-2')] }, buildMasterData())
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.code).toBe('EXCA_ASSIGNED_TO_ACTIVE_FLEET')
+  })
+
+  it('rejects a Pile_Id assigned to active fleets from different Companies', () => {
+    const result = createFleetSetup(
+      {
+        fronts: [destinationFront('F1', 'H1', 'S5_02'), destinationFront('F2', 'H2', 'S5_02')],
+        fleets: [baseFleet('FLEET-A', 'F1'), baseFleet('FLEET-B', 'F2')],
+      },
+      buildMasterData(),
+    )
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('PILE_ASSIGNED_TO_DIFFERENT_COMPANY')
+  })
+
+  it('allows an unassigned Pile_Id for a different Company', () => {
+    const result = createFleetSetup(
+      {
+        fronts: [destinationFront('F1', 'H1', 'S5_02'), destinationFront('F2', 'H2', 'S5_03')],
+        fleets: [baseFleet('FLEET-A', 'F1'), baseFleet('FLEET-B', 'F2')],
+      },
+      buildMasterData(),
+    )
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('does not let a historical Fleet assignment conflict with its active successor', () => {
+    const successor = createDerivedFleetDefinition({
+      fleetId: fleetId('FLEET-B'),
+      frontId: frontId('F2'),
+      referenceFleetId: fleetId('FLEET-A'),
+      addedTruckIds: [],
+      removedTruckIds: [],
+    })
+    if (!successor.ok) throw new Error('invalid test fixture')
+
+    const result = createFleetSetup(
+      {
+        fronts: [destinationFront('F1', 'H1', 'S5_02'), destinationFront('F2', 'H2', 'S5_02')],
+        fleets: [baseFleet('FLEET-A', 'F1'), successor.value],
+      },
+      buildMasterData(),
+    )
+
     expect(result.ok).toBe(true)
   })
 

@@ -19,7 +19,7 @@ import { err, ok } from '@/domain/common/result'
 import type { Shift } from '@/domain/shift/shift'
 import { buildFixtureShift } from '@/infrastructure/local-db/local-db-test-fixtures'
 import i18n from '@/i18n'
-import { ShiftStartPage, type MasterDataCacheReader } from './shift-start-page'
+import { ShiftStartPage, type MasterDataCacheReader, type SetupChecker } from './shift-start-page'
 import { clearWorkSetupDraft, readWorkSetupDraft, saveWorkSetupDraft } from '@/infrastructure/device/work-setup-draft-store'
 
 type WorkspaceResult = Result<CurrentShiftWorkspace | undefined, ShiftWorkspaceReadError>
@@ -91,7 +91,10 @@ function buildTestMasterData(): MasterData {
   const br1Only = must(parseSamplingHouseCode('SHT/C01'))
   return must(
     createMasterData({
-      employees: [createEmployeeReference(must(parseEmployeeId('RAHARJO-1')), 'Raharjo Rahman')],
+      employees: [
+        createEmployeeReference(must(parseEmployeeId('RAHARJO-1')), 'Raharjo Rahman', 'Supervisor'),
+        createEmployeeReference(must(parseEmployeeId('STAFF-1')), 'Staff Only', 'Staff'),
+      ],
       crews: [createCrewReference(must(parseCrewCode('260225')), 'Crew Only', 'Sampler')],
       sectors: [createSectorReference(br1), createSectorReference(ds)],
       locations: [],
@@ -123,6 +126,14 @@ function renderPage(overrides: {
   refreshMasterData?: () => Promise<Result<void, DomainError>>
   isOnline?: () => boolean
   now?: () => Date
+  initialChecker?: SetupChecker
+  initialValues?: {
+    readonly shiftDate: string
+    readonly shiftCode: string
+    readonly sectorCode: string
+    readonly samplingHouseCode: string
+  }
+  identityLocked?: boolean
   onContinue?: (shift: Shift, masterData: MasterData, manpower: readonly ManpowerAssignment[]) => void
 }) {
   const store = overrides.store ?? new FakeShiftWorkspaceReader(ok(undefined))
@@ -142,27 +153,47 @@ function renderPage(overrides: {
                 refreshMasterData={overrides.refreshMasterData}
                 isOnline={overrides.isOnline}
                 now={overrides.now}
+                initialChecker={overrides.initialChecker}
+                initialValues={overrides.initialValues}
+                identityLocked={overrides.identityLocked}
                 onContinue={onContinue}
               />
             }
           />
-          <Route path="/home" element={<div>HOME_PAGE_MARKER</div>} />
+          <Route path="/production" element={<div>PRODUCTION_PAGE_MARKER</div>} />
         </Routes>
       </MemoryRouter>
     </I18nextProvider>,
   )
 }
 
-function fillValidForm() {
+async function chooseOption(user: ReturnType<typeof userEvent.setup>, label: string, value: string) {
+  await user.click(screen.getByRole('combobox', { name: label }))
+  await user.click(screen.getByRole('option', { name: value }))
+}
+
+async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
   fireEvent.change(screen.getByLabelText('Shift Date'), { target: { value: '2026-09-04' } })
-  fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'D' } })
-  fireEvent.change(screen.getByLabelText('Sector'), { target: { value: 'BR1' } })
-  fireEvent.change(screen.getByLabelText('Sampling House'), { target: { value: 'SH_01' } })
+  await chooseOption(user, 'Shift Code', 'D')
+  await chooseOption(user, 'Sector', 'BR1')
+  await chooseOption(user, 'Sampling House', 'SH_01')
+}
+
+function customOptionLabels(label: string) {
+  fireEvent.click(screen.getByLabelText(label))
+  const labels = screen.getAllByRole('option').map((option) => option.textContent)
+  fireEvent.keyDown(document, { key: 'Escape' })
+  return labels
 }
 
 async function addChecker(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('Search NIK / Name'), 'Raharjo')
   await user.click(await screen.findByRole('button', { name: /Raharjo Rahman/ }))
+}
+
+async function addCrew(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText('Search NIK / Name'), 'Crew Only')
+  await user.click(await screen.findByRole('button', { name: /Crew Only/ }))
 }
 
 describe('ShiftStartPage', () => {
@@ -182,17 +213,42 @@ describe('ShiftStartPage', () => {
     expect(refreshMasterData).not.toHaveBeenCalled()
   })
 
+  it('landing-originated setup keeps its validated identity and shows manpower only', async () => {
+    renderPage({
+      identityLocked: true,
+      initialChecker: {
+        personId: 'RAHARJO-1',
+        name: 'Raharjo Rahman',
+        source: 'EMPLOYEE',
+      },
+      initialValues: {
+        shiftDate: '2026-09-04',
+        shiftCode: 'D',
+        sectorCode: 'BR1',
+        samplingHouseCode: 'SH_01',
+      },
+    })
+
+    expect(await screen.findByRole('heading', { name: 'SETUP MANPOWER' })).toBeInTheDocument()
+    expect(await screen.findByTestId('work-setup-manpower')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Shift Date')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Shift Code')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Sector')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Sampling House')).not.toBeInTheDocument()
+  })
+
   it('A2. defaults a new registration from the local date and keeps a manual Shift Code edit after re-render', async () => {
+    const user = userEvent.setup()
     renderPage({ now: () => new Date(2026, 8, 4, 10, 0) })
 
     await waitFor(() => expect(screen.getByLabelText('Shift Date')).toHaveValue('2026-09-04'))
-    expect(screen.getByText('04-Sep-2026')).toBeInTheDocument()
+    expect(screen.getAllByText('04-Sept-2026')).toHaveLength(2)
     expect(screen.getByLabelText('Shift Code')).toHaveValue('D')
     expect(screen.getByTestId('time-location-row-1')).toHaveClass('grid-cols-[3fr_2fr]')
     expect(screen.getByTestId('time-location-row-2')).toHaveClass('flex-col')
 
-    fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'N' } })
-    fireEvent.change(screen.getByLabelText('Sector'), { target: { value: 'BR1' } })
+    await chooseOption(user, 'Shift Code', 'N')
+    await chooseOption(user, 'Sector', 'BR1')
 
     expect(screen.getByLabelText('Shift Code')).toHaveValue('N')
   })
@@ -201,20 +257,20 @@ describe('ShiftStartPage', () => {
     renderPage({ store: new FakeShiftWorkspaceReader(ok(buildTestWorkspace())) })
 
     expect(await screen.findByText('Active Shift Found')).toBeInTheDocument()
-    expect(screen.getByText('September 4, 2026')).toBeInTheDocument()
+    expect(screen.getByText('04-Sept-2026')).toBeInTheDocument()
     expect(screen.getByText('D')).toBeInTheDocument()
     expect(screen.getByText('S1')).toBeInTheDocument()
     expect(screen.getByText('HOUSE-1')).toBeInTheDocument()
     expect(screen.getByText('Active')).toBeInTheDocument()
   })
 
-  it('C. clicking Resume Shift navigates to /home without any workspace write', async () => {
+  it('C. clicking Resume Shift navigates to /production without any workspace write', async () => {
     const user = userEvent.setup()
     renderPage({ store: new FakeShiftWorkspaceReader(ok(buildTestWorkspace())) })
 
     await user.click(await screen.findByRole('button', { name: 'Resume Shift' }))
 
-    expect(await screen.findByText('HOME_PAGE_MARKER')).toBeInTheDocument()
+    expect(await screen.findByText('PRODUCTION_PAGE_MARKER')).toBeInTheDocument()
   })
 
   it('D. Start New Shift with an existing current shift opens the registration form', async () => {
@@ -253,7 +309,7 @@ describe('ShiftStartPage', () => {
     expect(await screen.findByText('Active Shift Found')).toBeInTheDocument()
   })
 
-  it('G. one Pengawas with all valid fields enables Next and hands the new Shift to the caller', async () => {
+  it('G. one Shift Lead and one Crew with all valid fields enables Next and hands the new Shift to the caller', async () => {
     const user = userEvent.setup()
     let readyShift: Shift | undefined
     let readyMasterData: MasterData | undefined
@@ -268,15 +324,16 @@ describe('ShiftStartPage', () => {
     })
 
     await screen.findByLabelText('Shift Date')
-    fillValidForm()
+    await fillValidForm(user)
     await addChecker(user)
+    await addCrew(user)
     expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: 'Next' }))
 
     expect(readyShift?.status).toBe('NEW')
     expect(readyShift?.id).toBe('fixed-shift-id')
     expect(readyMasterData).toBeDefined()
-    expect(readyManpower).toHaveLength(1)
+    expect(readyManpower).toHaveLength(2)
     expect(readyManpower?.[0]?.jobDeskCode).toBe('')
   })
 
@@ -285,22 +342,24 @@ describe('ShiftStartPage', () => {
     renderPage({ generateShiftId: () => '   ' })
 
     await screen.findByLabelText('Shift Date')
-    fillValidForm()
+    await fillValidForm(user)
     await addChecker(user)
+    await addCrew(user)
     await user.click(screen.getByRole('button', { name: 'Next' }))
 
     expect(await screen.findByText('Unable to complete registration. Please try again.')).toBeInTheDocument()
     expect(screen.queryByText(/must not be blank or whitespace-only/i)).not.toBeInTheDocument()
   })
 
-  it('G3. zero Pengawas disables Next and shows the inline requirement', async () => {
+  it('G3. zero Shift Lead disables Next and shows the roster requirement', async () => {
+    const user = userEvent.setup()
     const onContinue = vi.fn()
     renderPage({ onContinue })
 
     await screen.findByLabelText('Shift Date')
-    fillValidForm()
+    await fillValidForm(user)
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
-    expect(screen.getByText('At least 1 Supervisor is required.')).toBeInTheDocument()
+    expect(screen.getByText('Add at least 1 Lead.')).toBeInTheDocument()
     expect(onContinue).not.toHaveBeenCalled()
   })
 
@@ -309,12 +368,38 @@ describe('ShiftStartPage', () => {
     renderPage({})
 
     await screen.findByLabelText('Shift Date')
-    fillValidForm()
+    await fillValidForm(user)
     await user.type(screen.getByLabelText('Search NIK / Name'), 'Crew Only')
     await user.click(await screen.findByRole('button', { name: /Crew Only/ }))
 
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
-    expect(screen.getByText('At least 1 Supervisor is required.')).toBeInTheDocument()
+    expect(screen.getByText('Add at least 1 Lead.')).toBeInTheDocument()
+  })
+
+  it('G5. a Shift Lead-only roster cannot continue', async () => {
+    const user = userEvent.setup()
+    renderPage({})
+
+    await screen.findByLabelText('Shift Date')
+    await fillValidForm(user)
+    await addChecker(user)
+
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+    expect(screen.getByText('Add at least 1 Crew.')).toBeInTheDocument()
+  })
+
+  it('G6. ordinary Staff plus a Crew cannot satisfy the Shift Lead requirement', async () => {
+    const user = userEvent.setup()
+    renderPage({})
+
+    await screen.findByLabelText('Shift Date')
+    await fillValidForm(user)
+    await user.type(screen.getByLabelText('Search NIK / Name'), 'Staff Only')
+    await user.click(await screen.findByRole('button', { name: /Staff Only/ }))
+    await addCrew(user)
+
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+    expect(screen.getByText('Add at least 1 Lead.')).toBeInTheDocument()
   })
 
   it('H. an invalid form shows field-level validation and stays on Work Setup', async () => {
@@ -324,6 +409,7 @@ describe('ShiftStartPage', () => {
     await screen.findByLabelText('Shift Date')
     await user.type(screen.getByLabelText('Search NIK / Name'), 'Raharjo')
     await user.click(await screen.findByRole('button', { name: /Raharjo Rahman/ }))
+    await addCrew(user)
     await user.click(screen.getByRole('button', { name: 'Next' }))
 
     expect(await screen.findAllByText('This field is required.')).toHaveLength(2)
@@ -331,10 +417,11 @@ describe('ShiftStartPage', () => {
   })
 
   it('I. Work Setup retains entered values without a separate review step', async () => {
+    const user = userEvent.setup()
     renderPage({})
 
     await screen.findByLabelText('Shift Date')
-    fillValidForm()
+    await fillValidForm(user)
 
     expect(screen.getByLabelText('Shift Date')).toHaveValue('2026-09-04')
     expect(screen.getByLabelText('Shift Code')).toHaveValue('D')
@@ -370,46 +457,41 @@ describe('ShiftStartPage', () => {
   it('J. the Shift Code selector only offers DS/NS — no arbitrary text is possible', async () => {
     renderPage({})
 
-    const select = (await screen.findByLabelText('Shift Code')) as HTMLSelectElement
-    expect(select.tagName).toBe('SELECT')
-    const values = Array.from(select.options).map((option) => option.value)
-    expect(values.sort()).toEqual(['', 'D', 'N'])
+    const user = userEvent.setup()
+    await screen.findByRole('combobox', { name: 'Shift Code' })
+    await user.click(screen.getByRole('combobox', { name: 'Shift Code' }))
+    expect(screen.getAllByRole('option').map((option) => option.textContent).sort()).toEqual(['D', 'N'])
   })
 
   it('K. Sector options come from MasterData, not a hardcoded list', async () => {
     renderPage({})
 
-    const select = (await screen.findByLabelText('Sector')) as HTMLSelectElement
-    const values = Array.from(select.options).map((option) => option.value)
-    expect(values.sort()).toEqual(['', 'BR1', 'DS_SECTOR'])
+    await screen.findByLabelText('Sector')
+    expect(customOptionLabels('Sector').sort()).toEqual(['BR1', 'DS_SECTOR'])
   })
 
   it('L. Sampling House options are filtered by the selected Sector, and the same code (SH_01) can exist under two different sectors', async () => {
+    const user = userEvent.setup()
     renderPage({})
 
     await screen.findByLabelText('Sector')
-    fireEvent.change(screen.getByLabelText('Sector'), { target: { value: 'BR1' } })
-    const br1Options = Array.from((screen.getByLabelText('Sampling House') as HTMLSelectElement).options).map(
-      (option) => option.value,
-    )
-    expect(br1Options.sort()).toEqual(['', 'SHT/C01', 'SH_01'])
+    await chooseOption(user, 'Sector', 'BR1')
+    expect(customOptionLabels('Sampling House').sort()).toEqual(['SHT/C01', 'SH_01'])
 
-    fireEvent.change(screen.getByLabelText('Sector'), { target: { value: 'DS_SECTOR' } })
-    const dsOptions = Array.from((screen.getByLabelText('Sampling House') as HTMLSelectElement).options).map(
-      (option) => option.value,
-    )
-    expect(dsOptions.sort()).toEqual(['', 'SH_01'])
+    await chooseOption(user, 'Sector', 'DS_SECTOR')
+    expect(customOptionLabels('Sampling House')).toEqual(['SH_01'])
   })
 
   it('M. changing Sector clears an already-selected Sampling House that is not valid under the new Sector', async () => {
+    const user = userEvent.setup()
     renderPage({})
 
     await screen.findByLabelText('Sector')
-    fireEvent.change(screen.getByLabelText('Sector'), { target: { value: 'BR1' } })
-    fireEvent.change(screen.getByLabelText('Sampling House'), { target: { value: 'SHT/C01' } })
+    await chooseOption(user, 'Sector', 'BR1')
+    await chooseOption(user, 'Sampling House', 'SHT/C01')
     expect(screen.getByLabelText('Sampling House')).toHaveValue('SHT/C01')
 
-    fireEvent.change(screen.getByLabelText('Sector'), { target: { value: 'DS_SECTOR' } })
+    await chooseOption(user, 'Sector', 'DS_SECTOR')
 
     expect(screen.getByLabelText('Sampling House')).toHaveValue('')
   })
@@ -420,7 +502,7 @@ describe('ShiftStartPage', () => {
 
     await screen.findByLabelText('Shift Date')
     fireEvent.change(screen.getByLabelText('Shift Date'), { target: { value: '2026-09-04' } })
-    fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'D' } })
+    await chooseOption(user, 'Shift Code', 'D')
     // Sector left unselected — Sector and Sampling House must both report errors.
     await user.click(screen.getByRole('button', { name: 'Next' }))
 

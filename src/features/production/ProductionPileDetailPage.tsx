@@ -28,7 +28,7 @@ type LoadPhase =
     }
 
 const STATUS_BADGE_CLASS: Readonly<Record<ProductionBatchStatus, string>> = {
-  ACTIVE: 'bg-primary/10 text-primary',
+  ACTIVE: 'bg-focus-accent-soft text-primary',
   COMPLETE: 'bg-emerald-100 text-emerald-700',
   PENDING: 'bg-muted text-muted-foreground',
 }
@@ -122,7 +122,7 @@ export function ProductionPileDetailPage() {
       <div className="flex flex-col gap-3 px-5 py-4">
         <div className="flex items-center justify-between">
           <span className="font-semibold">{pile.id}</span>
-          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">{pile.oreCode}</span>
+          <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', pile.oreCode === 'LIM' ? 'qps-material-lim-badge' : 'bg-emerald-100 text-emerald-700')}>{pile.oreCode}</span>
         </div>
 
         {phase.kind === 'error' ? (

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router'
 import type { ActiveWorkspaceContext } from '@/app/router/AppLayout'
 import { localOperationalStore } from '@/app/local-operational-store'
@@ -20,13 +20,20 @@ import { SampleProgressSummary } from '@/features/registration/sample-progress-s
 
 interface ActivePileRegistrationFormProps {
   readonly onSaved?: () => void
-  /** Lets the floating modal place the primary submit action in its header. */
+  /** Lets the floating modal associate its footer action with this form. */
   readonly formId: string
   /** Supplying a row turns the same active-shift form into its local edit flow. */
   readonly initialRegistration?: PileRegistrationDraft
   /** Lets the modal disable its external Save action while a hard rule fails. */
   readonly onCanSubmitChange?: (canSubmit: boolean) => void
 }
+
+type PileOptionsPlacement = Readonly<{
+  direction: 'above' | 'below'
+  maxHeight: number
+}>
+
+const preferredPileOptionsHeight = 176
 
 /** Active-shift Sample Setup with config-driven Trip and bag constraints. */
 export function ActivePileRegistrationForm({
@@ -53,6 +60,11 @@ export function ActivePileRegistrationForm({
   const [error, setError] = useState('')
   const [samplePositions, setSamplePositions] = useState<readonly SamplePosition[]>([])
   const [operationalHistoryResult, setOperationalHistoryResult] = useState(false)
+  const pileFieldRef = useRef<HTMLDivElement>(null)
+  const [pileOptionsPlacement, setPileOptionsPlacement] = useState<PileOptionsPlacement>({
+    direction: 'below',
+    maxHeight: preferredPileOptionsHeight,
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -109,6 +121,53 @@ export function ActivePileRegistrationForm({
         )
       : []
   }, [query, workspace.masterData.pileAreas, workspace.shift.sectorCode])
+
+  useLayoutEffect(() => {
+    if (!query.trim()) return
+
+    const field = pileFieldRef.current
+    const dialogBody = field?.closest<HTMLElement>('[data-ui="sample-dialog-body"]')
+    if (!field || !dialogBody) return
+
+    let frame = 0
+    const updatePlacement = () => {
+      const fieldBounds = field.getBoundingClientRect()
+      const bodyBounds = dialogBody.getBoundingClientRect()
+      // jsdom has no layout. Preserve the safe, normal downward default for
+      // tests while browsers calculate against the scrollable modal body.
+      if (bodyBounds.height <= 0) return
+
+      const gap = 4
+      const above = Math.max(0, fieldBounds.top - bodyBounds.top - gap)
+      const below = Math.max(0, bodyBounds.bottom - fieldBounds.bottom - gap)
+      // Upward placement is allowed only when the complete preferred list fits
+      // inside the form body. Otherwise the list stays below the field and is
+      // capped to the body space rather than crossing the title or footer.
+      const direction = above >= preferredPileOptionsHeight ? 'above' : 'below'
+      const available = direction === 'above' ? above : below
+      setPileOptionsPlacement({
+        direction,
+        maxHeight: Math.floor(Math.min(preferredPileOptionsHeight, available)),
+      })
+    }
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(updatePlacement)
+    }
+
+    scheduleUpdate()
+    dialogBody.addEventListener('scroll', scheduleUpdate, { passive: true })
+    window.addEventListener('resize', scheduleUpdate)
+    window.visualViewport?.addEventListener('resize', scheduleUpdate)
+    window.visualViewport?.addEventListener('scroll', scheduleUpdate)
+    return () => {
+      cancelAnimationFrame(frame)
+      dialogBody.removeEventListener('scroll', scheduleUpdate)
+      window.removeEventListener('resize', scheduleUpdate)
+      window.visualViewport?.removeEventListener('resize', scheduleUpdate)
+      window.visualViewport?.removeEventListener('scroll', scheduleUpdate)
+    }
+  }, [query])
   const selectedPile = selectedPileId
     ? workspace.masterData.pileAreas.find((area) => area.pileId === selectedPileId)
     : undefined
@@ -239,32 +298,42 @@ export function ActivePileRegistrationForm({
   return (
     <form
       id={formId}
+      data-ui="active-sample-form"
+      data-mode={initialRegistration ? 'edit' : 'add'}
       noValidate
-      className="flex flex-col gap-3"
+      className="active-sample-form flex flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault()
         void add()
       }}
     >
-      <SampleProgressSummary
-        progress={progress}
-        countFormat="of"
-        physicalInHouse={validPhysicalInHouse}
-        showDerivedInHouse={false}
-      />
-      <div className="relative">
-        <label className="mb-1 block text-sm font-medium" htmlFor="active-pile-search">
+      <div data-ui="sample-dialog-progress" data-material={selectedPile?.oreCode}>
+        <SampleProgressSummary
+          progress={progress}
+          countFormat="of"
+          physicalInHouse={validPhysicalInHouse}
+          showDerivedInHouse={false}
+        />
+      </div>
+      <div ref={pileFieldRef} data-ui="sample-dialog-pile" className="relative">
+        <label className="type-field-label mb-1 block text-foreground" htmlFor="active-pile-search">
           Pile_Id
         </label>
         {selectedPile ? (
-          <div className="flex h-11 items-center justify-between gap-2 rounded-md border border-border bg-muted px-3 text-sm">
+          <div
+            data-ui="sample-dialog-pile-selected"
+            data-material={selectedPile.oreCode}
+            className="flex h-12 items-center justify-between gap-2 rounded-[var(--radius-control)] border px-3 text-sm"
+          >
             <span className="min-w-0 truncate font-medium">
               {selectedPile.pileId}{' '}
               <span aria-hidden="true" className="text-muted-foreground">
                 &middot;
               </span>{' '}
               <span
-                className={selectedPile.oreCode === 'SAP' ? 'text-emerald-700' : 'text-amber-900'}
+                data-ui="sample-dialog-material"
+                data-material={selectedPile.oreCode}
+                className="font-semibold"
               >
                 {selectedPile.oreCode}
               </span>
@@ -272,7 +341,7 @@ export function ActivePileRegistrationForm({
             {!hasDependencies ? (
               <button
                 type="button"
-                className="shrink-0 text-primary"
+                className="shrink-0 font-semibold text-primary"
                 onClick={() => {
                   setSelectedPileId(undefined)
                   setQuery('')
@@ -295,15 +364,23 @@ export function ActivePileRegistrationForm({
                 setError('')
               }}
               placeholder="Search Pile_Id..."
-              className="h-11 w-full rounded-md border border-border bg-background px-3"
+              className="active-sample-dialog-field h-12 w-full rounded-[var(--radius-control)] border px-3 text-foreground"
             />
             {query.trim() ? (
-              <div className="scrollbar-none absolute left-0 top-full z-[60] mt-1 max-h-44 w-full overflow-y-auto rounded-md border border-border bg-background shadow-xl">
+              <div
+                data-ui="sample-dialog-pile-options"
+                data-placement={pileOptionsPlacement.direction}
+                style={{ maxHeight: `${pileOptionsPlacement.maxHeight}px` }}
+                className={`scrollbar-none absolute left-0 z-[60] w-full overflow-y-auto rounded-[var(--radius-control)] border border-border bg-surface-elevated shadow-xl ${
+                  pileOptionsPlacement.direction === 'above' ? 'bottom-full mb-1' : 'top-full mt-1'
+                }`}
+              >
                 {candidates.map((area) => (
                   <button
                     key={area.pileId}
                     type="button"
                     aria-label={`Select ${area.pileId} ${area.oreCode}`}
+                    data-ui="sample-dialog-pile-option"
                     className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2 text-left text-sm hover:bg-muted"
                     onClick={() => {
                       setSelectedPileId(area.pileId)
@@ -323,11 +400,9 @@ export function ActivePileRegistrationForm({
                         &middot;
                       </span>
                       <span
-                        className={
-                          area.oreCode === 'SAP'
-                            ? 'font-semibold text-emerald-700'
-                            : 'font-semibold text-amber-900'
-                        }
+                        data-ui="sample-dialog-material"
+                        data-material={area.oreCode}
+                        className="font-semibold"
                       >
                         {area.oreCode}
                       </span>
@@ -342,8 +417,8 @@ export function ActivePileRegistrationForm({
           </>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <label className="text-sm font-medium">
+      <div data-ui="sample-dialog-batch-trip" className="grid grid-cols-2 gap-3">
+        <label className="type-field-label text-foreground">
           Batch
           <input
             aria-label="Batch"
@@ -356,10 +431,10 @@ export function ActivePileRegistrationForm({
             }}
             placeholder="Batch"
             inputMode="numeric"
-            className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 font-normal disabled:bg-muted"
+            className="active-sample-dialog-field mt-1 h-12 w-full rounded-[var(--radius-control)] border px-3 font-normal disabled:bg-muted"
           />
         </label>
-        <label className="text-sm font-medium">
+        <label className="type-field-label text-foreground">
           Trip
           <input
             aria-label="Trip"
@@ -373,14 +448,17 @@ export function ActivePileRegistrationForm({
             placeholder="Trip"
             inputMode="numeric"
             aria-invalid={Boolean(tripError)}
-            className={`mt-1 h-11 w-full rounded-md border bg-background px-3 font-normal disabled:bg-muted ${tripError ? 'border-red-600' : 'border-border'}`}
+            className={`active-sample-dialog-field mt-1 h-12 w-full rounded-[var(--radius-control)] border px-3 font-normal disabled:bg-muted ${tripError ? 'border-danger' : ''}`}
           />
-          {tripError ? <span className="mt-1 block text-xs text-red-600">{tripError}</span> : null}
+          {tripError ? <span className="type-field-error mt-1 block text-danger">{tripError}</span> : null}
         </label>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <label className="text-sm font-medium">
-          Sample In House
+      <div data-ui="sample-dialog-house-status" className="grid grid-cols-2 gap-3">
+        <label className="type-field-label text-foreground">
+          <span className="flex items-center justify-between gap-2">
+            <span>Sample In House</span>
+            {progress ? <span data-ui="sample-dialog-max-bags" className="type-field-helper whitespace-nowrap text-warning">Max {progress.maximumPhysicalInHouseBags} Bags</span> : null}
+          </span>
           <input
             aria-label="Sample In House"
             value={sampleInHouse}
@@ -392,30 +470,27 @@ export function ActivePileRegistrationForm({
             placeholder="Physical bags"
             inputMode="numeric"
             aria-invalid={Boolean(physicalError)}
-            className={`mt-1 h-11 w-full rounded-md border bg-background px-3 font-normal ${physicalError ? 'border-red-600' : 'border-border'}`}
+            className={`active-sample-dialog-field mt-1 h-12 w-full rounded-[var(--radius-control)] border px-3 font-normal ${physicalError ? 'border-danger' : ''}`}
           />
-          {progress ? (
-            <span className="mt-1 block text-xs text-muted-foreground">
-              Max {progress.maximumPhysicalInHouseBags} Bags
-            </span>
-          ) : null}
           {physicalError ? (
-            <span className="mt-1 block text-xs text-red-600">{physicalError}</span>
+            <span className="type-field-error mt-1 block text-danger">{physicalError}</span>
           ) : null}
           {physicalWarning ? (
-            <span className="mt-1 block text-xs text-amber-700">{physicalWarning}</span>
+            <span className="type-field-error mt-1 block text-warning">{physicalWarning}</span>
           ) : null}
         </label>
-        <label className="text-sm font-medium">
+        <label className="type-field-label text-foreground">
           Status
           <select
             aria-label="Status"
+            data-ui="sample-dialog-status"
+            data-status={status}
             value={status}
             onChange={(event) => {
               setStatus(event.target.value as PileRegistrationStatus)
               setError('')
             }}
-            className={`mt-1 h-11 w-full rounded-md border border-border bg-background px-3 font-medium ${status === 'ACTIVE' ? 'text-emerald-700' : 'text-red-700'}`}
+            className="active-sample-dialog-field mt-1 h-12 w-full rounded-[var(--radius-control)] border px-3 font-medium"
           >
             <option value="ACTIVE">Planned</option>
             <option value="INACTIVE">Unplanned</option>
@@ -423,7 +498,7 @@ export function ActivePileRegistrationForm({
         </label>
       </div>
       {error ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="type-field-error text-danger">
           {error}
         </p>
       ) : null}

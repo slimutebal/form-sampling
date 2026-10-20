@@ -72,7 +72,7 @@ export function SelectedPersonnelList({
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-base font-semibold">{t('manpower.selectedPersonnel')}</h2>
+      <h2 className="type-section-title">{t('manpower.selectedPersonnel')}</h2>
       {selected.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
           {t('manpower.noPersonnel')}

@@ -1,5 +1,6 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import truckIconUrl from '@/assets/icons/truck.svg'
 import { FleetSafetyIcon, ManpowerSafetyIcon, SampleSafetyIcon } from './setup-safety-icons'
 
 describe('Active Setup safety icons', () => {
@@ -29,8 +30,6 @@ describe('Active Setup safety icons', () => {
     expect(
       container.querySelector('[data-icon="sample-safety"] [data-part="ore-pile"]'),
     ).toBeInTheDocument()
-    expect(
-      container.querySelectorAll('[data-icon="fleet-safety"] [data-vehicle="mining-dump-truck"]'),
-    ).toHaveLength(1)
+    expect(container.querySelector('[data-icon="fleet-safety"] [data-asset="truck-icon"]')).toHaveAttribute('href', truckIconUrl)
   })
 })

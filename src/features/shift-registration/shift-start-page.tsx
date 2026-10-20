@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
 
 import { refreshAppsScriptMasterData } from '@/app/google/google-master-data-sync'
 import { createManpowerFromDraft } from '@/application/manpower/create-manpower-from-draft'
+import { isPengawasEmployee } from '@/application/manpower/pengawas-role'
 import type {
   CurrentShiftWorkspace,
   ShiftWorkspaceReadError,
@@ -15,7 +17,6 @@ import {
   type ShiftRegistrationFormValues,
 } from '@/application/shift-registration/shift-registration-form-values'
 import { generateShiftId as defaultGenerateShiftId } from '@/application/shift-registration/shift-id-generator'
-import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -220,6 +221,7 @@ interface ShiftStartPageProps {
     shift: Shift,
     masterData: MasterData,
     manpower: readonly ManpowerAssignment[],
+    checkerPersonId: string,
   ) => void
 
   /**
@@ -240,6 +242,13 @@ interface ShiftStartPageProps {
   onBack?: () => void
 
   forceNew?: boolean
+
+  /**
+   * The Landing modal has already validated the operational identity.
+   * In this mode Work Setup owns manpower only and must not ask for the
+   * same identity fields again.
+   */
+  identityLocked?: boolean
 }
 
 /**
@@ -259,6 +268,7 @@ export function ShiftStartPage({
   initialManpowerSelection,
   onBack,
   forceNew = false,
+  identityLocked = false,
 }: ShiftStartPageProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -298,16 +308,20 @@ export function ShiftStartPage({
 
   const [manpowerError, setManpowerError] = useState<string>()
 
-  const pengawasCount = manpowerSelection.selected.filter(
-    (person) => person.source === 'EMPLOYEE',
-  ).length
-
-  const isSupervisorMissing = pengawasCount === 0
-
   const [masterDataPhase, setMasterDataPhase] =
     useState<MasterDataPhase>({
-      kind: 'loading',
-    })
+    kind: 'loading',
+  })
+
+  const activeMasterData = masterDataPhase.kind === 'ready' ? masterDataPhase.masterData : undefined
+  const pengawasCount = activeMasterData
+    ? manpowerSelection.selected.filter((person) => isPengawasEmployee(person.personId, activeMasterData)).length
+    : 0
+  const samplerCount = manpowerSelection.selected.filter(
+    (person) => person.source === 'CREW' && person.personId !== manpowerSelection.checkerPersonId,
+  ).length
+  const isSupervisorMissing = pengawasCount === 0
+  const isCrewMissing = samplerCount === 0
 
   const [masterDataReloadToken, setMasterDataReloadToken] =
     useState(0)
@@ -445,7 +459,7 @@ export function ShiftStartPage({
 
     const draft = readWorkSetupDraft()
 
-    if (draft) {
+    if (draft && !identityLocked) {
       const restoredValues: ShiftRegistrationFormValues = {
         shiftDate: draft.shiftDate,
         shiftCode: draft.shiftCode,
@@ -488,6 +502,7 @@ export function ShiftStartPage({
     )
   }, [
     formValues,
+    identityLocked,
     initialChecker,
     manpowerSelection,
     masterDataPhase,
@@ -556,7 +571,7 @@ export function ShiftStartPage({
   ])
 
   const handleResume = useCallback(() => {
-    navigate('/home')
+    navigate('/production')
   }, [navigate])
 
   const handleStartNew = useCallback(() => {
@@ -578,9 +593,8 @@ export function ShiftStartPage({
       setFormValues(values)
 
       /**
-       * Work Setup requires at least one Employee/Staff Pengawas.
-       *
-       * Checker does not automatically satisfy this if Checker is Crew.
+       * Work Setup requires an Employee with an explicit Pengawas Level.
+       * A Checker or ordinary Staff entry does not satisfy this by itself.
        */
       if (isSupervisorMissing) {
         setManpowerError(
@@ -589,16 +603,19 @@ export function ShiftStartPage({
         return
       }
 
+      if (isCrewMissing) {
+        setManpowerError(
+          t('manpower.errors.crewRequired'),
+        )
+        return
+      }
+
       const manpowerResult = createManpowerFromDraft(
         manpowerSelection.selected.map((person) => ({
           personId: person.personId,
-          jobDeskCode:
-            person.personId ===
-            manpowerSelection.checkerPersonId
-              ? 'Checker'
-              : person.source === 'CREW'
-                ? 'Sampler'
-                : '',
+          jobDeskCode: person.source === 'CREW'
+            ? person.personId === manpowerSelection.checkerPersonId ? 'Checker' : 'Sampler'
+            : person.jobDeskCode,
         })),
         masterDataPhase.masterData,
       )
@@ -631,6 +648,7 @@ export function ShiftStartPage({
           result.value,
           masterDataPhase.masterData,
           manpowerResult.value,
+          manpowerSelection.checkerPersonId!,
         )
       } else {
         setSubmissionError(
@@ -640,6 +658,7 @@ export function ShiftStartPage({
     },
     [
       generateShiftId,
+      isCrewMissing,
       isSupervisorMissing,
       manpowerSelection,
       masterDataPhase,
@@ -708,7 +727,7 @@ export function ShiftStartPage({
     )
   }
 
-  const pageTitle = 'WORK SETUP'
+  const pageTitle = identityLocked ? 'SETUP MANPOWER' : 'WORK SETUP'
 
   return (
     /**
@@ -719,13 +738,11 @@ export function ShiftStartPage({
      *
      * Only WorkSetupManpower's roster box should use overflow-y-auto.
      */
-    <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {mode === 'form' ? (
-        <div className="grid shrink-0 grid-cols-[auto_1fr] items-center gap-2 border-b border-border px-5 py-2">
-          <LanguageSwitcher compact />
-
-          <h1 className="text-center text-[19px] font-semibold leading-tight">
-            WORK SETUP
+        <div className="shrink-0 border-b border-border px-5 py-2">
+          <h1 className="type-page-title text-center">
+            {pageTitle}
           </h1>
 
         </div>
@@ -846,51 +863,80 @@ export function ShiftStartPage({
                   </p>
                 ) : null}
 
-                <ShiftRegistrationForm
-                  className="min-h-0 flex-1 pt-8 sm:pt-10"
-                  values={formValues}
-                  masterData={
-                    masterDataPhase.masterData
-                  }
-                  onValuesChange={(values) => {
-                    setFormValues(values)
+                {identityLocked ? (
+                  <form
+                    id="work-setup-form"
+                  className="flex min-h-0 flex-1 flex-col overflow-hidden pt-4"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      handleFormSubmit(formValues)
+                    }}
+                  >
+                    <WorkSetupManpower
+                      masterData={
+                        masterDataPhase.masterData
+                      }
+                      value={manpowerSelection}
+                      error={manpowerError}
+                      workContext={formValues}
+                      onChange={(selection) => {
+                        setManpowerSelection(
+                          selection,
+                        )
 
-                    persistWorkSetupDraft(
-                      values,
-                      manpowerSelection,
-                    )
-                  }}
-                  onSubmit={handleFormSubmit}
-                  showSubmitButton={false}
-                >
-                  <WorkSetupManpower
+                        setManpowerError(
+                          undefined,
+                        )
+
+                        persistWorkSetupDraft(
+                          formValues,
+                          selection,
+                        )
+                      }}
+                    />
+                  </form>
+                ) : (
+                  <ShiftRegistrationForm
+                    className="min-h-0 flex-1 overflow-hidden pt-4"
+                    values={formValues}
                     masterData={
                       masterDataPhase.masterData
                     }
-                    value={manpowerSelection}
-                    error={
-                      isSupervisorMissing
-                        ? t(
-                            'manpower.errors.supervisorRequired',
-                          )
-                        : manpowerError
-                    }
-                    onChange={(selection) => {
-                      setManpowerSelection(
-                        selection,
-                      )
-
-                      setManpowerError(
-                        undefined,
-                      )
+                    onValuesChange={(values) => {
+                      setFormValues(values)
 
                       persistWorkSetupDraft(
-                        formValues,
-                        selection,
+                        values,
+                        manpowerSelection,
                       )
                     }}
-                  />
-                </ShiftRegistrationForm>
+                    onSubmit={handleFormSubmit}
+                    showSubmitButton={false}
+                  >
+                    <WorkSetupManpower
+                      masterData={
+                        masterDataPhase.masterData
+                      }
+                      value={manpowerSelection}
+                      error={manpowerError}
+                      workContext={formValues}
+                      onChange={(selection) => {
+                        setManpowerSelection(
+                          selection,
+                        )
+
+                        setManpowerError(
+                          undefined,
+                        )
+
+                        persistWorkSetupDraft(
+                          formValues,
+                          selection,
+                        )
+                      }}
+                    />
+                  </ShiftRegistrationForm>
+                )}
 
                 {/*
                   Footer is always outside the scrollable manpower roster.
@@ -904,7 +950,7 @@ export function ShiftStartPage({
                       className="w-full"
                       onClick={onBack}
                     >
-                      {t('fleetSetup.back')}
+                      <ArrowLeft aria-hidden="true" size={18} /> Back
                     </Button>
                   ) : (
                     <span />
@@ -913,14 +959,13 @@ export function ShiftStartPage({
                   <Button
                     type="submit"
                     form="work-setup-form"
+                    variant="focus"
                     className="w-full"
                     disabled={
-                      isSupervisorMissing
+                      isSupervisorMissing || isCrewMissing
                     }
                   >
-                    {t(
-                      'shiftStart.form.submit',
-                    )}
+                    Next <ArrowRight aria-hidden="true" size={18} />
                   </Button>
                 </div>
               </div>

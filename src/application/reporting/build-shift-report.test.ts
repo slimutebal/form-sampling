@@ -669,6 +669,34 @@ describe('buildShiftReport — manpower', () => {
     expect(result.value.manpower[0]).toMatchObject({ employeeId: 'CREW-1', employeeName: 'Andri Tani Kusuma' })
   })
 
+  it('formats a Staff Checker from the persisted assignment without replacing the Staff job description', () => {
+    const result = buildShiftReport(baseInput({
+      checkerPersonId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID),
+      manpowerAssignments: [
+        { personId: fixtureEmployeeId(FIXTURE_EMPLOYEE_ID), name: FIXTURE_EMPLOYEE_NAME, jobDeskCode: 'Supervisor', isPic: true },
+        { personId: 'CREW-1', name: 'Takdir', jobDeskCode: 'Sampler', isPic: false },
+      ],
+    }))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.manpower.map((row) => row.jobDeskCode)).toEqual([
+      'Supervisor (Checker)',
+      'Sampler',
+    ])
+  })
+
+  it('formats a Crew Checker as Checker from the persisted assignment', () => {
+    const result = buildShiftReport(baseInput({
+      checkerPersonId: 'CREW-1',
+      manpowerAssignments: [
+        { personId: 'CREW-1', name: 'Takdir', jobDeskCode: 'Sampler', isPic: false },
+      ],
+    }))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.manpower[0]?.jobDeskCode).toBe('Checker')
+  })
+
   it('empty manpower is allowed', () => {
     const result = buildShiftReport(baseInput({ manpowerAssignments: [] }))
     expect(result.ok).toBe(true)

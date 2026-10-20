@@ -83,7 +83,7 @@ export function FrontFleetAdjustmentEditor({
         </dl>
 
         <section className="flex flex-col gap-3 rounded-lg border border-border p-3">
-          <h4 className="font-semibold">{t('fleetActive.currentTrucks')}</h4>
+          <h4 className="type-subsection-title">{t('fleetActive.currentTrucks')}</h4>
           <SelectedTrucks
             truckIds={truckIds}
             actionLabel={(id) => t('fleetSetup.removeTruckNamed', { truckId: id })}

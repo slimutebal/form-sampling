@@ -48,6 +48,12 @@ export interface ShiftWorkspaceRecord {
   readonly pendingBatches?: readonly PendingBatchCarryOver[]
   readonly pendingSamples?: readonly HandoverPendingSample[]
   readonly manpower?: readonly ManpowerAssignment[]
+  /**
+   * Operational assignment, deliberately separate from `jobDeskCode` so a
+   * Staff Checker remains a Supervisor/Foreman in all persisted history.
+   * Optional for backward-compatible reads of existing IndexedDB rows.
+   */
+  readonly checkerPersonId?: string
   readonly pileRegistrations?: readonly PileRegistrationDraft[]
 }
 

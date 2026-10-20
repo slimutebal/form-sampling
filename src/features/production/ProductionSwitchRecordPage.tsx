@@ -134,7 +134,10 @@ export function ProductionSwitchRecordPage() {
       ? t('switchRecord.headerTitleFrom', { pileId: pileId ?? '', batchNumber: Number(batchNumberParam), ritNumber: Number(ritNumberParam) })
       : t('switchRecord.headerTitleInto', { pileId: pileId ?? '', batchNumber: Number(batchNumberParam), ritNumber: Number(ritNumberParam) })
 
-  const checkerResult = useMemo(() => resolveProductionRecorder(workspace.manpower), [workspace.manpower])
+  const checkerResult = useMemo(
+    () => resolveProductionRecorder(workspace.manpower, workspace.checkerPersonId),
+    [workspace.checkerPersonId, workspace.manpower],
+  )
 
   if (phase.kind === 'loading') {
     return (
@@ -440,7 +443,7 @@ export function ProductionSwitchRecordPage() {
               <Button type="button" variant="secondary" size="lg" className="h-14" onClick={() => setStage({ kind: 'form' })} disabled={saving}>
                 {t('switchRecord.cancel')}
               </Button>
-              <Button type="button" size="lg" className="h-14" onClick={() => void handleConfirm()} disabled={saving || !checkerResult.ok}>
+              <Button type="button" size="lg" variant="focus" className="h-14" onClick={() => void handleConfirm()} disabled={saving || !checkerResult.ok}>
                 {saving
                   ? t('editRecord.saving')
                   : sampleImpactResult?.ok && sampleImpactResult.value.changed

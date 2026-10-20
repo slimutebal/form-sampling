@@ -7,7 +7,6 @@ import { localOperationalStore } from '@/app/local-operational-store'
 import { useMasterDataCacheStatus } from '@/app/hooks/useMasterDataCacheStatus'
 import { selectEffectiveTransactions } from '@/application/production/effective-production'
 import { derivePendingSamples } from '@/application/sample-handling/derive-pending-samples'
-import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardTitle } from '@/components/ui/card'
@@ -15,7 +14,6 @@ import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
 import type { ProductionRecord } from '@/domain/production/production-record'
 import type { SamplePosition } from '@/domain/sample-handling/sample-position'
 import { formatShiftDateForDisplay } from '@/features/shift-registration/format-shift-date'
-import type { SupportedLanguage } from '@/i18n'
 
 type LoadPhase =
   | { readonly kind: 'loading' }
@@ -39,7 +37,7 @@ function StatTile({ label, value }: { label: string; value: number }) {
 }
 
 export function HomePage() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { workspace } = useOutletContext<ActiveWorkspaceContext>()
   const [phase, setPhase] = useState<LoadPhase>({ kind: 'loading' })
   const [masterDataStatus, reloadMasterDataStatus] = useMasterDataCacheStatus(localOperationalStore)
@@ -81,7 +79,6 @@ export function HomePage() {
     }
   }, [workspace.shift.id])
 
-  const language = i18n.language as SupportedLanguage
   const pendingCount =
     phase.kind === 'loaded'
       ? derivePendingSamples({
@@ -107,7 +104,7 @@ export function HomePage() {
         <Card>
           <CardContent className="flex flex-col gap-1">
             <p className="text-sm text-muted-foreground">
-              {formatShiftDateForDisplay(workspace.shift.date, language)} · {workspace.shift.shiftCode}
+              {formatShiftDateForDisplay(workspace.shift.date)} · {workspace.shift.shiftCode}
             </p>
             <p className="text-base font-semibold">
               {workspace.shift.sectorCode} · {workspace.shift.samplingHouseCode}
@@ -157,18 +154,15 @@ export function HomePage() {
         </div>
 
         <Card>
-          <CardTitle>{t('settings.language')}</CardTitle>
-          <CardContent className="mt-3">
-            <LanguageSwitcher />
-          </CardContent>
-        </Card>
-
-        <Card>
           <CardTitle>{t('more.masterData.title')}</CardTitle>
           <CardContent className="mt-3 flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">
               {masterDataStatus.kind === 'synced'
-                ? t('more.masterData.lastSynced', { timestamp: masterDataStatus.fetchedAt.toLocaleString(i18n.language) })
+                ? t('more.masterData.lastSynced', { timestamp: formatShiftDateForDisplay([
+                    masterDataStatus.fetchedAt.getFullYear(),
+                    String(masterDataStatus.fetchedAt.getMonth() + 1).padStart(2, '0'),
+                    String(masterDataStatus.fetchedAt.getDate()).padStart(2, '0'),
+                  ].join('-')) })
                 : t('more.masterData.neverSynced')}
             </p>
             {refreshPhase === 'error' ? (

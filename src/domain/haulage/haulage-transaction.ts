@@ -6,6 +6,7 @@ import type { BatchPosition } from '../batch/batch-position'
 import { createBatchPosition, validateBatchPosition } from '../batch/batch-position'
 import { resolveEffectiveFleetAgainstMaster } from '../fleet/fleet-resolution'
 import type { FleetSetup } from '../fleet/fleet-setup'
+import type { ExcaCode } from '../fleet/exca-code'
 import type { TruckValidationResult } from '../fleet/truck-validation'
 import { validateTruckForFleet } from '../fleet/truck-validation'
 import { findOreSamplingConfig, type MasterData } from '../master/master-data'
@@ -29,6 +30,8 @@ export interface HaulageTransactionData {
   readonly frontId: FrontId
   readonly fleetId: FleetId
   readonly truckId: TruckId
+  /** Exca effective when this immutable haulage decision was recorded. */
+  readonly excaCode?: ExcaCode
   readonly samplingEvaluation: SamplingEvaluation
   readonly truckValidation: TruckValidationResult
 }
@@ -128,6 +131,9 @@ export function createHaulageTransaction(
     frontId: effectiveFleet.value.frontId,
     fleetId: params.fleetId,
     truckId: params.truckId,
+    ...(params.fleetSetup.fronts.find((front) => front.frontId === effectiveFleet.value.frontId)?.excaCode
+      ? { excaCode: params.fleetSetup.fronts.find((front) => front.frontId === effectiveFleet.value.frontId)?.excaCode }
+      : {}),
     samplingEvaluation,
     truckValidation: truckValidation.value,
   }

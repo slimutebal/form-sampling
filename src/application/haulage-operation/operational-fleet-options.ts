@@ -4,6 +4,7 @@ import { err, ok } from '@/domain/common/result'
 import { resolveEffectiveFleetAgainstMaster } from '@/domain/fleet/fleet-resolution'
 import type { FleetSetup } from '@/domain/fleet/fleet-setup'
 import { deriveFrontLineage } from '@/domain/fleet/front-lineage'
+import { destinationPileIdsForFront } from '@/domain/fleet/front'
 import type { HaulerCode } from '@/domain/master/master-codes'
 import type { MasterData } from '@/domain/master/master-data'
 
@@ -88,7 +89,7 @@ export function operationalFleetOptionsForPile(
         return false
       }
       const front = frontById.get(option.frontId)
-      return !front?.destinationPileId || front.destinationPileId === pileId
+      return !front?.destinationPileId || destinationPileIdsForFront(front).includes(pileId)
     }),
   )
 }
@@ -108,8 +109,53 @@ export function operationalFleetOptionsForDestinationPile(
 
   const frontById = new Map(fleetSetup.fronts.map((front) => [front.frontId, front]))
   return ok(
-    optionsResult.value.filter((option) => frontById.get(option.frontId)?.destinationPileId === pileId),
+    optionsResult.value.filter((option) => {
+      const front = frontById.get(option.frontId)
+      return front ? destinationPileIdsForFront(front).includes(pileId) : false
+    }),
   )
+}
+
+/**
+ * Returns the distinct Trucks available to the active Fleets explicitly
+ * assigned to one destination Pile.  This is deliberately derived from the
+ * same resolved Fleet options as the Fleet selector, so a Truck that belongs
+ * to two eligible Fleets appears once without losing either valid Fleet.
+ */
+export function operationalTruckOptionsForDestinationPile(
+  masterData: MasterData,
+  fleetSetup: FleetSetup,
+  pileId: PileId,
+): Result<readonly TruckId[], DomainError> {
+  const optionsResult = operationalFleetOptionsForDestinationPile(masterData, fleetSetup, pileId)
+  if (!optionsResult.ok) return err(optionsResult.error)
+
+  const truckIds = new Map<string, TruckId>()
+  for (const option of optionsResult.value) {
+    for (const truckId of option.effectiveTruckIds) {
+      truckIds.set(truckId as string, truckId)
+    }
+  }
+  return ok([...truckIds.values()].sort((left, right) => String(left).localeCompare(String(right))))
+}
+
+/**
+ * Narrows the active, destination-matched Fleet list to Fleets that actually
+ * contain the chosen Truck.  The production write flow repeats this check at
+ * save time; this helper only provides the selectable, current-workspace view.
+ */
+export function operationalFleetOptionsForDestinationPileTruck(
+  masterData: MasterData,
+  fleetSetup: FleetSetup,
+  pileId: PileId,
+  truckId: string,
+): Result<readonly OperationalFleetOption[], DomainError> {
+  const optionsResult = operationalFleetOptionsForDestinationPile(masterData, fleetSetup, pileId)
+  if (!optionsResult.ok) return err(optionsResult.error)
+
+  return ok(optionsResult.value.filter((option) =>
+    option.effectiveTruckIds.some((candidate) => (candidate as string) === truckId),
+  ))
 }
 
 /**

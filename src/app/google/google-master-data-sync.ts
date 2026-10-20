@@ -19,6 +19,13 @@ export interface GoogleMasterDataSyncOverrides {
   readonly clock: Clock
 }
 
+function logMasterDataRefresh(event: string, details: Record<string, unknown>) {
+  if (!import.meta.env.DEV) return
+  console.info(`[master-data] ${event}`, details)
+}
+
+let inFlightConfiguredRefresh: Promise<Result<MasterDataCacheEntry, DomainError>> | undefined
+
 /**
  * Composition boundary: runtime config → `AppsScriptMasterDataRemoteReader`
  * → existing `refreshMasterData`
@@ -29,7 +36,7 @@ export interface GoogleMasterDataSyncOverrides {
  * `overrides` exists only for tests (inject a fake reader/cache/clock);
  * production callers invoke this with no arguments.
  */
-export async function refreshAppsScriptMasterData(
+export function refreshAppsScriptMasterData(
   overrides?: Partial<GoogleMasterDataSyncOverrides>,
 ): Promise<Result<MasterDataCacheEntry, DomainError>> {
   const cache = overrides?.cache ?? localOperationalStore
@@ -39,6 +46,28 @@ export async function refreshAppsScriptMasterData(
     return refreshMasterData({ reader: overrides.reader, cache, clock })
   }
 
+  if (inFlightConfiguredRefresh) {
+    logMasterDataRefresh('remote-refresh-joined-in-flight-request', {})
+    return inFlightConfiguredRefresh
+  }
+
+  const request = refreshConfiguredMasterData(cache, clock)
+  inFlightConfiguredRefresh = request
+  void request.then(
+    () => {
+      if (inFlightConfiguredRefresh === request) inFlightConfiguredRefresh = undefined
+    },
+    () => {
+      if (inFlightConfiguredRefresh === request) inFlightConfiguredRefresh = undefined
+    },
+  )
+  return request
+}
+
+async function refreshConfiguredMasterData(
+  cache: MasterDataCacheStore,
+  clock: Clock,
+): Promise<Result<MasterDataCacheEntry, DomainError>> {
   const configResult = readGoogleRuntimeConfig()
   if (!configResult.ok) {
     return configResult

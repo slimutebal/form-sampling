@@ -45,6 +45,12 @@ export interface FrontDefinition {
   readonly sectorCode: SectorCode
   readonly haulerCode: HaulerCode
   readonly destinationPileId?: PileId
+  /**
+   * Additional active destinations for this Front. `destinationPileId`
+   * remains the legacy primary destination so existing workspaces and
+   * historical transaction snapshots remain readable unchanged.
+   */
+  readonly destinationPileIds?: readonly PileId[]
   /** Optional only for legacy workspaces created before Exca was recorded. */
   readonly excaCode?: ExcaCode
 }
@@ -55,10 +61,26 @@ export function createFrontDefinition(
   haulerCode: HaulerCode,
   destinationPileId?: PileId,
   excaCode?: ExcaCode,
+  destinationPileIds?: readonly PileId[],
 ): FrontDefinition {
-  return excaCode
-    ? { frontId, sectorCode, haulerCode, destinationPileId, excaCode }
-    : { frontId, sectorCode, haulerCode, destinationPileId }
+  const destinations = destinationPileIds?.length
+    ? [...new Set(destinationPileIds)]
+    : destinationPileId ? [destinationPileId] : undefined
+  return {
+    frontId,
+    sectorCode,
+    haulerCode,
+    destinationPileId: destinations?.[0],
+    ...(destinations ? { destinationPileIds: destinations } : {}),
+    ...(excaCode ? { excaCode } : {}),
+  }
+}
+
+/** Returns the complete destination set while preserving legacy single-Pile Fronts. */
+export function destinationPileIdsForFront(front: FrontDefinition): readonly PileId[] {
+  return front.destinationPileIds?.length
+    ? [...new Set(front.destinationPileIds)]
+    : front.destinationPileId ? [front.destinationPileId] : []
 }
 
 /**

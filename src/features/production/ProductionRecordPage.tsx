@@ -80,7 +80,7 @@ export function ProductionRecordPage() {
         <div className="shrink-0"><PageHeader title={t('title')} /></div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         <div className="flex flex-col gap-3">
-          <h2 className="font-semibold">Select Batch</h2>
+          <h2 className="type-section-title">Select Batch</h2>
           {activeRegistrations.map((candidate) => (
             <Link key={Number(candidate.batch)} to={`/production/record/${encodeURIComponent(pile.id as string)}?registrationBatch=${Number(candidate.batch)}`} className="rounded-lg border border-border p-3 font-medium">
               Batch {String(candidate.batch).padStart(3, '0')} · Trip {String(candidate.rit).padStart(3, '0')}
@@ -99,6 +99,7 @@ export function ProductionRecordPage() {
       masterData={workspace.masterData}
       fleetSetup={workspace.fleetSetup}
       manpower={workspace.manpower}
+      checkerPersonId={workspace.checkerPersonId}
       pendingBatches={workspace.pendingBatches}
       registration={registration}
       targetPosition={parseMissedTargetPosition(searchParams)}

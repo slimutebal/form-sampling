@@ -6,10 +6,12 @@ import type { MasterData } from '@/domain/master/master-data'
 export interface ActiveManpowerSelection {
   readonly personId: string
   readonly jobDeskCode: string
+  readonly isChecker?: boolean
 }
 
-function isChecker(jobDeskCode: string): boolean {
-  return jobDeskCode.trim() === 'Checker'
+export interface ActiveManpowerUpdate {
+  readonly manpower: readonly ManpowerAssignment[]
+  readonly checkerPersonId: string
 }
 
 /**
@@ -21,7 +23,7 @@ export function updateActiveManpower(
   existing: readonly ManpowerAssignment[],
   selected: readonly ActiveManpowerSelection[],
   catalog: MasterData,
-): Result<readonly ManpowerAssignment[], DomainError> {
+): Result<ActiveManpowerUpdate, DomainError> {
   const existingById = new Map(existing.map((assignment) => [assignment.personId, assignment]))
   const seen = new Set<string>()
   const assignments: ManpowerAssignment[] = []
@@ -34,16 +36,22 @@ export function updateActiveManpower(
 
     const persisted = existingById.get(person.personId)
     if (persisted) {
-      assignments.push(createManpowerAssignment(persisted.personId, persisted.name, person.jobDeskCode, persisted.isPic))
+      const jobDeskCode = persisted.isPic
+        ? person.jobDeskCode
+        : person.isChecker
+          ? 'Checker'
+          : 'Sampler'
+      assignments.push(createManpowerAssignment(persisted.personId, persisted.name, jobDeskCode, persisted.isPic))
       continue
     }
 
     const resolved = createManpowerFromDraft([person], catalog)
-    if (!resolved.ok) return resolved
+    if (!resolved.ok) return err(resolved.error)
     assignments.push(resolved.value[0])
   }
 
-  const checkerCount = assignments.filter((assignment) => isChecker(assignment.jobDeskCode)).length
+  const checkerIds = selected.filter((person) => person.isChecker).map((person) => person.personId)
+  const checkerCount = checkerIds.length
   if (checkerCount !== 1) {
     return err({
       code: 'INVALID_CHECKER_COUNT',
@@ -51,5 +59,5 @@ export function updateActiveManpower(
     })
   }
 
-  return ok(assignments)
+  return ok({ manpower: assignments, checkerPersonId: checkerIds[0] })
 }

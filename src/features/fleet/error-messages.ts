@@ -11,6 +11,7 @@ const FLEET_ACTIVE_ERROR_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   FRONT_NUMBER_LIMIT_REACHED: 'fleetActive.errors.numberLimitReached',
   FLEET_REFERENCE_BRANCHING: 'fleetActive.errors.alreadySuperseded',
   FLEET_DESTINATION_PILE_NOT_FOUND: 'fleetSetup.errors.destinationNotFound',
+  PILE_ASSIGNED_TO_DIFFERENT_COMPANY: 'fleetSetup.errors.destinationCompanyConflict',
   FLEET_DESTINATION_REQUIRED: 'fleetActive.errors.destinationRequired',
   FLEET_FRONT_NOT_FOUND: 'fleetSetup.errors.frontNotFound',
   FLEET_REFERENCE_NOT_FOUND: 'fleetSetup.errors.referenceNotFound',

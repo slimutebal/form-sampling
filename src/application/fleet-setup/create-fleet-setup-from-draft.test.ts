@@ -154,6 +154,30 @@ describe('createFleetSetupFromDraft', () => {
     expect(result.value.fleetSetup.fronts[0]?.destinationPileId).toBe('PILE-1')
   })
 
+  it('applies the same Pile/Company rule while assembling a Fleet setup draft', () => {
+    const sameCompany = createFleetSetupFromDraft(
+      [
+        base('FLEET-1', '01', ['T1'], 'H1', 'PILE-1'),
+        base('FLEET-2', '02', ['T2'], 'H1', 'PILE-1'),
+      ],
+      buildShift(),
+      buildMasterData(),
+    )
+    expect(sameCompany.ok).toBe(true)
+
+    const differentCompany = createFleetSetupFromDraft(
+      [
+        base('FLEET-1', '01', ['T1'], 'H1', 'PILE-1'),
+        base('FLEET-2', '02', ['H2-T1'], 'H2', 'PILE-1'),
+      ],
+      buildShift(),
+      buildMasterData(),
+    )
+    expect(differentCompany.ok).toBe(false)
+    if (differentCompany.ok) return
+    expect(differentCompany.error.code).toBe('PILE_ASSIGNED_TO_DIFFERENT_COMPANY')
+  })
+
   it('leaves destinationPileId undefined when blank (a Front may have no destination)', () => {
     const result = createFleetSetupFromDraft([base('FLEET-1', '01', ['T1'])], buildShift(), buildMasterData())
     expect(result.ok).toBe(true)

@@ -6,6 +6,7 @@ import type { Result } from '@/domain/common/result'
 import { createBaseFleetDefinition } from '@/domain/fleet/fleet-definition'
 import { createFleetSetup, type FleetSetup } from '@/domain/fleet/fleet-setup'
 import { createFrontDefinition } from '@/domain/fleet/front'
+import { deriveFrontLineage } from '@/domain/fleet/front-lineage'
 import { createMasterData, type MasterData } from '@/domain/master/master-data'
 import { parseHaulerCode, parsePileAreaCode } from '@/domain/master/master-codes'
 import {
@@ -116,6 +117,54 @@ describe('appendFrontContinuation', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.value.effectiveFleet.truckIds).toEqual(['A', 'B', 'E', 'F'])
+  })
+
+  it('creates the explicitly selected successor number with the final inherited Truck selection', () => {
+    const masterData = buildMasterData()
+    const fleetSetup = buildFleetSetup(masterData)
+
+    const result = appendFrontContinuation({
+      fleetSetup,
+      masterData,
+      referenceFrontId: 'BR1/01',
+      frontNumber: 4,
+      addedTruckIds: ['F'],
+      removedTruckIds: ['E'],
+      fleetId: 'FLEET-04',
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.newFront.frontId).toBe('BR1/04')
+    expect(result.value.newFleet).toMatchObject({
+      kind: 'DERIVED',
+      referenceFleetId: 'FLEET-01',
+      addedTruckIds: ['F'],
+      removedTruckIds: ['E'],
+    })
+    expect(result.value.effectiveFleet.truckIds).toEqual(['A', 'B', 'D', 'F'])
+    expect(deriveFrontLineage(result.value.fleetSetup).activeFrontIds).toContain('BR1/04')
+    expect(deriveFrontLineage(result.value.fleetSetup).historicalFrontIds).toContain('BR1/01')
+  })
+
+  it('persists an explicit canonical Exca on a continuation without changing its lineage', () => {
+    const masterData = buildMasterData()
+    const fleetSetup = buildFleetSetup(masterData)
+
+    const result = appendFrontContinuation({
+      fleetSetup,
+      masterData,
+      referenceFrontId: 'BR1/01',
+      excaCode: 'H1-Exc_0003',
+      addedTruckIds: [],
+      removedTruckIds: [],
+      fleetId: 'FLEET-04',
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.newFront.excaCode).toBe('H1-Exc_0003')
+    expect(result.value.newFleet.kind).toBe('DERIVED')
   })
 
   it('keeps the reference Front\'s Destination when none is given', () => {

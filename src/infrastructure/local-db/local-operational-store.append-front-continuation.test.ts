@@ -5,6 +5,7 @@ import { parseOreCode, parseSectorCode } from '../../domain/common/codes'
 import { createBaseFleetDefinition } from '../../domain/fleet/fleet-definition'
 import { createFleetSetup } from '../../domain/fleet/fleet-setup'
 import { createFrontDefinition, createFrontId } from '../../domain/fleet/front'
+import { createFleetAssignmentIdentity } from '../../domain/fleet/fleet-assignment-identity'
 import { parseHaulerCode, parsePileAreaCode } from '../../domain/master/master-codes'
 import { createHaulerReference, createPileAreaReference, createSectorReference, createTruckReference } from '../../domain/master/references'
 import { createOreSamplingConfig, parseBatchSize, parsePackingConfigValue, parseSamplingInterval } from '../../domain/master/sampling-config'
@@ -131,6 +132,93 @@ describe('LocalOperationalStore.appendFrontContinuation', () => {
     if (!loaded.ok) return
     expect(loaded.value?.fleetSetup.fronts.map((front) => front.frontId).sort()).toEqual(['S1/01', 'S1/02'])
     reopenedStore.close()
+  })
+
+  it('persists the originating Shift identity through save and reload without changing production Fleet references', async () => {
+    const store = newStore()
+    const masterData = buildMasterData()
+    const fleetSetup = buildInitialFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-IDENTITY')
+    const pile = buildFixtureSapPile('PILE-1')
+    await store.initializeShiftWorkspace({ shift, piles: [pile], masterData, fleetSetup })
+
+    const assignmentIdentity = must(createFleetAssignmentIdentity({
+      fleetAssignmentId: fixtureFleetId('FLEET-02'),
+      fleetSequence: 2,
+      originShiftId: shift.id,
+      operationalDate: shift.date,
+      shiftCode: shift.shiftCode,
+      sectorCode: shift.sectorCode,
+      frontId: must(createFrontId(shift.sectorCode, 2)),
+      company: must(parseHaulerCode(HAULER_CODE)),
+    }))
+    const continuation = appendFrontContinuation({
+      fleetSetup,
+      masterData,
+      referenceFrontId: 'S1/01',
+      frontNumber: 2,
+      addedTruckIds: [],
+      removedTruckIds: [],
+      fleetId: 'FLEET-02',
+      assignmentIdentity,
+    })
+    expect(continuation.ok).toBe(true)
+    if (!continuation.ok) return
+
+    expect((await store.appendFrontContinuation(shift.id, { fleetSetup: continuation.value.fleetSetup })).ok).toBe(true)
+    const reloaded = await store.loadShiftWorkspace(shift.id)
+    expect(reloaded.ok).toBe(true)
+    if (!reloaded.ok || !reloaded.value) return
+    const persisted = reloaded.value.fleetSetup.fleets.find((fleet) => fleet.fleetId === 'FLEET-02')
+    expect(persisted?.assignmentIdentity).toEqual(assignmentIdentity)
+    expect(persisted?.fleetId).toBe('FLEET-02')
+    const backup = await store.exportLocalWorkspaceBackup(shift.id)
+    expect(backup.ok).toBe(true)
+    if (!backup.ok) return
+    const restoredStore = newStore()
+    expect((await restoredStore.restoreLocalWorkspaceBackup(backup.value)).ok).toBe(true)
+    const restored = await restoredStore.loadShiftWorkspace(shift.id)
+    expect(restored.ok && restored.value?.fleetSetup.fleets.find((fleet) => fleet.fleetId === 'FLEET-02')?.assignmentIdentity).toEqual(assignmentIdentity)
+    restoredStore.close()
+    store.close()
+  })
+
+  it('rejects a duplicate full Fleet Code from another locally managed shift workspace', async () => {
+    const store = newStore()
+    const masterData = buildMasterData()
+    const firstSetup = buildInitialFleetSetup(masterData)
+    const firstShift = buildFixtureShift('SHIFT-IDENTITY-FIRST')
+    const pile = buildFixtureSapPile('PILE-1')
+    await store.initializeShiftWorkspace({ shift: firstShift, piles: [pile], masterData, fleetSetup: firstSetup })
+
+    const firstIdentity = must(createFleetAssignmentIdentity({
+      fleetAssignmentId: fixtureFleetId('FLEET-02'), fleetSequence: 2, originShiftId: firstShift.id,
+      operationalDate: firstShift.date, shiftCode: firstShift.shiftCode, sectorCode: firstShift.sectorCode,
+      frontId: must(createFrontId(firstShift.sectorCode, 2)), company: must(parseHaulerCode(HAULER_CODE)),
+    }))
+    const firstContinuation = must(appendFrontContinuation({
+      fleetSetup: firstSetup, masterData, referenceFrontId: 'S1/01', frontNumber: 2,
+      addedTruckIds: [], removedTruckIds: [], fleetId: 'FLEET-02', assignmentIdentity: firstIdentity,
+    }))
+    expect((await store.appendFrontContinuation(firstShift.id, { fleetSetup: firstContinuation.fleetSetup })).ok).toBe(true)
+
+    const secondSetup = buildInitialFleetSetup(masterData)
+    const secondShift = buildFixtureShift('SHIFT-IDENTITY-SECOND')
+    await store.initializeShiftWorkspace({ shift: secondShift, piles: [pile], masterData, fleetSetup: secondSetup })
+    const collidingIdentity = must(createFleetAssignmentIdentity({
+      fleetAssignmentId: fixtureFleetId('FLEET-03'), fleetSequence: 2, originShiftId: secondShift.id,
+      operationalDate: secondShift.date, shiftCode: secondShift.shiftCode, sectorCode: secondShift.sectorCode,
+      frontId: must(createFrontId(secondShift.sectorCode, 2)), company: must(parseHaulerCode(HAULER_CODE)),
+    }))
+    const secondContinuation = must(appendFrontContinuation({
+      fleetSetup: secondSetup, masterData, referenceFrontId: 'S1/01', frontNumber: 2,
+      addedTruckIds: [], removedTruckIds: [], fleetId: 'FLEET-03', assignmentIdentity: collidingIdentity,
+    }))
+
+    const rejected = await store.appendFrontContinuation(secondShift.id, { fleetSetup: secondContinuation.fleetSetup })
+    expect(rejected.ok).toBe(false)
+    if (!rejected.ok) expect(rejected.error.code).toBe('DUPLICATE_FLEET_CODE')
+    store.close()
   })
 
   it('activates a destination Pile not yet in the workspace, in the same atomic write', async () => {

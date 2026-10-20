@@ -27,9 +27,9 @@ import {
  */
 
 const masterData = buildFixtureMasterData()
-const fleetSetup = buildFixtureFleetSetup(masterData)
-const shift = buildFixtureShift('SHIFT-1')
 const pile = buildFixtureSapPile('PILE-1') // SAP: interval 2, batchSize 20
+const fleetSetup = buildFixtureFleetSetup(masterData, pile.id)
+const shift = buildFixtureShift('SHIFT-1')
 const createdBy = fixtureEmployeeId('12345')
 const createdAt = new Date('2026-09-04T10:00:00.000Z')
 const oreSamplingConfig = findOreSamplingConfig(masterData, pile.oreCode)

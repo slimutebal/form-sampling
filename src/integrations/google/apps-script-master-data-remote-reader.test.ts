@@ -71,6 +71,23 @@ describe('AppsScriptMasterDataRemoteReader', () => {
     })
   })
 
+  it('projects required Employees columns by their exact header names when Initial is inserted before Level', async () => {
+    const reader = new AppsScriptMasterDataRemoteReader('https://example.test/exec')
+    const pending = reader.readMasterData()
+    callbackFor(jsonpScript())({
+      ...validPayload,
+      tables: {
+        ...validPayload.tables,
+        Employees: [['Employee_ID', 'Name', 'Initial', 'Level'], ['SCM0268', 'Mega Putri', 'Mega', 'Supervisor']],
+      },
+    })
+
+    await expect(pending).resolves.toMatchObject({
+      ok: true,
+      value: { employees: [{ id: 'SCM0268', name: 'Mega Putri', level: 'Supervisor' }] },
+    })
+  })
+
   it('maps a script error to the stable unavailable error and cleans up', async () => {
     const reader = new AppsScriptMasterDataRemoteReader('https://example.test/exec')
     const pending = reader.readMasterData()

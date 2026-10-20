@@ -87,7 +87,10 @@ export function ProductionEditRecordPage() {
     }
   }, [record, initialized])
 
-  const checkerResult = useMemo(() => resolveProductionRecorder(workspace.manpower), [workspace.manpower])
+  const checkerResult = useMemo(
+    () => resolveProductionRecorder(workspace.manpower, workspace.checkerPersonId),
+    [workspace.checkerPersonId, workspace.manpower],
+  )
 
   const frontOptionsResult = useMemo(
     () => (pile ? operationalFleetOptionsForPile(workspace.masterData, workspace.fleetSetup, pile.id) : undefined),
@@ -249,7 +252,7 @@ export function ProductionEditRecordPage() {
                   className={cn(
                     'h-11 rounded-lg border text-sm font-medium',
                     physicalCondition === value
-                      ? 'border-primary bg-primary text-primary-foreground'
+                      ? 'border-[var(--qps-primary-action)] bg-[var(--qps-primary-action)] text-[var(--qps-primary-action-foreground)]'
                       : 'border-border bg-background text-foreground',
                   )}
                 >
@@ -271,7 +274,7 @@ export function ProductionEditRecordPage() {
                   className={cn(
                     'h-11 rounded-lg border text-sm font-medium',
                     contamination === value
-                      ? 'border-primary bg-primary text-primary-foreground'
+                      ? 'border-[var(--qps-primary-action)] bg-[var(--qps-primary-action)] text-[var(--qps-primary-action-foreground)]'
                       : 'border-border bg-background text-foreground',
                   )}
                 >

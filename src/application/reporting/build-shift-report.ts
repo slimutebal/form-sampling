@@ -1,7 +1,7 @@
 import { deriveEffectiveSamplingRequirement } from '@/application/production/production-sample-impact'
 import { selectEffectiveProductionRecords, selectEffectiveTransactions } from '@/application/production/effective-production'
 import { derivePendingSamples } from '@/application/sample-handling/derive-pending-samples'
-import type { PileId } from '@/domain/common/identifiers'
+import type { FleetId, PileId } from '@/domain/common/identifiers'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err, ok } from '@/domain/common/result'
 import { findEmployee, findPileArea, type MasterData } from '@/domain/master/master-data'
@@ -9,6 +9,8 @@ import type { Pile } from '@/domain/pile/pile'
 import type { ProductionRecord } from '@/domain/production/production-record'
 import type { SamplePosition } from '@/domain/sample-handling/sample-position'
 import type { Shift } from '@/domain/shift/shift'
+import type { FleetSetup } from '@/domain/fleet/fleet-setup'
+import { resolveFleetAssignmentIdentity } from '@/domain/fleet/fleet-assignment-identity'
 import { deriveShiftProductionReport } from './derive-shift-production-report'
 import { isoWeekOf } from './iso-week'
 import { getReportLabels, shiftCodeDisplayLabel } from './report-localization'
@@ -30,8 +32,11 @@ export interface BuildShiftReportInput {
   readonly productionRecords: readonly ProductionRecord[]
   readonly samplePositions: readonly SamplePosition[]
   readonly masterData: MasterData
+  /** Optional for legacy callers; active REPORT supplies the workspace snapshot. */
+  readonly fleetSetup?: FleetSetup
   /** Explicit, caller-supplied manpower for this shift (ROADMAP Phase 14 §3). Defaults to none. */
   readonly manpowerAssignments: readonly ManpowerAssignment[]
+  readonly checkerPersonId?: string
 }
 
 function buildError(code: string, message: string): Result<never, DomainError> {
@@ -65,6 +70,14 @@ function buildError(code: string, message: string): Result<never, DomainError> {
 export function buildShiftReport(input: BuildShiftReportInput): Result<ShiftReport, DomainError> {
   const { language, shift, piles, productionRecords, samplePositions, masterData, manpowerAssignments } = input
   const labels = getReportLabels(language)
+  const fleetById = new Map(input.fleetSetup?.fleets.map((fleet) => [fleet.fleetId, fleet]) ?? [])
+  const frontById = new Map(input.fleetSetup?.fronts.map((front) => [front.frontId, front]) ?? [])
+  const fleetCodeFor = (fleetId: FleetId): string | undefined => {
+    const fleet = fleetById.get(fleetId)
+    if (!fleet) return undefined
+    const resolved = resolveFleetAssignmentIdentity(fleet, frontById.get(fleet.frontId), shift)
+    return resolved.status === 'RESOLVED' ? resolved.identity.fleetCode : undefined
+  }
 
   const pileById = new Map<PileId, Pile>()
   for (const pile of piles) {
@@ -116,14 +129,28 @@ export function buildShiftReport(input: BuildShiftReportInput): Result<ShiftRepo
   // Crew master, at Manpower Setup time
   // (`@/application/manpower/create-manpower-from-draft`) — never
   // re-resolved here, and never assumed to be Employee-only (Phase 18 §4).
-  const manpower: ReportManpowerRow[] = manpowerAssignments.map((assignment) => ({
-    date: shift.date,
-    shiftCode: shift.shiftCode,
-    location: `${shift.sectorCode}/${shift.samplingHouseCode}`,
-    jobDeskCode: assignment.jobDeskCode,
-    employeeId: assignment.personId,
-    employeeName: assignment.name,
-  }))
+  const legacyCheckers = manpowerAssignments.filter((assignment) => assignment.jobDeskCode.trim() === 'Checker')
+  const effectiveCheckerPersonId = input.checkerPersonId && manpowerAssignments.some((assignment) => assignment.personId === input.checkerPersonId)
+    ? input.checkerPersonId
+    : legacyCheckers.length === 1
+      ? legacyCheckers[0].personId
+      : undefined
+  const manpower: ReportManpowerRow[] = manpowerAssignments.map((assignment) => {
+    const isChecker = assignment.personId === effectiveCheckerPersonId
+    const jobDeskCode = isChecker && assignment.isPic && assignment.jobDeskCode.trim() !== 'Checker'
+      ? `${assignment.jobDeskCode} (Checker)`
+      : isChecker && !assignment.isPic
+        ? 'Checker'
+        : assignment.jobDeskCode
+    return {
+      date: shift.date,
+      shiftCode: shift.shiftCode,
+      location: `${shift.sectorCode}/${shift.samplingHouseCode}`,
+      jobDeskCode,
+      employeeId: assignment.personId,
+      employeeName: assignment.name,
+    }
+  })
 
   // Effective (ACCEPT + ACTIVE) production only (Phase 22 §1/§2) — never
   // recomputed here; delegated entirely to the shared projection so the
@@ -238,6 +265,7 @@ export function buildShiftReport(input: BuildShiftReportInput): Result<ShiftRepo
       truckStatusLabel: labels.truckStatus[truckStatus],
       frontId: effective.frontId,
       fleetId: effective.fleetId,
+      fleetCode: fleetCodeFor(effective.fleetId),
       wrongTruckReasons,
       wrongTruckReasonLabels: wrongTruckReasons.map((reason) => labels.wrongTruckReason[reason]),
     })

@@ -14,6 +14,7 @@ import { groupPendingBatchesByPile } from '@/features/handover/group-pending-bat
 import { HandoverPilePreviewCard } from '@/features/handover/handover-pile-preview-card'
 import type { HandoverFileReadResult } from '@/features/handover/read-handover-file'
 import { readHandoverFile as defaultReadHandoverFile } from '@/features/handover/read-handover-file'
+import { formatShiftDateForDisplay } from '@/features/shift-registration/format-shift-date'
 import type { Result } from '@/domain/common/result'
 
 export interface HandoverPageProps {
@@ -54,9 +55,9 @@ type Phase =
 
 function HandoverViewport({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <header className="shrink-0 border-b border-border px-5 py-4 text-center">
-        <h1 className="text-lg font-extrabold tracking-wide">{title}</h1>
+        <h1 className="type-page-title">{title}</h1>
       </header>
       {children}
     </div>
@@ -269,13 +270,13 @@ export function HandoverPage({
               <div>
                 <p className="text-xs text-muted-foreground">{t('handover.mismatchImported')}</p>
                 <p className="text-sm font-medium">
-                  {preview.archive.shiftInfo.date} · {preview.archive.shiftInfo.shiftCode}
+                  {formatShiftDateForDisplay(preview.archive.shiftInfo.date)} · {preview.archive.shiftInfo.shiftCode}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">{t('handover.mismatchExpected')}</p>
                 <p className="text-sm font-medium">
-                  {expectedPreviousShift.date} · {expectedPreviousShift.shiftCode}
+                  {formatShiftDateForDisplay(expectedPreviousShift.date)} · {expectedPreviousShift.shiftCode}
                 </p>
               </div>
               <p className="text-sm text-muted-foreground">{t('handover.mismatchMessage')}</p>
@@ -309,7 +310,7 @@ export function HandoverPage({
           <CardContent className="flex flex-col gap-2">
             <p className="text-sm text-muted-foreground">{t('handover.previousShift')}</p>
             <p className="text-base font-semibold">
-              {preview.archive.shiftInfo.date} · {preview.archive.shiftInfo.shiftCode}
+              {formatShiftDateForDisplay(preview.archive.shiftInfo.date)} · {preview.archive.shiftInfo.shiftCode}
             </p>
           </CardContent>
         </Card>
@@ -343,7 +344,7 @@ export function HandoverPage({
           </div>
         )}
 
-        <Button type="button" size="lg" className="w-full" onClick={handleConfirm}>
+        <Button type="button" size="lg" variant="focus" className="w-full" onClick={handleConfirm}>
           {t('handover.confirmImport')}
         </Button>
         {backAction}

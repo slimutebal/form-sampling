@@ -9,6 +9,11 @@ export interface RefreshMasterDataDeps {
   readonly clock: Clock
 }
 
+function logMasterDataRefresh(event: string, details: Record<string, unknown>) {
+  if (!import.meta.env.DEV) return
+  console.info(`[master-data] ${event}`, details)
+}
+
 /**
  * Refreshes the local master-data cache from Google (ROADMAP Phase 16
  * §6/§8). The remote catalog is fully fetched and validated — through
@@ -26,15 +31,18 @@ export async function refreshMasterData(
 ): Promise<Result<MasterDataCacheEntry, DomainError>> {
   const remoteResult = await deps.reader.readMasterData()
   if (!remoteResult.ok) {
+    logMasterDataRefresh('remote-read-failed', { code: remoteResult.error.code })
     return remoteResult
   }
 
   const fetchedAt = deps.clock.now()
   const replaceResult = await deps.cache.replaceMasterDataCache(remoteResult.value, fetchedAt)
   if (!replaceResult.ok) {
+    logMasterDataRefresh('cache-persist-failed', { code: replaceResult.error.code })
     return replaceResult
   }
 
+  logMasterDataRefresh('cache-persisted', {})
   return ok({ masterData: remoteResult.value, fetchedAt })
 }
 

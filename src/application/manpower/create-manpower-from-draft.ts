@@ -28,11 +28,11 @@ export interface ManpowerDraftEntry {
  * entries are explicitly valid; there is deliberately no one-PIC-only
  * check.
  *
- * Job Desk is only required for a Crew: the Crew master's `jobCode` may
- * prefill it, but if blank the operator must supply one per shift. A
- * Staff/Employee Job Desk may remain blank — the Employee master has no
- * exact Job field, and this app must not invent whether a Staff member is
- * e.g. SPV or Foreman.
+ * Crew have two operational roles in this context: the selected Checker,
+ * or Sampler. The upstream Crew master job code is informational only and
+ * must not turn an ordinary Crew member into another role or block saving
+ * when it is blank. Staff levels remain a Master Employee presentation
+ * concern; no level is invented or overwritten here.
  */
 export function createManpowerFromDraft(
   entries: readonly ManpowerDraftEntry[],
@@ -62,14 +62,13 @@ export function createManpowerFromDraft(
 
     const isPic = employee !== undefined
 
-    if (!isPic && !entry.jobDeskCode.trim()) {
-      return err({
-        code: 'BLANK_MANPOWER_JOB_DESK',
-        message: `Job desk is required for personId ${entry.personId}`,
-      })
-    }
+    const jobDeskCode = isPic
+      ? entry.jobDeskCode
+      : entry.jobDeskCode.trim().toLocaleLowerCase() === 'checker'
+        ? 'Checker'
+        : 'Sampler'
 
-    assignments.push(createManpowerAssignment(entry.personId, name, entry.jobDeskCode, isPic))
+    assignments.push(createManpowerAssignment(entry.personId, name, jobDeskCode, isPic))
   }
 
   return ok(assignments)

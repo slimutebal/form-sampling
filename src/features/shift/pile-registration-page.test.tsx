@@ -61,7 +61,8 @@ async function selectPile(user: ReturnType<typeof userEvent.setup>, query: strin
 async function fillEntry(user: ReturnType<typeof userEvent.setup>, batch: string, rit: string, status = 'ACTIVE') {
   await user.type(screen.getByLabelText('Batch'), batch)
   await user.type(screen.getByLabelText('Trip'), rit)
-  await user.selectOptions(screen.getByLabelText('Status'), status)
+  await user.click(screen.getByRole('combobox', { name: 'Status' }))
+  await user.click(screen.getByRole('option', { name: status === 'ACTIVE' ? 'Active' : 'Inactive' }))
 }
 
 describe('PileRegistrationPage', () => {
@@ -130,6 +131,29 @@ describe('PileRegistrationPage', () => {
     await fillEntry(user, '002', '002')
     await user.click(screen.getByRole('button', { name: 'Add Sample' }))
     expect(screen.getByRole('alert')).toHaveTextContent('already registered')
+  })
+
+  it('adds and edits the dedicated Sample In House value without replacing other registrations', async () => {
+    const user = userEvent.setup()
+    const { onRegistrationsChange } = renderPage([registration(2)])
+
+    await selectPile(user, 'S5_24')
+    await fillEntry(user, '006', '006')
+    await user.type(screen.getByLabelText('Sample In House'), '3')
+    await user.click(screen.getByRole('button', { name: 'Add Sample' }))
+    expect(onRegistrationsChange).toHaveBeenLastCalledWith([
+      registration(2),
+      { ...registration(6), sampleInHouse: 3 },
+    ])
+
+    await user.click(screen.getByRole('button', { name: 'Edit S5_24 batch 006' }))
+    await user.clear(screen.getByLabelText('Sample In House'))
+    await user.type(screen.getByLabelText('Sample In House'), '2')
+    await user.click(screen.getByRole('button', { name: 'Update Sample' }))
+    expect(onRegistrationsChange).toHaveBeenLastCalledWith([
+      registration(2),
+      { ...registration(6), sampleInHouse: 2 },
+    ])
   })
 
   it('preserves the draft when continuing and invokes Back independently', async () => {

@@ -22,25 +22,70 @@ function catalog() {
 
 describe('updateActiveManpower', () => {
   it('preserves existing assignments while allowing a newly refreshed Employee to be added', () => {
-    const existing = [createManpowerAssignment('EMP-A', 'Historic Employee A', 'Checker', true)]
+    const existing = [createManpowerAssignment('CHECKER', 'Historic Checker', 'Checker', false)]
     const result = updateActiveManpower(existing, [
-      { personId: 'EMP-A', jobDeskCode: 'Checker' },
-      { personId: 'EMP-B', jobDeskCode: '' },
+      { personId: 'CHECKER', jobDeskCode: 'Checker', isChecker: true },
+      { personId: 'EMP-B', jobDeskCode: '', isChecker: false },
     ], catalog())
-    expect(result).toEqual({ ok: true, value: [
-      createManpowerAssignment('EMP-A', 'Historic Employee A', 'Checker', true),
-      createManpowerAssignment('EMP-B', 'Employee B', '', true),
-    ] })
+    expect(result).toEqual({ ok: true, value: {
+      manpower: [
+        createManpowerAssignment('CHECKER', 'Historic Checker', 'Checker', false),
+        createManpowerAssignment('EMP-B', 'Employee B', '', true),
+      ],
+      checkerPersonId: 'CHECKER',
+    } })
   })
 
-  it('keeps an existing assignment when it no longer exists in the refreshed catalog', () => {
-    const existing = [createManpowerAssignment('RETIRED', 'Historic Worker', 'Checker', true)]
-    const result = updateActiveManpower(existing, [{ personId: 'RETIRED', jobDeskCode: 'Checker' }], catalog())
-    expect(result).toEqual({ ok: true, value: existing })
+  it('keeps an existing Crew Checker when it no longer exists in the refreshed catalog', () => {
+    const existing = [createManpowerAssignment('RETIRED', 'Historic Worker', 'Checker', false)]
+    const result = updateActiveManpower(existing, [{ personId: 'RETIRED', jobDeskCode: 'Checker', isChecker: true }], catalog())
+    expect(result).toEqual({ ok: true, value: { manpower: existing, checkerPersonId: 'RETIRED' } })
   })
 
   it('requires exactly one Checker', () => {
-    const result = updateActiveManpower([], [{ personId: 'EMP-B', jobDeskCode: '' }], catalog())
+    const result = updateActiveManpower([], [{ personId: 'EMP-B', jobDeskCode: '', isChecker: false }], catalog())
     expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_CHECKER_COUNT' } })
+  })
+
+  it('assigns Checker to Staff without replacing the Staff job description', () => {
+    const existing = [
+      createManpowerAssignment('EMP-A', 'Employee A', 'Supervisor', true),
+      createManpowerAssignment('CHECKER', 'Crew Checker', 'Checker', false),
+    ]
+    const result = updateActiveManpower(existing, [
+      { personId: 'EMP-A', jobDeskCode: 'Supervisor', isChecker: true },
+      { personId: 'CHECKER', jobDeskCode: 'Checker', isChecker: false },
+    ], catalog())
+    expect(result).toEqual({ ok: true, value: {
+      manpower: [
+        createManpowerAssignment('EMP-A', 'Employee A', 'Supervisor', true),
+        createManpowerAssignment('CHECKER', 'Crew Checker', 'Sampler', false),
+      ],
+      checkerPersonId: 'EMP-A',
+    } })
+  })
+
+  it('re-saves legacy blank and Sampler Crew assignments as Sampler while retaining Checker', () => {
+    const existing = [
+      createManpowerAssignment('CHECKER', 'Checker', 'Checker', false),
+      createManpowerAssignment('230268', 'Takdir', '', false),
+      createManpowerAssignment('230235', 'Ismail', 'Sampler', false),
+    ]
+    const result = updateActiveManpower(existing, [
+      { personId: 'CHECKER', jobDeskCode: 'Checker', isChecker: true },
+      { personId: '230268', jobDeskCode: '', isChecker: false },
+      { personId: '230235', jobDeskCode: 'Sampler', isChecker: false },
+    ], catalog())
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        manpower: [
+        createManpowerAssignment('CHECKER', 'Checker', 'Checker', false),
+        createManpowerAssignment('230268', 'Takdir', 'Sampler', false),
+        createManpowerAssignment('230235', 'Ismail', 'Sampler', false),
+        ],
+        checkerPersonId: 'CHECKER',
+      },
+    })
   })
 })

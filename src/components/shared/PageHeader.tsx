@@ -26,7 +26,7 @@ export function PageHeader({ title }: PageHeaderProps) {
   return (
     <header className="sticky top-[env(safe-area-inset-top)] z-10 safe-x border-b border-border bg-background">
       <div className="flex items-center px-5 py-3">
-        <h1 className="text-[19px] font-semibold leading-tight">{title}</h1>
+        <h1 className="type-page-title">{title}</h1>
       </div>
     </header>
   )

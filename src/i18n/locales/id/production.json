@@ -86,6 +86,7 @@
       "duplicateTransaction": "Entri produksi ini sudah pernah tercatat.",
       "checkerNotAssigned": "Belum ada Checker yang ditugaskan pada shift ini. Hubungi supervisor.",
       "checkerAmbiguous": "Lebih dari satu Checker ditugaskan pada shift ini. Hubungi supervisor.",
+      "observationsRequired": "Physical Condition dan Contamination wajib diisi untuk record ini.",
       "loadFailed": "Gagal memuat data produksi untuk Pile ini.",
       "generic": "Terjadi kesalahan. Silakan coba lagi."
     }

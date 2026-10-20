@@ -457,7 +457,7 @@ export function SampleHandlingPage({
         ) : null}
 
         <div>
-          <h2 className="mb-2 text-base font-semibold">{t('sampleHandling.pendingSamples')}</h2>
+          <h2 className="type-section-title mb-2">{t('sampleHandling.pendingSamples')}</h2>
           <PendingSampleList pendingSamplePiles={pendingSamplePiles} onHandleSample={handleHandleSample} />
         </div>
 
@@ -499,7 +499,7 @@ export function SampleHandlingPage({
         ) : null}
 
         <div>
-          <h2 className="mb-2 text-base font-semibold">{t('sampleHandling.handledSamples')}</h2>
+          <h2 className="type-section-title mb-2">{t('sampleHandling.handledSamples')}</h2>
           <HandledSampleList samplePositions={phase.samplePositions} employees={masterData.employees} />
         </div>
       </div>

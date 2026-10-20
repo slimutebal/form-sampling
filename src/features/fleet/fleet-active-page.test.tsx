@@ -40,6 +40,15 @@ import { FleetActivePage, type FleetActivePageStore } from '@/features/fleet/fle
 import type { LocalShiftWorkspace } from '@/infrastructure/local-db/local-operational-store'
 import i18n from '@/i18n'
 
+async function chooseCustomOption(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+  optionName: string,
+) {
+  await user.click(screen.getByRole('combobox', { name: label }))
+  await user.click(screen.getByRole('option', { name: optionName }))
+}
+
 function value<T>(result: { ok: true; value: T } | { ok: false }): T {
   if (!result.ok) throw new Error('invalid test fixture')
   return result.value
@@ -236,7 +245,7 @@ describe('FleetActivePage', () => {
     )
 
     await user.click(screen.getByRole('button', { name: '+ Add Front' }))
-    expect(screen.getByText('S1/02')).toBeInTheDocument() // auto-derived new Front No preview
+    expect(screen.getByText('S1/02', { selector: 'output' })).toBeInTheDocument() // auto-derived new Front No preview
 
     await user.click(screen.getByRole('button', { name: 'Save Front' }))
 
@@ -321,12 +330,13 @@ describe('FleetActivePage — new independent BASE Front (Phase 18 §2, Fleet Re
     )
 
     await user.click(screen.getByRole('button', { name: '+ Add Front' }))
-    await user.selectOptions(screen.getByLabelText('Fleet Reference'), '')
-    await user.selectOptions(screen.getByLabelText('Hauler'), HAULER_2)
+    await chooseCustomOption(user, 'Fleet Reference', 'None')
+    expect(screen.getByRole('combobox', { name: 'Fleet Reference' })).toHaveValue('')
+    await chooseCustomOption(user, 'Hauler', HAULER_2)
 
-    const truckSelector = screen.getByLabelText('Add Truck')
-    expect(within(truckSelector).getByRole('option', { name: 'STM-A40_0001' })).toBeInTheDocument()
-    expect(within(truckSelector).queryByRole('option', { name: 'T1' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('combobox', { name: 'Add Truck' }))
+    expect(screen.getByRole('option', { name: 'STM-A40_0001' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'T1' })).not.toBeInTheDocument()
   })
 
   it('requires a Destination for a new BASE Front (no reference to inherit one from)', async () => {
@@ -346,8 +356,8 @@ describe('FleetActivePage — new independent BASE Front (Phase 18 §2, Fleet Re
     )
 
     await user.click(screen.getByRole('button', { name: '+ Add Front' }))
-    await user.selectOptions(screen.getByLabelText('Fleet Reference'), '')
-    await user.selectOptions(screen.getByLabelText('Hauler'), HAULER_2)
+    await chooseCustomOption(user, 'Fleet Reference', 'None')
+    await chooseCustomOption(user, 'Hauler', HAULER_2)
 
     expect(screen.getByText('Select a Destination/Pile for this new Front.')).toBeInTheDocument()
   })
@@ -384,13 +394,13 @@ describe('FleetActivePage — new independent BASE Front (Phase 18 §2, Fleet Re
     )
 
     await user.click(screen.getByRole('button', { name: '+ Add Front' }))
-    await user.selectOptions(screen.getByLabelText('Fleet Reference'), '')
-    await user.selectOptions(screen.getByLabelText('Hauler'), HAULER_2)
+    await chooseCustomOption(user, 'Fleet Reference', 'None')
+    await chooseCustomOption(user, 'Hauler', HAULER_2)
     await user.type(screen.getByLabelText('Destination/Pile'), 'L9_27')
     await user.click(await screen.findByRole('button', { name: /L9_27/ }))
-    await user.selectOptions(screen.getByLabelText('Add Truck'), 'STM-A40_0001')
+    await chooseCustomOption(user, 'Add Truck', 'STM-A40_0001')
     await user.click(screen.getByRole('button', { name: 'Add Truck' }))
-    expect(screen.getByText('S1/02')).toBeInTheDocument() // auto-derived new Front No preview
+    expect(screen.getByText('S1/02', { selector: 'output' })).toBeInTheDocument() // auto-derived new Front No preview
 
     await user.click(screen.getByRole('button', { name: 'Save Front' }))
 
@@ -457,7 +467,7 @@ describe('FleetActivePage — persistent unit adjustment (Field Finding 2, "Atur
     await user.click(screen.getByRole('button', { name: 'Atur Unit' }))
     expect(screen.getByText('Adjust Unit — S1/01')).toBeInTheDocument()
 
-    await user.selectOptions(screen.getByLabelText('Add Truck'), 'T2')
+    await chooseCustomOption(user, 'Add Truck', 'T2')
     await user.click(screen.getByRole('button', { name: 'Add Truck' }))
     await user.click(screen.getByRole('button', { name: 'Save Units' }))
 
@@ -481,7 +491,7 @@ describe('FleetActivePage — persistent unit adjustment (Field Finding 2, "Atur
 
     await user.click(screen.getByRole('button', { name: 'Atur Unit' }))
     // Add T2, then remove the original T1 — ends at exactly 1 truck (T2), never 0.
-    await user.selectOptions(screen.getByLabelText('Add Truck'), 'T2')
+    await chooseCustomOption(user, 'Add Truck', 'T2')
     await user.click(screen.getByRole('button', { name: 'Add Truck' }))
     await user.click(screen.getByRole('button', { name: 'Remove T1' }))
     await user.click(screen.getByRole('button', { name: 'Save Units' }))
@@ -523,7 +533,7 @@ describe('FleetActivePage — persistent unit adjustment (Field Finding 2, "Atur
     render(<FleetActivePage workspace={workspace} store={store} onFleetUpdated={vi.fn()} />)
 
     await user.click(screen.getByRole('button', { name: 'Atur Unit' }))
-    await user.selectOptions(screen.getByLabelText('Add Truck'), 'T1')
+    await chooseCustomOption(user, 'Add Truck', 'T1')
     await user.click(screen.getByRole('button', { name: 'Add Truck' }))
     await user.click(screen.getByRole('button', { name: 'Save Units' }))
 

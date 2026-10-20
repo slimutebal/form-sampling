@@ -137,7 +137,7 @@ function VoidConfirmCard({
       className="border-red-300 bg-red-50"
     >
       <CardContent className="flex flex-col gap-3">
-        <h2 id="void-record-title" className="text-lg font-bold">
+        <h2 id="void-record-title" className="type-dialog-title">
           {title}
         </h2>
         <div>
@@ -253,8 +253,8 @@ export function ProductionRitDetailPage() {
   }, [phase, pile, batchNumber, ritNumber, workspace.masterData, workspace.pendingBatches])
 
   const checkerResult = useMemo(
-    () => resolveProductionRecorder(workspace.manpower),
-    [workspace.manpower],
+    () => resolveProductionRecorder(workspace.manpower, workspace.checkerPersonId),
+    [workspace.checkerPersonId, workspace.manpower],
   )
 
   if (!pile || !batchNumberResult.ok || !ritNumberResult.ok) {

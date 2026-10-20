@@ -23,19 +23,22 @@ const CHECKER_JOB_DESK_CODE = 'Checker'
  */
 export function resolveProductionRecorder(
   manpower: readonly ManpowerAssignment[],
+  checkerPersonId?: string,
 ): Result<EmployeeId, DomainError> {
-  const checkers = manpower.filter((assignment) => assignment.jobDeskCode === CHECKER_JOB_DESK_CODE)
+  const checkers = checkerPersonId
+    ? manpower.filter((assignment) => assignment.personId === checkerPersonId)
+    : manpower.filter((assignment) => assignment.jobDeskCode === CHECKER_JOB_DESK_CODE)
 
   if (checkers.length === 0) {
     return err({
       code: 'PRODUCTION_CHECKER_NOT_ASSIGNED',
-      message: 'No manpower assignment with jobDeskCode "Checker" exists for this shift',
+      message: 'No operational Checker assignment exists for this shift',
     })
   }
   if (checkers.length > 1) {
     return err({
       code: 'PRODUCTION_CHECKER_AMBIGUOUS',
-      message: 'More than one manpower assignment with jobDeskCode "Checker" exists for this shift',
+      message: 'More than one operational Checker assignment exists for this shift',
     })
   }
 

@@ -1,5 +1,4 @@
 import { render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { I18nextProvider } from 'react-i18next'
 import { MemoryRouter } from 'react-router'
@@ -57,9 +56,10 @@ describe('application shell — active workspace', () => {
 
     const nav = await screen.findByRole('navigation')
     expect(within(nav).getByRole('link', { name: 'SETUP' })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: 'REVIEW' })).toHaveAttribute('href', '/samples')
     expect(within(nav).getByRole('button', { name: 'REC' })).toBeInTheDocument()
     expect(within(nav).getByRole('link', { name: 'REPORT' })).toBeInTheDocument()
-    expect(within(nav).getAllByRole('link')).toHaveLength(2)
+    expect(within(nav).getAllByRole('link')).toHaveLength(3)
   })
 
   it('renders the real Piles screen (not a placeholder)', async () => {
@@ -74,14 +74,22 @@ describe('application shell — active workspace', () => {
     expect(await screen.findByText('F1')).toBeInTheDocument()
   })
 
-  it('switches translated shell text without reloading', async () => {
-    const user = userEvent.setup()
+  it('keeps /regist fixed while its operational lists own scrolling', async () => {
+    renderApp(['/regist'])
+
+    await screen.findByRole('tab', { name: 'Fleet' })
+    expect(document.querySelector('main')).toHaveClass('overflow-hidden')
+    expect(document.querySelector('[data-ui="fleet-list"]')).toHaveClass('overflow-y-auto')
+  })
+
+  it('keeps the approved fixed shell labels without restoring a language switcher', async () => {
     renderApp(['/home'])
 
-    expect(await screen.findByRole('heading', { name: 'Bahasa' })).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'EN' }))
-
-    expect(await screen.findByRole('heading', { name: 'Language' })).toBeInTheDocument()
+    const nav = await screen.findByRole('navigation')
+    expect(within(nav).getByRole('link', { name: 'SETUP' })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: 'REVIEW' })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: 'REPORT' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'EN' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /Bahasa|Language/ })).not.toBeInTheDocument()
   })
 })

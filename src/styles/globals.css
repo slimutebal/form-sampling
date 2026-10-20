@@ -1,7 +1,75 @@
 @import 'tailwindcss';
 
+@font-face {
+  font-family: 'Plus Jakarta Sans Page';
+  src: url('../assets/fonts/plus-jakarta-sans-latin-800-normal.woff2') format('woff2');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Retained for other local experiments; the Fleet comparison below uses the
+   official static 700 face so its source is unambiguous. */
+@font-face {
+  font-family: 'Plus Jakarta Sans Variable';
+  src: url('../assets/fonts/plus-jakarta-sans-latin-variable.woff2') format('woff2');
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Local copy of the official Google Fonts Plus Jakarta Sans v12 700 face.
+   It is intentionally only selected by the odd Fleet Number comparison. */
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  src: url('../assets/fonts/plus-jakarta-sans-google-v12-700.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* SETUP-only local family. Each declared instance maps to an actual bundled
+   Satoshi file, so no runtime CDN request or synthetic bold is required. */
+@font-face {
+  font-family: 'Satoshi';
+  src: url('../assets/fonts/Satoshi-Light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Satoshi';
+  src: url('../assets/fonts/Satoshi-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Satoshi';
+  src: url('../assets/fonts/Satoshi-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Satoshi';
+  src: url('../assets/fonts/Satoshi-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* UI and display text use system stacks; page titles have the local face
+     registered above. No unavailable third-party font is claimed here. */
+  --font-ui: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: var(--font-ui);
+  --font-page-title: 'Plus Jakarta Sans Page', var(--font-ui);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  --font-sans: var(--font-ui);
 }
 
 html,
@@ -11,10 +79,926 @@ body,
 }
 
 body {
-  @apply bg-background text-foreground font-sans antialiased;
+  @apply bg-background text-foreground antialiased;
+  font-family: var(--font-ui);
   font-synthesis: none;
   /* Reference viewport range per docs/UI_UX_SPEC.md: 320-430px, no horizontal scroll. */
   overflow-x: hidden;
+}
+
+.fleet-edit-pile-chip[data-material='SAP'] {
+  border-color: color-mix(in srgb, var(--ore-sap) 42%, var(--border));
+  background: color-mix(in srgb, var(--ore-sap) 12%, var(--surface));
+  color: var(--ore-sap-foreground);
+}
+
+.fleet-edit-pile-chip[data-material='LIM'] {
+  border-color: color-mix(in srgb, var(--ore-lim) 48%, var(--border));
+  background: color-mix(in srgb, var(--ore-lim) 12%, var(--surface));
+  color: var(--ore-lim-foreground);
+}
+
+/* Add-Fleet identity values remain complete but no longer dominate the
+   compact editor header. The selector is local to the two persisted-code
+   badges and does not alter shared field typography. */
+[data-ui='active-fleet-inline-editor'] label span[title] {
+  padding-inline: 0.25rem;
+  font-size: 0.8125rem;
+}
+
+/* Semantic typography uses one clean UI voice. Larger roles gain hierarchy
+   through size and weight, never condensed display tracking. */
+@layer components {
+  .type-display-lg { font-family: var(--font-ui); font-size: clamp(2rem, 8.4vw, 2.25rem); font-weight: 700; line-height: 1.15; letter-spacing: normal; }
+  .type-display-md { font-family: var(--font-ui); font-size: clamp(1.5rem, 6vw, 1.875rem); font-weight: 700; line-height: 1.2; letter-spacing: normal; }
+  .type-brand-title { font-family: var(--font-ui); font-size: clamp(2rem, 8.4vw, 2.25rem); font-weight: 700; line-height: 1.15; letter-spacing: normal; }
+  .type-brand-subtitle { font-size: 1.25rem; font-weight: 700; line-height: 1.35; letter-spacing: normal; }
+
+  .type-page-title { font-family: var(--font-page-title); font-size: 1.125rem; font-weight: 800; line-height: 1.2; letter-spacing: -0.025em; }
+  .type-page-subtitle { font-size: 0.875rem; font-weight: 500; line-height: 1.45; }
+  .type-section-title { font-family: var(--font-ui); font-size: 1rem; font-weight: 700; line-height: 1.35; letter-spacing: normal; }
+  .type-section-subtitle { font-size: 0.875rem; font-weight: 500; line-height: 1.4; }
+  .type-subsection-title { font-family: var(--font-ui); font-size: 0.875rem; font-weight: 700; line-height: 1.35; letter-spacing: normal; }
+  .type-context-value { font-family: var(--font-ui); font-size: 1.5rem; font-weight: 700; line-height: 1.25; letter-spacing: normal; }
+  /* Main values in compact operational rows: pile, batch, and sample share
+     one measurable hierarchy without borrowing a display style. */
+  .type-operational-data { font-size: 1.25rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; }
+  .type-operational-divider { font-size: 0.75rem; font-weight: 600; line-height: 1.15; }
+
+  .type-field-label { font-size: 0.75rem; font-weight: 650; line-height: 1.25; }
+  .type-field-value { font-size: 0.875rem; font-weight: 500; line-height: 1.35; }
+  .type-field-placeholder { font-size: 0.875rem; font-weight: 400; line-height: 1.35; }
+  .type-field-helper { font-size: 0.75rem; font-weight: 400; line-height: 1.35; }
+  .type-field-error { font-size: 0.75rem; font-weight: 600; line-height: 1.35; }
+
+  .type-body { font-size: 0.875rem; font-weight: 400; line-height: 1.5; }
+  .type-body-strong { font-size: 0.875rem; font-weight: 650; line-height: 1.5; }
+  .type-body-muted { font-size: 0.875rem; font-weight: 400; line-height: 1.5; }
+  .type-caption { font-size: 0.75rem; font-weight: 400; line-height: 1.35; }
+  .type-metadata { font-size: 0.6875rem; font-weight: 600; line-height: 1.3; letter-spacing: 0.02em; }
+  .type-meta { font-size: 0.6875rem; font-weight: 600; line-height: 1.3; letter-spacing: 0.02em; }
+  .type-status { font-size: 0.75rem; font-weight: 500; line-height: 1.35; }
+
+  .type-button-primary, .type-button-secondary, .type-button-ghost { font-size: 0.875rem; font-weight: 700; line-height: 1.2; }
+  .type-button { font-size: 0.875rem; font-weight: 700; line-height: 1.2; }
+  .type-link { font-size: 0.875rem; font-weight: 650; line-height: 1.3; }
+
+  .type-dialog-title { font-family: var(--font-ui); font-size: 1rem; font-weight: 700; line-height: 1.35; letter-spacing: normal; }
+  .type-dialog-subtitle { font-size: 0.8125rem; font-weight: 400; line-height: 1.4; }
+  .type-nav-label { font-size: 0.75rem; font-weight: 700; line-height: 1.2; letter-spacing: 0.02em; }
+  .type-breadcrumb { font-size: 0.75rem; font-weight: 500; line-height: 1.3; }
+
+  /* Reusable control surfaces intentionally keep the existing visual values.
+     Their semantic names make future maintenance independent of page files. */
+  .ui-button { border-radius: 0.375rem; transition-property: color, background-color, border-color, outline-color, box-shadow; transition-duration: 150ms; }
+  .ui-control { border: 1px solid var(--border); border-radius: 0.375rem; background: var(--input); padding-inline: var(--space-control); color: var(--foreground); transition-property: color, background-color, border-color, outline-color, box-shadow; transition-duration: 150ms; }
+  .ui-dropdown, .ui-popover { border: 1px solid var(--border); border-radius: 0.375rem; color: var(--foreground); }
+  .ui-dropdown { background: var(--dropdown); }
+  .ui-popover { background: var(--popover); }
+  .ui-popover { padding: var(--space-row); box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); }
+  .ui-card { border: 1px solid var(--border); border-radius: 0.5rem; background: var(--surface); padding: var(--space-card); box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); }
+  .ui-dialog { border-radius: 1rem; background: var(--surface-elevated); box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25); }
+  .ui-action-card { border: 1px solid var(--border); border-radius: 0.375rem; background: var(--muted); padding: var(--space-control); color: var(--foreground); }
+  .ui-page-padding { padding-inline: var(--space-page-x); padding-block: var(--space-page-y); }
+
+  /* Compact operational primitives. They are opt-in so existing pages keep
+     their present visual behaviour until deliberately migrated. */
+  .ui-operational-panel { border-color: var(--border); background: var(--surface-elevated); }
+  .ui-control-compact { height: var(--control-height-compact); border-radius: var(--radius-control); font-size: 0.75rem; }
+  .ui-sort-control { height: var(--control-height-compact); border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-elevated); padding-inline: 0.375rem; color: var(--muted-foreground); font-size: 0.75rem; font-weight: 600; line-height: 1; }
+  .ui-sort-control[aria-pressed='true'] { border-color: var(--primary); background: var(--primary); color: var(--primary-foreground); }
+  .ui-setup-tab { border-bottom: 2px solid transparent; color: var(--muted-foreground); font-size: 0.875rem; font-weight: 600; }
+  .ui-setup-tab[aria-selected='true'] { border-bottom-color: var(--primary); background: var(--selected); color: var(--foreground); }
+  .ui-action-menu { border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--popover); color: var(--foreground); box-shadow: 0 8px 20px rgb(0 0 0 / 0.12); }
+}
+
+/* WORK SETUP is the compact operational pilot. Its surfaces deliberately
+   stay scoped here: improving its dark-theme separation must not recolour
+   legacy screens that still use the global surface tokens. */
+.work-setup-page {
+  /* SETUP typography configuration: edit these five tokens to tune this
+     route without affecting the application's global UI font. */
+  --work-setup-font: 'Satoshi', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --work-setup-weight-light: 300;
+  --work-setup-weight-regular: 400;
+  --work-setup-weight-medium: 500;
+  --work-setup-weight-bold: 700;
+  /* Shared primary operational data: Fleet Pile and Sample Pile/values. */
+  --qps-primary-data-font-size: 1.25rem;
+  --qps-primary-data-font-weight: var(--work-setup-weight-bold);
+  --qps-primary-data-line-height: 1.25;
+  --work-setup-toolbar-pill-height: 46px;
+  /* Precision Green, scoped to the WORK SETUP pilot. */
+  --work-setup-page: #f5f8f6;
+  --work-setup-panel: #ffffff;
+  --work-setup-toolbar: #f7faf8;
+  --work-setup-tab: #f1f6f3;
+  --work-setup-input: #ffffff;
+  --work-setup-row: #fcfefc;
+  --work-setup-context: var(--qps-workspace-header-surface);
+  --work-setup-divider: #dfe9e2;
+  --work-setup-tab-active: #eef8df;
+  --work-setup-tab-active-underline: #33CC33;
+  --work-setup-tab-active-foreground: #33CC33;
+  --work-setup-muted-text: #65736b;
+  --background: #f5f8f6;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --foreground: #12251c;
+  --muted-foreground: #596d61;
+  --border: #dfe9e2;
+  --primary: #147d4d;
+  --primary-foreground: #ffffff;
+  --focus-accent: #33CC33;
+  --focus-accent-foreground: #0F2519;
+  --focus-accent-soft: #eef8df;
+  --qps-primary-action: var(--focus-accent);
+  --qps-primary-action-foreground: var(--focus-accent-foreground);
+  --selected: #eef8df;
+  --input: #ffffff;
+  --input-focus: #f5faeb;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #b91c1c;
+  --ore-sap: #22c55e;
+  --ore-lim: #FE6B03;
+  --planned: #60a5fa;
+  --unplanned: #94a3b8;
+  /* Text has stricter contrast than stripes, fills, and progress markers. */
+  --success-foreground: #15803d;
+  --warning-foreground: #f59e0b;
+  --ore-sap-foreground: #15803d;
+  --ore-lim-foreground: #FE6B03;
+  --planned-foreground: #1d4ed8;
+  --unplanned-foreground: #64748b;
+  --fleet-active: #2563eb;
+  --fleet-inactive: #64748b;
+  --fleet-reference-outbound: var(--ore-lim-foreground);
+  --fleet-reference-inbound: #2563eb;
+  /* Components use the semantic roles above. Do not add a second local
+     --color-* layer here: the global @theme mapping already resolves those
+     roles, while this scope preserves the WORK SETUP values themselves. */
+  background: var(--work-setup-page);
+  font-family: var(--work-setup-font);
+  font-synthesis: none;
+}
+
+/* Some shared type roles specify the global UI family. Constrain the SETUP
+   override to this page so the entire operational list uses its loaded local
+   face without changing typography on other routes. */
+.work-setup-page :is(.type-page-title, .type-section-title, .type-operational-data) {
+  font-family: var(--work-setup-font);
+  font-synthesis: none;
+}
+
+/* Keep SETUP on the four bundled instances even where shared utilities ask
+   for an unavailable 600, 650, or 800. This is intentionally scoped. */
+.work-setup-page .font-light { font-weight: var(--work-setup-weight-light); }
+.work-setup-page :is(.font-normal, .type-field-placeholder, .type-field-helper, .type-body, .type-body-muted, .type-metadata, .type-meta, .type-status) { font-weight: var(--work-setup-weight-regular); }
+.work-setup-page :is(.font-medium, .font-semibold, .type-field-label, .type-field-error, .type-body-strong, .type-link, .ui-sort-control, .ui-setup-tab) { font-weight: var(--work-setup-weight-medium); }
+.work-setup-page :is(.font-bold, .type-page-title, .type-section-title, .type-subsection-title, .type-context-value, .type-operational-data, .type-dialog-title, .type-button-primary, .type-button-secondary, .type-button-ghost, .type-button) { font-weight: var(--work-setup-weight-bold); }
+.work-setup-page [data-ui='fleet-status'] { font-weight: var(--work-setup-weight-regular); }
+
+/* Operational identifiers and values must retain stable digit widths across
+   desktop, mobile, PWA, and both themes. */
+.work-setup-page :is([data-ui='sample-pile'], [data-ui='sample-batch-trip'], [data-ui='sample-row-sample'], [data-ui='fleet-number'], [data-ui='fleet-pile-id'], [data-ui='fleet-batch-list'], [data-ui='fleet-expanded-identity'], [data-ui='fleet-truck-matrix']) {
+  font-variant-numeric: tabular-nums;
+}
+
+.work-setup-page .work-setup-header,
+.work-setup-page .ui-operational-panel {
+  background: var(--work-setup-panel);
+  border-color: var(--work-setup-divider);
+}
+
+.work-setup-page .work-setup-header[data-manpower-scrolled='true'] {
+  position: relative;
+  z-index: 10;
+  box-shadow: 0 5px 8px rgb(0 0 0 / 0.14);
+}
+
+.work-setup-page .work-setup-context {
+  background: var(--work-setup-context);
+}
+
+.work-setup-page [data-ui='work-setup-content'] {
+  padding-top: 0;
+}
+
+/* Scroll remains available for dense operational lists without adding a
+   visible track or thumb that competes with the data. */
+.work-setup-page .scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.work-setup-page .scrollbar-none::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.work-setup-page .work-setup-tabs {
+  background: transparent;
+  border-color: var(--work-setup-divider);
+  flex-wrap: nowrap;
+}
+
+.work-setup-page .work-setup-tabs .ui-setup-tab[aria-selected='true'] {
+  background: transparent;
+  border-bottom-color: var(--focus-accent);
+  border-bottom-width: 4px;
+  box-shadow: none;
+  color: var(--work-setup-tab-active-foreground, var(--focus-accent));
+}
+
+.work-setup-page .work-setup-tabs .ui-setup-tab:active {
+  background: var(--focus-accent-soft);
+}
+
+.work-setup-page .work-setup-tabs .ui-setup-tab:focus-visible {
+  outline: 2px solid var(--focus-accent);
+  outline-offset: -2px;
+}
+
+.work-setup-page .work-setup-detail-tab {
+  width: 100%;
+  font-size: 0.99rem;
+}
+
+.work-setup-page .work-setup-tabs [role='tablist'] {
+  width: clamp(6rem, 36vw, 10rem);
+  min-width: 5.5rem;
+  margin-left: auto;
+}
+
+.work-setup-page [data-ui='sample-fleet-sortbar'] {
+  order: initial;
+  margin-left: 0;
+}
+
+.work-setup-page .work-setup-search {
+  background: var(--qps-search-surface);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.work-setup-page .work-setup-search:focus {
+  background: var(--qps-search-focus-surface);
+  border-color: transparent;
+  outline-offset: -2px;
+}
+
+.work-setup-page .work-setup-search::placeholder {
+  color: var(--work-setup-muted-text);
+  opacity: 1;
+}
+
+.work-setup-page [data-ui='sample-search'] {
+  margin-left: 0;
+}
+
+.work-setup-page [data-ui='fleet-search'] {
+  margin-left: 0;
+}
+
+.qps-production-batch-search {
+  border-color: var(--qps-search-border);
+  background: var(--qps-search-surface);
+}
+
+.qps-production-batch-search:focus {
+  border-color: var(--focus-accent);
+  outline: 2px solid color-mix(in srgb, var(--focus-accent) 45%, transparent);
+  outline-offset: 1px;
+}
+
+.work-setup-page .work-setup-toolbar-action {
+  box-sizing: border-box;
+  width: 16.6667vw;
+  min-width: 44px;
+  height: var(--work-setup-toolbar-pill-height);
+  /* Keep the left search/sort pill unchanged while giving the trailing
+     action its requested five-pixel visual offset. */
+  position: relative;
+  left: 0.3125rem;
+  border-radius: 999px 0 0 999px;
+}
+
+.work-setup-page [data-ui='sample-toolbar-main'] {
+  box-sizing: border-box;
+  height: var(--work-setup-toolbar-pill-height);
+  background: color-mix(in srgb, var(--work-setup-toolbar) 82%, var(--surface-elevated));
+  border-color: var(--work-setup-divider);
+  margin-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.36), 0 1px 2px rgb(15 23 42 / 0.05);
+}
+
+.work-setup-page [data-ui='sample-toolbar-main'] [data-ui='sample-toolbar-search'] {
+  flex: 1 1 auto;
+  min-width: 4.5rem;
+}
+
+.work-setup-page [data-ui='sample-toolbar-main'] [data-ui='sample-fleet-sortbar'] {
+  flex: 0 0 auto;
+  margin-left: auto;
+  margin-right: calc(-1 * (var(--space-control) - 0.5rem));
+}
+
+.work-setup-page [data-ui='sample-toolbar-summary-secondary'] {
+  margin-left: auto;
+  text-align: right;
+}
+
+.work-setup-page [data-ui='sample-fleet-summary'] {
+  gap: clamp(1rem, 6vw, 2rem);
+}
+
+.work-setup-page .work-setup-manpower-edit {
+  /* The context bar owns the horizontal inset. Compensating exactly that
+     inset lets the action touch the viewport edge without a magic offset. */
+  width: 44px;
+  height: 44px;
+  margin-right: calc(-1 * var(--space-control));
+  border-radius: 999px 0 0 999px;
+}
+
+.work-setup-page [data-ui='sample-fleet-summary'] [data-ui$='summary-secondary'] {
+  margin-left: 0;
+  text-align: left;
+}
+
+@media (max-width: 23.4375rem) {
+  .work-setup-page [data-ui='sample-fleet-summary'] > p {
+    font-size: 0.6875rem;
+  }
+}
+
+.work-setup-page .ui-sort-control:not([aria-pressed='true']) {
+  background: var(--work-setup-toolbar);
+  border-color: var(--work-setup-divider);
+}
+
+.work-setup-page .ui-sort-control[aria-pressed='true'] {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18);
+}
+
+.work-setup-page .sample-sort-group {
+  gap: 0.125rem;
+}
+
+.work-setup-page .sample-sort-group .ui-sort-control,
+.work-setup-page .fleet-sort-group .ui-sort-control {
+  border: 0;
+  border-radius: 0.625rem;
+  background: transparent;
+  color: var(--work-setup-muted-text);
+  gap: 0.25rem;
+  height: 1.75rem;
+  padding-inline: 0.1875rem;
+  font-size: 0.6875rem;
+}
+
+.work-setup-page .sample-sort-group .ui-sort-control[aria-pressed='true'],
+.work-setup-page .fleet-sort-group .ui-sort-control[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--selected) 80%, var(--surface-elevated));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--focus-accent) 45%, var(--work-setup-divider)), 0 1px 2px rgb(0 0 0 / 0.18);
+  color: var(--foreground);
+}
+
+.work-setup-page [data-ui='sample-sort-plan'] { width: 2.125rem; }
+.work-setup-page [data-ui='sample-sort-batch'],
+.work-setup-page [data-ui='sample-sort-status'] { width: 2.375rem; }
+.work-setup-page [data-ui='sample-sort-sample'] { width: 2.75rem; }
+
+.work-setup-page .fleet-sort-group {
+  gap: 0.375rem;
+}
+
+.work-setup-page [data-ui='fleet-sort-status'] { width: 2.625rem; }
+.work-setup-page [data-ui='fleet-sort-company'] { width: 2.25rem; }
+.work-setup-page [data-ui='fleet-sort-id'] { width: 2.25rem; }
+.work-setup-page [data-ui='fleet-sort-truck-quantity'] { width: 2.375rem; }
+
+.work-setup-page [data-ui='sample-fleet-sortbar'] {
+  border: 1px solid var(--work-setup-divider);
+  border-radius: 999px;
+  background: var(--muted);
+  padding: 0.0625rem 0.125rem;
+}
+
+.work-setup-page [data-ui='sample-fleet-sortbar'] .ui-sort-control[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--work-setup-muted-text) 20%, var(--muted));
+  box-shadow: none;
+  color: var(--foreground);
+  width: auto;
+}
+
+/* The panel content uses standard horizontal padding. These two toolbar rows
+   deliberately compensate both that padding and the page inset so only their
+   outer pill edges meet the viewport. */
+.work-setup-page .work-setup-sample-toolbar,
+.work-setup-page .work-setup-fleet-toolbar {
+  margin-inline: calc(-1 * (var(--space-control) + var(--space-page-x)));
+}
+
+/* Sample/Fleet lists own their scroll area; the local toolbar action is in
+   normal flow and therefore never covers the final row. */
+.work-setup-page .work-setup-list-scroll {
+  padding-bottom: calc(var(--qps-nav-clearance) + var(--space-row));
+  overscroll-behavior: contain;
+  scroll-padding-bottom: calc(var(--qps-nav-clearance) + var(--space-row));
+  overflow-x: hidden;
+}
+
+.work-setup-page .work-setup-fleet-row {
+  background: var(--work-setup-row);
+}
+
+/* The panel keeps its normal control padding; record lists reclaim only that
+   inner inset so their rails and three data regions use the available width. */
+.work-setup-page .work-setup-sample-list,
+.work-setup-page .work-setup-fleet-list {
+  margin-inline: calc(-1 * var(--space-control));
+  padding-right: var(--space-row);
+  padding-left: 0.25rem;
+}
+
+.work-setup-page .work-setup-fleet-list > :not([hidden]) ~ :not([hidden]) {
+  border-top: 1px solid color-mix(in srgb, var(--work-setup-divider) 72%, transparent);
+}
+
+/* Fleet View/Expand typography is intentionally local to this list. The
+   values below are the single adjustment point for its visual hierarchy. */
+.work-setup-page .work-setup-fleet-list {
+  --qps-fleet-number-font-size: 26px;
+  --qps-fleet-number-font-weight: var(--work-setup-weight-bold);
+  --qps-fleet-company-font-size: 0.9375rem;
+  /* Satoshi has no 600 file; 500 is the closest bundled real face. */
+  --qps-fleet-company-font-weight: var(--work-setup-weight-medium);
+  --qps-fleet-pile-id-font-size: var(--qps-primary-data-font-size);
+  --qps-fleet-pile-id-font-weight: var(--qps-primary-data-font-weight);
+  --qps-fleet-full-id-font-size: 1.25rem;
+  --qps-fleet-full-id-font-weight: var(--work-setup-weight-bold);
+  --qps-fleet-meta-font-size: 11px;
+  --qps-fleet-meta-font-weight: var(--work-setup-weight-regular);
+  --qps-fleet-meta-line-height: 1.25;
+}
+
+.work-setup-page .work-setup-fleet-list [data-ui='fleet-number'] {
+  font-size: var(--qps-fleet-number-font-size);
+  font-weight: var(--qps-fleet-number-font-weight);
+  line-height: 1;
+  letter-spacing: normal;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: normal;
+  text-decoration: none;
+}
+
+/* Font-comparison experiment: only the Fleet Number face changes by the
+   actual numeric Front sequence. Both faces are bundled locally. */
+.work-setup-page .work-setup-fleet-list .qps-fleet-number--odd {
+  font-family: 'Plus Jakarta Sans';
+}
+
+.work-setup-page .work-setup-fleet-list .qps-fleet-number--even {
+  font-family: 'Satoshi';
+}
+
+.work-setup-page .work-setup-fleet-list .qps-fleet-company {
+  font-size: var(--qps-fleet-company-font-size);
+  font-weight: var(--qps-fleet-company-font-weight);
+}
+
+.work-setup-page .work-setup-fleet-list .qps-fleet-pile-id {
+  font-size: var(--qps-fleet-pile-id-font-size);
+  font-weight: var(--qps-fleet-pile-id-font-weight);
+}
+
+.work-setup-page .work-setup-fleet-list .qps-fleet-full-id {
+  font-size: var(--qps-fleet-full-id-font-size);
+  font-weight: var(--qps-fleet-full-id-font-weight);
+}
+
+.work-setup-page .work-setup-fleet-list .qps-fleet-meta {
+  font-size: var(--qps-fleet-meta-font-size);
+  font-weight: var(--qps-fleet-meta-font-weight);
+  line-height: var(--qps-fleet-meta-line-height);
+}
+
+.work-setup-page .type-operational-data {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: normal;
+}
+
+.work-setup-page .work-setup-sample-row {
+  background: var(--work-setup-row);
+}
+
+.work-setup-page .type-operational-divider {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.work-setup-page [data-ui='sample-row-pile'] > .type-field-helper,
+.work-setup-page [data-ui='sample-batch-status'],
+.work-setup-page [data-ui='sample-status'] {
+  font-size: 0.6875rem;
+}
+
+.work-setup-page [data-ui='sample-summary-dispatch'] {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.work-setup-page [data-ui='sample-batch-status'],
+.work-setup-page [data-ui='sample-status'] {
+  font-weight: 500;
+}
+
+.work-setup-page [data-ui='sample-batch-status'][data-complete='false'],
+.work-setup-page [data-ui='sample-status'] {
+  font-weight: 400;
+}
+
+.work-setup-page [data-ui='sample-row-pile'] [data-plan='planned'] {
+  font-weight: 400;
+}
+
+.work-setup-page [data-ui='sample-row-pile'] [data-plan] {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.work-setup-page .qps-primary-data {
+  font-family: var(--work-setup-font);
+  font-size: var(--qps-primary-data-font-size);
+  font-weight: var(--qps-primary-data-font-weight);
+  line-height: var(--qps-primary-data-line-height);
+  letter-spacing: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.work-setup-page .work-setup-sample-list > :not([hidden]) ~ :not([hidden]) {
+  border-color: color-mix(in srgb, var(--work-setup-divider) 72%, transparent);
+}
+
+/* Active-shift Add/Edit Sample only. These selectors intentionally require
+   the dialog marker so shared inputs and every other dialog retain their UI. */
+.work-setup-page .active-sample-dialog {
+  --sample-dialog-sap-surface: #eaf8ef;
+  --sample-dialog-sap-border: #addbb9;
+  --sample-dialog-sap-text: #15803d;
+  --sample-dialog-lim-surface: color-mix(in srgb, var(--ore-lim) 12%, var(--surface));
+  --sample-dialog-lim-border: color-mix(in srgb, var(--ore-lim) 48%, var(--border));
+  --sample-dialog-lim-text: var(--ore-lim-foreground);
+  --sample-dialog-planned-text: #15803d;
+  --sample-dialog-unplanned-text: #b91c1c;
+  --sample-dialog-field-surface: var(--input);
+  --sample-dialog-field-foreground: var(--foreground);
+  --sample-dialog-pile-foreground: var(--foreground);
+  --sample-dialog-divider: var(--border);
+  --sample-dialog-cancel-surface: var(--secondary-action);
+  --sample-dialog-cancel-border: var(--border);
+  --sample-dialog-cancel-text: var(--foreground);
+  --sample-dialog-save-surface: var(--primary);
+  --sample-dialog-save-text: var(--primary-foreground);
+  background: var(--surface-elevated);
+  border-color: var(--sample-dialog-divider);
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-progress'] {
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--surface) 74%, var(--work-setup-page));
+  padding: var(--space-control);
+}
+
+.work-setup-page .active-sample-dialog .active-sample-form[data-mode='edit'] [data-ui='sample-dialog-progress'] {
+  margin-top: calc(-1 * var(--space-row));
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-progress'] [role='group'] > div:first-child {
+  background: var(--work-setup-page);
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-progress'][data-material='SAP'] [data-testid='sample-progress-delivered'] {
+  background: #22c55e;
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-progress'][data-material='LIM'] [data-testid='sample-progress-delivered'] {
+  background: var(--ore-lim);
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-progress'] [data-testid='sample-progress-in-house'] {
+  background: #ef4444;
+}
+
+.work-setup-page .active-sample-dialog .active-sample-dialog-field {
+  border-color: color-mix(in srgb, var(--border) 82%, transparent);
+  background: var(--sample-dialog-field-surface);
+  color: var(--sample-dialog-field-foreground);
+}
+
+.work-setup-page .active-sample-dialog .active-sample-dialog-field:focus {
+  border-color: var(--primary);
+  outline-color: color-mix(in srgb, var(--focus-accent) 55%, transparent);
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-pile-selected'] {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--sample-dialog-pile-foreground);
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-pile-selected'][data-material='SAP'] {
+  border-color: var(--sample-dialog-sap-border);
+  background: var(--sample-dialog-sap-surface);
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-pile-selected'][data-material='LIM'] {
+  border-color: var(--sample-dialog-lim-border);
+  background: var(--sample-dialog-lim-surface);
+}
+
+/* Add Fleet uses the same master-data material cue without altering the
+   shared picker geometry or introducing another material state. */
+[data-ui='active-fleet-dialog'] [data-ui='active-fleet-destination'][data-material='SAP'] .ui-control {
+  border-color: color-mix(in srgb, var(--ore-sap) 52%, var(--border));
+  background: color-mix(in srgb, var(--ore-sap) 20%, var(--input));
+  color: var(--ore-sap-foreground);
+}
+
+[data-ui='active-fleet-dialog'] [data-ui='active-fleet-destination'][data-material='LIM'] .ui-control {
+  border-color: color-mix(in srgb, var(--ore-lim) 58%, var(--border));
+  background: color-mix(in srgb, var(--ore-lim) 24%, var(--input));
+  color: var(--ore-lim-foreground);
+}
+
+[data-ui='active-fleet-dialog'] [data-ui='active-fleet-destination'][data-material] .ui-control input {
+  color: inherit;
+}
+
+:root[data-theme='dark'] [data-ui='active-fleet-dialog'] [data-ui='active-fleet-save'],
+.dark [data-ui='active-fleet-dialog'] [data-ui='active-fleet-save'] {
+  background: var(--focus-accent);
+  color: var(--focus-accent-foreground);
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-material'][data-material='SAP'] {
+  color: var(--sample-dialog-sap-text);
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-material'][data-material='LIM'] {
+  color: var(--sample-dialog-lim-text);
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-status'][data-status='ACTIVE'] {
+  color: var(--sample-dialog-planned-text);
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-status'][data-status='INACTIVE'] {
+  color: var(--sample-dialog-unplanned-text);
+}
+
+/* Explicit dialog typography prevents compact utility classes on shared form
+   controls from shrinking the operational values below their intended size. */
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-header'] .type-dialog-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.work-setup-page .active-sample-dialog .active-sample-form label.type-field-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-pile-selected'] > span:first-child,
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-pile-selected'] [data-ui='sample-dialog-material'] {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.work-setup-page .active-sample-dialog .active-sample-dialog-field {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-status'] {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-progress'] [role='group'] > div:last-child {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.work-setup-page .active-sample-dialog .type-field-helper {
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-header'],
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-actions'] {
+  border-color: var(--sample-dialog-divider);
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-actions'] > button:first-child {
+  border-color: var(--sample-dialog-cancel-border);
+  background: var(--sample-dialog-cancel-surface);
+  color: var(--sample-dialog-cancel-text);
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-actions'] > button {
+  height: 3rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.work-setup-page .active-sample-dialog [data-ui='sample-dialog-actions'] > button[type='submit'] {
+  background: var(--sample-dialog-save-surface);
+  color: var(--sample-dialog-save-text);
+}
+
+:root[data-theme='dark'] .work-setup-page,
+.dark .work-setup-page {
+  --work-setup-page: #0b0f10;
+  --work-setup-panel: #12181a;
+  --work-setup-toolbar: #0f1517;
+  --work-setup-tab: #101618;
+  --work-setup-input: #0d1214;
+  --work-setup-row: #151c1f;
+  --work-setup-context: var(--qps-workspace-header-surface);
+  --work-setup-divider: #263036;
+  --work-setup-tab-active: #173a24;
+  --work-setup-tab-active-underline: #22c55e;
+  --work-setup-tab-active-foreground: #22c55e;
+  --work-setup-muted-text: #7c8b92;
+  --background: #0b0f10;
+  --surface: #12181a;
+  --surface-elevated: #12181a;
+  --foreground: #f3f6f7;
+  --muted-foreground: #a7b3b9;
+  --border: #263036;
+  --primary: #00FF00;
+  --primary-foreground: #071807;
+  --focus-accent: #00FF00;
+  --focus-accent-foreground: #071807;
+  --focus-accent-soft: #183122;
+  --qps-primary-action: var(--primary);
+  --qps-primary-action-foreground: var(--primary-foreground);
+  --selected: #183122;
+  --input: #0d1214;
+  --input-focus: #172020;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --ore-sap: #22c55e;
+  --ore-lim: #FE6B03;
+  --planned: #60a5fa;
+  --unplanned: #94a3b8;
+  --success-foreground: #22c55e;
+  --warning-foreground: #f59e0b;
+  --ore-sap-foreground: #22c55e;
+  --ore-lim-foreground: #FE6B03;
+  --planned-foreground: #60a5fa;
+  --unplanned-foreground: #94a3b8;
+  --fleet-active: #60a5fa;
+  --fleet-inactive: #7c8b92;
+  --fleet-reference-outbound: var(--ore-lim-foreground);
+  --fleet-reference-inbound: #60a5fa;
+}
+
+:root[data-theme='dark'] .work-setup-page .active-sample-dialog,
+.dark .work-setup-page .active-sample-dialog {
+  --sample-dialog-sap-surface: #e0f6e8;
+  --sample-dialog-sap-border: #22c55e;
+  --sample-dialog-sap-text: #166534;
+  --sample-dialog-lim-surface: color-mix(in srgb, var(--ore-lim) 12%, var(--surface));
+  --sample-dialog-lim-border: color-mix(in srgb, var(--ore-lim) 48%, var(--border));
+  --sample-dialog-lim-text: var(--ore-lim-foreground);
+  --sample-dialog-planned-text: #166534;
+  --sample-dialog-unplanned-text: #b91c1c;
+  --sample-dialog-field-surface: #e9f0ec;
+  --sample-dialog-field-foreground: #26332d;
+  --sample-dialog-pile-foreground: #26332d;
+  --sample-dialog-divider: #66757c;
+  --sample-dialog-cancel-surface: #e1f4e9;
+  --sample-dialog-cancel-border: #a8cfb8;
+  --sample-dialog-cancel-text: #314b3b;
+  --sample-dialog-save-surface: #65f238;
+  --sample-dialog-save-text: #0b0f10;
+  background: #0b0f10;
+}
+
+:root[data-theme='dark'] .work-setup-page .active-sample-dialog .active-sample-dialog-field::placeholder,
+.dark .work-setup-page .active-sample-dialog .active-sample-dialog-field::placeholder {
+  color: #718078;
+  opacity: 1;
+}
+
+:root[data-theme='dark'] .work-setup-page .active-sample-dialog [data-ui='sample-dialog-pile-selected'] button,
+.dark .work-setup-page .active-sample-dialog [data-ui='sample-dialog-pile-selected'] button {
+  color: var(--sample-dialog-sap-text);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .work-setup-page {
+    --work-setup-page: #0b0f10;
+    --work-setup-panel: #12181a;
+    --work-setup-toolbar: #0f1517;
+    --work-setup-tab: #101618;
+    --work-setup-input: #0d1214;
+    --work-setup-row: #151c1f;
+    --work-setup-context: var(--qps-workspace-header-surface);
+    --work-setup-divider: #263036;
+    --work-setup-tab-active: #173a24;
+    --work-setup-tab-active-underline: #22c55e;
+    --work-setup-tab-active-foreground: #22c55e;
+    --work-setup-muted-text: #7c8b92;
+    --background: #0b0f10;
+    --surface: #12181a;
+    --surface-elevated: #12181a;
+    --foreground: #f3f6f7;
+    --muted-foreground: #a7b3b9;
+    --border: #263036;
+    --primary: #00FF00;
+    --primary-foreground: #071807;
+    --focus-accent: #00FF00;
+    --focus-accent-foreground: #071807;
+    --focus-accent-soft: #183122;
+    --qps-primary-action: var(--primary);
+    --qps-primary-action-foreground: var(--primary-foreground);
+    --selected: #183122;
+    --input: #0d1214;
+    --input-focus: #172020;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --ore-sap: #22c55e;
+    --ore-lim: #FE6B03;
+    --planned: #60a5fa;
+    --unplanned: #94a3b8;
+    --success-foreground: #22c55e;
+    --warning-foreground: #f59e0b;
+    --ore-sap-foreground: #22c55e;
+    --ore-lim-foreground: #FE6B03;
+    --planned-foreground: #60a5fa;
+    --unplanned-foreground: #94a3b8;
+    --fleet-active: #60a5fa;
+    --fleet-inactive: #7c8b92;
+    --fleet-reference-outbound: var(--ore-lim-foreground);
+    --fleet-reference-inbound: #60a5fa;
+  }
+
+  :root:not([data-theme='light']) .work-setup-page .active-sample-dialog {
+    --sample-dialog-sap-surface: #e0f6e8;
+    --sample-dialog-sap-border: #22c55e;
+    --sample-dialog-sap-text: #166534;
+    --sample-dialog-lim-surface: color-mix(in srgb, var(--ore-lim) 12%, var(--surface));
+    --sample-dialog-lim-border: color-mix(in srgb, var(--ore-lim) 48%, var(--border));
+    --sample-dialog-lim-text: var(--ore-lim-foreground);
+    --sample-dialog-planned-text: #166534;
+    --sample-dialog-unplanned-text: #b91c1c;
+    --sample-dialog-field-surface: #e9f0ec;
+    --sample-dialog-field-foreground: #26332d;
+    --sample-dialog-pile-foreground: #26332d;
+    --sample-dialog-divider: #66757c;
+    --sample-dialog-cancel-surface: #e1f4e9;
+    --sample-dialog-cancel-border: #a8cfb8;
+    --sample-dialog-cancel-text: #314b3b;
+    --sample-dialog-save-surface: #65f238;
+    --sample-dialog-save-text: #0b0f10;
+    background: #0b0f10;
+  }
+
+  :root:not([data-theme='light']) .work-setup-page .active-sample-dialog .active-sample-dialog-field::placeholder {
+    color: #718078;
+    opacity: 1;
+  }
+
+  :root:not([data-theme='light']) .work-setup-page .active-sample-dialog [data-ui='sample-dialog-pile-selected'] button {
+    color: var(--sample-dialog-sap-text);
+  }
+}
+
+/* WebKit can otherwise force its own pale autofill foreground over the
+   landing's white search field, making entered names unreadable. */
+.landing-text-input:-webkit-autofill,
+.landing-text-input:-webkit-autofill:hover,
+.landing-text-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #064e3b;
+  caret-color: #064e3b;
+  box-shadow: 0 0 0 1000px #f8fbf9 inset;
 }
 
 /*
@@ -26,14 +1010,14 @@ body {
  */
 @layer utilities {
   .safe-top {
-    padding-top: env(safe-area-inset-top);
+    padding-top: max(env(safe-area-inset-top), 0.75rem);
   }
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
   .safe-x {
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
+    padding-left: max(env(safe-area-inset-left), 0px);
+    padding-right: max(env(safe-area-inset-right), 0px);
   }
   .scrollbar-none {
     -ms-overflow-style: none;
@@ -119,13 +1103,196 @@ body {
 }
 
 :root {
-  --background: #f8fbf9;
-  --foreground: #163020;
-  --muted: #eef6f0;
-  --muted-foreground: #607267;
-  --border: #cfe0d4;
-  --primary: #15803d;
+  color-scheme: light;
+  /* Level 0–2: page, resting panels, then floating UI. Keeping these
+     distinct prevents menus from disappearing into the app background. */
+  --color-bg: #f2f7f3;
+  --color-surface: #f9fcfa;
+  --color-surface-elevated: #ffffff;
+  --color-text: #163020;
+  --color-text-muted: #607267;
+  --color-primary: #15803d;
+  --color-accent: #33CC33;
+  /* Bright lime is reserved for the active/focus/confirmation layer. */
+  --color-focus-accent: #33CC33;
+  --color-focus-accent-foreground: #0F2519;
+  --color-focus-accent-soft: #ecfccb;
+  --color-border: #d6e4da;
+  --color-danger: #b42318;
+  --color-success: #15803d;
+  --color-warning: #a16207;
+  --color-info: #1d4ed8;
+  --color-ore-sap: #15803d;
+  --color-ore-lim: #FE6B03;
+  --color-planned: #1d4ed8;
+  --color-unplanned: #607267;
+  --color-disabled: #dfe9e2;
+  --color-input: #ffffff;
+  --color-input-focus: #f7fee7;
+  --qps-workspace-header-surface: #eaf3ed;
+  --qps-search-surface: color-mix(in srgb, var(--color-input) 88%, var(--color-surface));
+  --qps-search-focus-surface: var(--color-input-focus);
+  --qps-search-border: color-mix(in srgb, var(--color-border) 82%, var(--color-text));
+  --color-dropdown: var(--color-surface-elevated);
+  --color-popover: var(--color-surface-elevated);
+  --color-secondary-action: #edf5ef;
+  --color-selected: var(--color-focus-accent-soft);
+  /* Central spacing scale for operational pages and shared controls. */
+  --space-page-x: 0.25rem;
+  --space-page-y: 0.5rem;
+  --space-card: 0.875rem;
+  --space-section: 0.5rem;
+  --space-row: 0.5rem;
+  --space-column: 0.75rem;
+  --space-control: 0.75rem;
+  --control-height-compact: 2rem;
+  --control-height-standard: 2.75rem;
+  --radius-control: 0.375rem;
+  --radius-panel: 0;
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+  --muted: #edf5ef;
+  --muted-foreground: var(--color-text-muted);
+  --border: var(--color-border);
+  --primary: var(--color-primary);
   --primary-foreground: #ffffff;
+  --surface: var(--color-surface);
+  --surface-elevated: var(--color-surface-elevated);
+  --accent: var(--color-accent);
+  --focus-accent: var(--color-focus-accent);
+  --focus-accent-foreground: var(--color-focus-accent-foreground);
+  --focus-accent-soft: var(--color-focus-accent-soft);
+  --danger: var(--color-danger);
+  --success: var(--color-success);
+  --warning: var(--color-warning);
+  --info: var(--color-info);
+  --ore-sap: var(--color-ore-sap);
+  --ore-lim: var(--color-ore-lim);
+  --planned: var(--color-planned);
+  --unplanned: var(--color-unplanned);
+  --success-foreground: var(--success);
+  --warning-foreground: var(--warning);
+  --ore-sap-foreground: var(--ore-sap);
+  --ore-lim-foreground: #975600;
+  --ore-lim-fill-foreground: #0F2519;
+  --planned-foreground: var(--planned);
+  --unplanned-foreground: var(--unplanned);
+  --disabled: var(--color-disabled);
+  --input: var(--color-input);
+  --input-focus: var(--color-input-focus);
+  --dropdown: var(--color-dropdown);
+  --popover: var(--color-popover);
+  --secondary-action: var(--color-secondary-action);
+  --selected: var(--color-selected);
+}
+
+:root[data-theme='dark'],
+.dark {
+  color-scheme: dark;
+  --color-bg: #0b0f10;
+  --color-surface: #12181a;
+  --color-surface-elevated: #12181a;
+  --color-text: #f3f6f7;
+  --color-text-muted: #a7b3b9;
+  --color-primary: #00FF00;
+  --color-accent: #00FF00;
+  --color-focus-accent: #00FF00;
+  --color-focus-accent-foreground: #071807;
+  --color-focus-accent-soft: #183122;
+  --color-border: #263036;
+  --color-danger: #ff8a80;
+  --color-success: #4ade80;
+  --color-warning: #facc15;
+  --color-info: #93c5fd;
+  --color-ore-sap: #4ade80;
+  --color-ore-lim: #FE6B03;
+  --color-planned: #93c5fd;
+  --color-unplanned: #a9beae;
+  --color-disabled: #203827;
+  --color-input: #102218;
+  --color-input-focus: #203b19;
+  --qps-workspace-header-surface: #151c1f;
+  --qps-search-surface: transparent;
+  --qps-search-focus-surface: color-mix(in srgb, var(--color-input-focus) 78%, transparent);
+  --qps-search-border: var(--color-input);
+  --color-secondary-action: #1b3223;
+  --color-selected: var(--color-focus-accent-soft);
+  --muted: #1b3223;
+  --primary-foreground: #071807;
+  --ore-lim-foreground: #FE6B03;
+  --ore-lim-fill-foreground: #071807;
+  --focus-accent: var(--color-focus-accent);
+  --focus-accent-foreground: var(--color-focus-accent-foreground);
+  --focus-accent-soft: var(--color-focus-accent-soft);
+  --success: var(--color-success);
+  --warning: var(--color-warning);
+  --info: var(--color-info);
+  --ore-sap: var(--color-ore-sap);
+  --ore-lim: var(--color-ore-lim);
+  --planned: var(--color-planned);
+  --unplanned: var(--color-unplanned);
+  --disabled: var(--color-disabled);
+  --input: var(--color-input);
+  --input-focus: var(--color-input-focus);
+  --dropdown: var(--color-dropdown);
+  --popover: var(--color-popover);
+  --secondary-action: var(--color-secondary-action);
+  --selected: var(--color-selected);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --color-bg: #0b0f10;
+    --color-surface: #12181a;
+    --color-surface-elevated: #12181a;
+    --color-text: #f3f6f7;
+    --color-text-muted: #a7b3b9;
+    --color-primary: #00FF00;
+    --color-accent: #00FF00;
+    --color-focus-accent: #00FF00;
+    --color-focus-accent-foreground: #071807;
+    --color-focus-accent-soft: #183122;
+    --color-border: #263036;
+    --color-danger: #ff8a80;
+    --color-success: #4ade80;
+    --color-warning: #facc15;
+    --color-info: #93c5fd;
+    --color-ore-sap: #4ade80;
+    --color-ore-lim: #FE6B03;
+    --color-planned: #93c5fd;
+    --color-unplanned: #a9beae;
+    --color-disabled: #203827;
+    --color-input: #102218;
+    --color-input-focus: #203b19;
+    --qps-workspace-header-surface: #151c1f;
+    --qps-search-surface: transparent;
+    --qps-search-focus-surface: color-mix(in srgb, var(--color-input-focus) 78%, transparent);
+    --qps-search-border: var(--color-input);
+    --color-secondary-action: #1b3223;
+    --color-selected: var(--color-focus-accent-soft);
+    --muted: #1b3223;
+    --primary-foreground: #071807;
+    --ore-lim-foreground: #FE6B03;
+    --ore-lim-fill-foreground: #071807;
+    --focus-accent: var(--color-focus-accent);
+    --focus-accent-foreground: var(--color-focus-accent-foreground);
+    --focus-accent-soft: var(--color-focus-accent-soft);
+    --success: var(--color-success);
+    --warning: var(--color-warning);
+    --info: var(--color-info);
+    --ore-sap: var(--color-ore-sap);
+    --ore-lim: var(--color-ore-lim);
+    --planned: var(--color-planned);
+    --unplanned: var(--color-unplanned);
+    --disabled: var(--color-disabled);
+    --input: var(--color-input);
+    --input-focus: var(--color-input-focus);
+    --dropdown: var(--color-dropdown);
+    --popover: var(--color-popover);
+    --secondary-action: var(--color-secondary-action);
+    --selected: var(--color-selected);
+  }
 }
 
 @theme inline {
@@ -136,4 +1303,288 @@ body {
   --color-border: var(--border);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-accent: var(--accent);
+  --color-focus-accent: var(--focus-accent);
+  --color-focus-accent-foreground: var(--focus-accent-foreground);
+  --color-focus-accent-soft: var(--focus-accent-soft);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-ore-sap: var(--ore-sap);
+  --color-ore-lim: var(--ore-lim);
+  --color-planned: var(--planned);
+  --color-unplanned: var(--unplanned);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-ore-sap-foreground: var(--ore-sap-foreground);
+  --color-ore-lim-foreground: var(--ore-lim-foreground);
+  --color-planned-foreground: var(--planned-foreground);
+  --color-unplanned-foreground: var(--unplanned-foreground);
+  --color-fleet-active: var(--fleet-active);
+  --color-fleet-inactive: var(--fleet-inactive);
+  --color-fleet-reference-inbound: var(--fleet-reference-inbound);
+  --color-fleet-reference-outbound: var(--fleet-reference-outbound);
+  --color-disabled: var(--disabled);
+  --color-input: var(--input);
+  --color-input-focus: var(--input-focus);
+  --color-dropdown: var(--dropdown);
+  --color-popover: var(--popover);
+  --color-secondary-action: var(--secondary-action);
+  --color-selected: var(--selected);
+}
+
+/* Native controls that have not yet opted into a reusable field component
+   retain a single, visible keyboard/input focus treatment. */
+@layer base {
+  :where(input, textarea, select):not(:disabled):focus {
+    border-color: var(--focus-accent);
+    outline: 2px solid color-mix(in srgb, var(--focus-accent) 55%, transparent);
+    outline-offset: 1px;
+  }
+
+  :where(input, textarea, select):disabled {
+    background-color: var(--color-disabled);
+    color: var(--color-text-muted);
+  }
+}
+
+/* Floating primary navigation -------------------------------------------------
+   A single, contained pill deliberately owns all three primary destinations. */
+:root {
+  --qps-nav-height: 58px;
+  --qps-nav-clearance: calc(var(--qps-nav-height) + 1.25rem + env(safe-area-inset-bottom));
+  --qps-bottom-nav-reserved-space: var(--qps-nav-clearance);
+  /* Shared with the SETUP workspace context bar: the left dock pill is the
+     same surface, not a separately guessed light/dark colour. */
+  --qps-bottom-nav-surface: var(--qps-workspace-header-surface);
+  --qps-bottom-nav-record: var(--focus-accent);
+  --qps-bottom-nav-record-foreground: var(--focus-accent-foreground);
+  --qps-bottom-nav-active: var(--focus-accent);
+  --qps-bottom-nav-inactive: var(--muted-foreground);
+  --qps-primary-action: var(--focus-accent);
+  --qps-primary-action-foreground: var(--focus-accent-foreground);
+  --qps-bottom-nav-shadow: 0 14px 34px rgb(33 48 64 / 0.16);
+  --qps-bottom-nav-motion: 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.qps-bottom-nav {
+  position: fixed;
+  z-index: 20;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  height: var(--qps-bottom-nav-reserved-space);
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  isolation: isolate;
+  /* This transparent reservation still owns touches so list rows beneath the
+     floating controls cannot be activated accidentally. */
+  pointer-events: auto;
+}
+
+/* One non-interactive horizontal layer blurs the list behind the floating
+   controls. The frame is raised above it, keeping text, icons, and REC sharp. */
+.qps-bottom-nav__backdrop {
+  position: absolute;
+  z-index: 0;
+  inset: -1rem 0 0;
+  pointer-events: none;
+  background: transparent;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 2.5rem);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 2.5rem);
+}
+
+.qps-bottom-nav__frame {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(calc(100vw - 1.5rem), 30rem);
+  grid-template-columns: minmax(0, 1fr) var(--qps-nav-height);
+  gap: 0.625rem;
+  align-items: center;
+}
+
+.qps-bottom-nav__tabs {
+  display: grid;
+  height: var(--qps-nav-height);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  padding: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 9999px;
+  background: var(--qps-bottom-nav-surface);
+  box-shadow: var(--qps-bottom-nav-shadow);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.qps-bottom-nav__tab {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  height: 2.9375rem;
+  grid-template-rows: 1.5rem 0.75rem 0.1875rem;
+  row-gap: 0.25rem;
+  align-content: center;
+  justify-items: center;
+  color: var(--qps-bottom-nav-inactive);
+  text-decoration: none;
+  transition: color var(--qps-bottom-nav-motion);
+}
+
+.qps-bottom-nav__symbol {
+  display: block;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  background: currentColor;
+  mask: var(--qps-bottom-nav-symbol) center / contain no-repeat;
+  -webkit-mask: var(--qps-bottom-nav-symbol) center / contain no-repeat;
+}
+
+/* Material identity is independent from warning/reject status. LIM surfaces
+   derive from one accent token; compact text uses its contrast-safe role. */
+.qps-material-lim-fill { border-color: var(--ore-lim); background: var(--ore-lim); color: var(--ore-lim-fill-foreground); }
+.qps-material-lim-badge { background: color-mix(in srgb, var(--ore-lim) 18%, var(--surface)); color: var(--ore-lim-foreground); }
+.qps-material-lim-selected { border-color: var(--ore-lim); background: color-mix(in srgb, var(--ore-lim) 14%, var(--surface)); color: var(--ore-lim-foreground); }
+.qps-material-lim-muted { border-color: color-mix(in srgb, var(--ore-lim) 42%, var(--border)); background: color-mix(in srgb, var(--ore-lim) 8%, var(--surface)); color: var(--ore-lim-foreground); }
+.qps-material-lim-indicator { background: var(--ore-lim); }
+.qps-material-lim-rail-left { border-left-color: var(--ore-lim); }
+.qps-material-lim-rail-top { border-top-color: var(--ore-lim); }
+.qps-material-lim-surface { background: color-mix(in srgb, var(--ore-lim) 7%, var(--surface)); }
+.qps-material-lim-surface-strong { background: color-mix(in srgb, var(--ore-lim) 14%, var(--surface)); }
+
+.qps-bottom-nav__label {
+  display: block;
+  height: 0.75rem;
+  overflow: hidden;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 0.75rem;
+  white-space: nowrap;
+}
+
+.qps-bottom-nav__indicator {
+  display: block;
+  width: 2rem;
+  height: 0.1875rem;
+  border-radius: 999px;
+  background: transparent;
+  transition: background-color var(--qps-bottom-nav-motion);
+}
+
+.qps-bottom-nav__tab--active {
+  color: var(--qps-bottom-nav-active);
+}
+
+.qps-bottom-nav__tab--active .qps-bottom-nav__indicator {
+  background: var(--qps-bottom-nav-active);
+}
+
+.qps-bottom-nav__tab:focus-visible,
+.qps-record-button:focus-visible {
+  outline: 2px solid var(--focus-accent);
+  outline-offset: 3px;
+}
+
+.qps-record-button {
+  display: grid;
+  width: var(--qps-nav-height);
+  min-width: var(--qps-nav-height);
+  height: var(--qps-nav-height);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--qps-bottom-nav-record);
+  color: var(--qps-bottom-nav-record-foreground);
+  cursor: pointer;
+  place-items: center;
+  transition: background-color var(--qps-bottom-nav-motion), color var(--qps-bottom-nav-motion);
+}
+
+.qps-record-button__content {
+  position: relative;
+  display: grid;
+  width: var(--qps-nav-height);
+  height: var(--qps-nav-height);
+  place-items: center;
+}
+
+.qps-record-button__rec,
+.qps-record-button__plus {
+  position: absolute;
+  grid-area: 1 / 1;
+  transition: transform var(--qps-bottom-nav-motion), opacity 180ms ease;
+}
+
+.qps-record-button__rec {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.qps-record-button__plus {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.72);
+}
+
+.qps-record-button[data-record-active] .qps-record-button__rec {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.72);
+}
+
+.qps-record-button[data-record-active] .qps-record-button__plus {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+@media (max-width: 22rem) {
+  .qps-bottom-nav__frame {
+    width: calc(100vw - 1rem);
+  }
+}
+
+:root[data-theme='dark'],
+.dark {
+  --qps-bottom-nav-record: var(--focus-accent);
+  --qps-bottom-nav-record-foreground: var(--focus-accent-foreground);
+  --qps-bottom-nav-active: var(--primary);
+  --qps-primary-action: var(--primary);
+  --qps-primary-action-foreground: var(--primary-foreground);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --qps-bottom-nav-record: var(--focus-accent);
+    --qps-bottom-nav-record-foreground: var(--focus-accent-foreground);
+    --qps-bottom-nav-active: var(--primary);
+    --qps-primary-action: var(--primary);
+    --qps-primary-action-foreground: var(--primary-foreground);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qps-bottom-nav * {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+}
+
+/* The spacer contributes scroll range without painting a full-width dock slab.
+   That lets the active page continue behind the transparent fixed wrapper while
+   still allowing its final interactive item to scroll clear of the controls. */
+.qps-nav-scroll-clearance {
+  height: var(--qps-nav-clearance);
+  pointer-events: none;
 }

@@ -103,6 +103,66 @@ describe('appendNewBaseFront', () => {
     expect(result.value.effectiveFleet.truckIds).toEqual(['STM-A40_0001', 'STM-A40_0002'])
   })
 
+  it('persists an explicit canonical Exca selected for the new BASE Front', () => {
+    const masterData = buildMasterData()
+    const fleetSetup = buildFleetSetup(masterData)
+
+    const result = appendNewBaseFront({
+      fleetSetup,
+      masterData,
+      sectorCode: SECTOR,
+      haulerCode: HAULER_2,
+      destinationPileId: 'L9_27',
+      excaCode: 'H2-Exc_0003',
+      truckIds: [],
+      fleetId: 'FLEET-02',
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.newFront.excaCode).toBe('H2-Exc_0003')
+  })
+
+  it('keeps every selected Destination Pile while retaining the first as the legacy primary', () => {
+    const masterData = buildMasterData()
+    const fleetSetup = buildFleetSetup(masterData)
+
+    const result = appendNewBaseFront({
+      fleetSetup,
+      masterData,
+      sectorCode: SECTOR,
+      haulerCode: HAULER,
+      destinationPileId: 'L18_S09',
+      destinationPileIds: ['L18_S09', 'L9_27'],
+      truckIds: ['A'],
+      fleetId: 'FLEET-02',
+    })
+
+    expect(result).toMatchObject({ ok: true })
+    if (!result.ok) return
+    expect(result.value.newFront.destinationPileId).toBe('L18_S09')
+    expect(result.value.newFront.destinationPileIds).toEqual(['L18_S09', 'L9_27'])
+  })
+
+  it('rejects an active Fleet from a different Company using an assigned Pile_Id', () => {
+    const masterData = buildMasterData()
+    const fleetSetup = buildFleetSetup(masterData)
+
+    const result = appendNewBaseFront({
+      fleetSetup,
+      masterData,
+      sectorCode: SECTOR,
+      haulerCode: HAULER_2,
+      destinationPileId: 'L18_S09',
+      truckIds: [],
+      fleetId: 'FLEET-02',
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('PILE_ASSIGNED_TO_DIFFERENT_COMPANY')
+  })
+
   it('auto-assigns the next Front Number for the Sector, same rule as a continuation', () => {
     const masterData = buildMasterData()
     const fleetSetup = buildFleetSetup(masterData)
@@ -120,6 +180,39 @@ describe('appendNewBaseFront', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.value.newFront.frontId).toBe('BR1/02')
+  })
+
+  it('returns the Front Number limit error instead of a numeric suggestion when all numbers are used', () => {
+    const masterData = buildMasterData()
+    const sector = must(parseSectorCode(SECTOR))
+    const hauler = must(parseHaulerCode(HAULER))
+    const fronts = Array.from({ length: 25 }, (_, index) =>
+      createFrontDefinition(
+        must(parseFrontId(`BR1/${String(index + 1).padStart(2, '0')}`)),
+        sector,
+        hauler,
+      ),
+    )
+    const fleets = fronts.map((frontDefinition, index) =>
+      must(createBaseFleetDefinition({
+        fleetId: must(parseFleetId(`FLEET-${index + 1}`)),
+        frontId: frontDefinition.frontId,
+        truckIds: [],
+      })),
+    )
+    const fleetSetup = must(createFleetSetup({ fronts, fleets }, masterData))
+
+    const result = appendNewBaseFront({
+      fleetSetup,
+      masterData,
+      sectorCode: SECTOR,
+      haulerCode: HAULER_2,
+      destinationPileId: 'L9_27',
+      truckIds: [],
+      fleetId: 'FLEET-26',
+    })
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'FRONT_NUMBER_LIMIT_REACHED' } })
   })
 
   it('requires a Destination — a new independent BASE Front has no reference to inherit one from', () => {

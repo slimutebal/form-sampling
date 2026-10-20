@@ -2,7 +2,7 @@ import type { MasterDataRemoteReader } from '@/application/google/google-ports'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err } from '@/domain/common/result'
 import type { MasterData } from '@/domain/master/master-data'
-import { GOOGLE_MASTER_HEADERS } from './google-sheet-contract'
+import { cellText, GOOGLE_MASTER_HEADERS } from './google-sheet-contract'
 import { parseMasterDataFromRanges, type RawMasterDataRanges } from './master-data-sheet-reader'
 
 type Rows = readonly (readonly unknown[])[]
@@ -10,6 +10,11 @@ type JsonpGlobal = Record<string, unknown>
 
 const JSONP_TIMEOUT_MS = 15_000
 let nextCallbackId = 0
+
+function logRemoteMasterData(event: string, details: Record<string, unknown>) {
+  if (!import.meta.env.DEV) return
+  console.info(`[master-data] ${event}`, details)
+}
 
 /**
  * JSONP adapter for the deployed Apps Script Web App. Apps Script responses
@@ -30,14 +35,30 @@ export class AppsScriptMasterDataRemoteReader implements MasterDataRemoteReader 
     try {
       body = await this.loadJsonp()
     } catch (failure) {
+      logRemoteMasterData('jsonp-failed', { code: failure === 'APPS_SCRIPT_TIMEOUT' ? 'APPS_SCRIPT_TIMEOUT' : 'APPS_SCRIPT_UNAVAILABLE' })
       return err(jsonpFailure(failure))
     }
 
     const ranges = toRanges(body)
-    if (!ranges) return remoteInvalid()
+    if (!ranges) {
+      logRemoteMasterData('remote-payload-invalid', { reason: 'MISSING_OR_INVALID_TABLES' })
+      return remoteInvalid()
+    }
 
     const parsed = parseMasterDataFromRanges(ranges)
-    return parsed.ok ? parsed : remoteInvalid()
+    if (!parsed.ok) {
+      if (parsed.error.code === 'GOOGLE_MASTER_REQUIRED_HEADER_MISSING') {
+        logRequiredHeaderDetails(body)
+      }
+      logRemoteMasterData('remote-payload-invalid', { reason: parsed.error.code })
+      return remoteInvalid()
+    }
+    logRemoteMasterData('remote-payload-valid', {
+      employees: ranges.employees.length,
+      sectors: ranges.sectors.length,
+      pileAreas: ranges.pileAreas.length,
+    })
+    return parsed
   }
 
   private loadJsonp(): Promise<unknown> {
@@ -75,7 +96,12 @@ export class AppsScriptMasterDataRemoteReader implements MasterDataRemoteReader 
         script = document.createElement('script')
         script.async = true
         script.src = this.masterDataUrl(callbackName)
-        script.onerror = () => fail('APPS_SCRIPT_UNAVAILABLE')
+        logRemoteMasterData('jsonp-request-started', { endpoint: new URL(this.endpoint).origin + new URL(this.endpoint).pathname })
+        script.onerror = () => {
+          // JSONP script errors intentionally expose no HTTP status to page JS.
+          logRemoteMasterData('jsonp-script-error', { reason: 'SCRIPT_LOAD_ERROR_NO_HTTP_STATUS' })
+          fail('APPS_SCRIPT_UNAVAILABLE')
+        }
         document.head.append(script)
       } catch {
         fail('APPS_SCRIPT_UNAVAILABLE')
@@ -120,16 +146,57 @@ function isRows(value: unknown): value is Rows {
  * Apps Script currently returns complete sheet rows for `tables`, even for
  * sheets whose app contract only consumes a leading range (for example,
  * `Employees!A:C` while the sheet also has columns beyond `Level`). Project
- * only a verified leading contract range here; the parser below still checks
- * every required header and every required data value. A renamed, reordered,
- * missing, or extra column inside the documented range is never accepted.
+ * only the required contract columns here; the parser below still checks
+ * every required header and every required data value. Required headers must
+ * remain exact, unique, and in their documented relative order. Extra columns
+ * may appear anywhere (for example Employees.Initial before Employees.Level).
  */
 function projectLeadingContractColumns(rows: Rows, headers: readonly string[]): Rows {
   const firstRow = rows[0]
-  const hasExpectedLeadingHeaders = firstRow !== undefined && headers.every(
-    (header, index) => String(firstRow[index] ?? '').trim() === header,
+  if (!firstRow) return rows
+  const headerPositions = headers.map((header) => firstRow.findIndex((cell) => cellText(cell) === header))
+  const eachRequiredHeaderAppearsOnce = headers.every(
+    (header) => firstRow.filter((cell) => cellText(cell) === header).length === 1,
   )
-  return hasExpectedLeadingHeaders ? rows.map((row) => row.slice(0, headers.length)) : rows
+  const keepsRequiredOrder = headerPositions.every((position, index) => index === 0 || position > headerPositions[index - 1])
+  if (headerPositions.some((position) => position < 0) || !eachRequiredHeaderAppearsOnce || !keepsRequiredOrder) {
+    return rows
+  }
+  return rows.map((row) => headerPositions.map((position) => row[position]))
+}
+
+function logRequiredHeaderDetails(body: unknown) {
+  if (!import.meta.env.DEV || typeof body !== 'object' || body === null || !('tables' in body)) return
+  const tables = body.tables
+  if (typeof tables !== 'object' || tables === null) return
+  const contracts: ReadonlyArray<readonly [string, readonly string[]]> = [
+    ['Employees', GOOGLE_MASTER_HEADERS.employees],
+    ['Crews', GOOGLE_MASTER_HEADERS.crews],
+    ['Sectors', GOOGLE_MASTER_HEADERS.sectors],
+    ['Sampling_Houses', GOOGLE_MASTER_HEADERS.samplingHouses],
+    ['Pile_Areas', GOOGLE_MASTER_HEADERS.pileAreas],
+    ['Haulers', GOOGLE_MASTER_HEADERS.haulers],
+    ['Trucks', GOOGLE_MASTER_HEADERS.trucks],
+    ['Ore_Sampling_Config', GOOGLE_MASTER_HEADERS.oreSamplingConfigs],
+  ]
+  for (const [table, expectedHeaders] of contracts) {
+    const candidate = (tables as Record<string, unknown>)[table]
+    const actualHeaders = Array.isArray(candidate) && Array.isArray(candidate[0])
+      ? candidate[0].map((cell) => cellText(cell))
+      : []
+    const missingHeaders = expectedHeaders.filter((header) => !actualHeaders.includes(header))
+    const expectedPositionsMatch = expectedHeaders.every((header, index) => actualHeaders[index] === header)
+    if (missingHeaders.length > 0 || !expectedPositionsMatch) {
+      logRemoteMasterData('required-header-missing', {
+        table,
+        missingHeader: missingHeaders[0] ?? expectedHeaders.find((header, index) => actualHeaders[index] !== header),
+        missingHeaders,
+        expectedHeaders,
+        actualHeaders,
+        reason: missingHeaders.length > 0 ? 'HEADER_NOT_PRESENT' : 'HEADER_POSITION_MISMATCH',
+      })
+    }
+  }
 }
 
 /** Accepts the documented `{ tables: { Sheet_Name: rows } }` payload only. */

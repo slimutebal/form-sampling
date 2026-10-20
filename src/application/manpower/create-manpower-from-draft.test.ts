@@ -14,7 +14,11 @@ function buildMasterData(): MasterData {
   return value(
     createMasterData({
       employees: [createEmployeeReference(value(parseEmployeeId('SCM0333')), 'Raharjo Rahman')],
-      crews: [createCrewReference(value(parseCrewCode('260225')), 'Andri Tani Kusuma', 'Sampler')],
+      crews: [
+        createCrewReference(value(parseCrewCode('260225')), 'Andri Tani Kusuma', 'Sampler'),
+        createCrewReference(value(parseCrewCode('230268')), 'Takdir'),
+        createCrewReference(value(parseCrewCode('230235')), 'Ismail'),
+      ],
       sectors: [],
       locations: [],
       samplingHouses: [],
@@ -87,12 +91,19 @@ describe('createManpowerFromDraft', () => {
     expect(result.error.code).toBe('DUPLICATE_MANPOWER_PERSON_ID')
   })
 
-  it('rejects a blank Job Desk for a Crew entry', () => {
-    const entries: ManpowerDraftEntry[] = [{ personId: '260225', jobDeskCode: '  ' }]
+  it('normalizes blank or legacy Crew Job Desk values for Takdir and Ismail without blocking save', () => {
+    const entries: ManpowerDraftEntry[] = [
+      { personId: '230268', jobDeskCode: '  ' },
+      { personId: '230235', jobDeskCode: 'Sampler' },
+    ]
     const result = createManpowerFromDraft(entries, buildMasterData())
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.error.code).toBe('BLANK_MANPOWER_JOB_DESK')
+    expect(result).toEqual({
+      ok: true,
+      value: [
+        { personId: '230268', name: 'Takdir', jobDeskCode: 'Sampler', isPic: false },
+        { personId: '230235', name: 'Ismail', jobDeskCode: 'Sampler', isPic: false },
+      ],
+    })
   })
 
   it('accepts a blank Job Desk for a Staff/Employee entry — the Staff master has no exact Job field', () => {
