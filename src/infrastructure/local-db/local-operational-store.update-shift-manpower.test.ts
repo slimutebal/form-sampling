@@ -86,6 +86,41 @@ describe('LocalOperationalStore.updateShiftManpower', () => {
     store.close()
   })
 
+  it('persists a Staff Checker separately from the Staff job description across reload', async () => {
+    const databaseName = uniqueDatabaseName()
+    const store = new LocalOperationalStore(databaseName)
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-STAFF-CHECKER')
+    const pile = buildFixtureSapPile('PILE-1')
+    const supervisor = createManpowerAssignment('SCM0333', 'Raharjo Rahman', 'Supervisor', true)
+
+    await store.initializeShiftWorkspace({
+      shift,
+      piles: [pile],
+      masterData,
+      fleetSetup,
+      manpower: [supervisor, createManpowerAssignment('260225', 'Takdir', 'Checker', false)],
+    })
+    const updateResult = await store.updateShiftManpower(
+      shift.id,
+      [supervisor, createManpowerAssignment('260225', 'Takdir', 'Sampler', false)],
+      'SCM0333',
+    )
+    expect(updateResult.ok).toBe(true)
+    store.close()
+
+    const reopenedStore = new LocalOperationalStore(databaseName)
+    const loaded = await reopenedStore.loadCurrentShiftWorkspace()
+    expect(loaded.ok).toBe(true)
+    if (loaded.ok) {
+      expect(loaded.value?.checkerPersonId).toBe('SCM0333')
+      expect(loaded.value?.manpower[0]).toEqual(supervisor)
+      expect(loaded.value?.manpower[1]?.jobDeskCode).toBe('Sampler')
+    }
+    reopenedStore.close()
+  })
+
   it('never resets fleet, piles, or pending state — every other field is preserved', async () => {
     const store = newStore()
     const masterData = buildFixtureMasterData()

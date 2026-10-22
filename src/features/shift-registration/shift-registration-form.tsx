@@ -3,6 +3,7 @@ import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { cn } from '@/components/ui/cn'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { CustomSelect } from '@/components/ui/custom-select'
 import { ALLOWED_SHIFT_CODES } from '@/application/shift-registration/allowed-shift-codes'
 import type { ShiftRegistrationFormValues } from '@/application/shift-registration/shift-registration-form-values'
 import {
@@ -11,6 +12,7 @@ import {
 } from '@/application/shift-registration/validate-shift-registration-form'
 import type { MasterData } from '@/domain/master/master-data'
 import { fieldErrorTranslationKey } from '@/features/shift-registration/field-error-messages'
+import { formatShiftDateForDisplay } from '@/features/shift-registration/format-shift-date'
 
 interface DateFieldProps {
   id: string
@@ -19,29 +21,6 @@ interface DateFieldProps {
   error?: string
   onChange: (value: string) => void
   placeholder: string
-}
-
-function formatDateForInputDisplay(value: string): string {
-  if (!value) return ''
-
-  const [year, month, day] = value.split('-').map(Number)
-
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ]
-
-  return `${String(day).padStart(2, '0')}-${months[month - 1]}-${year}`
 }
 
 function DateField({ id, label, value, error, onChange, placeholder }: DateFieldProps) {
@@ -60,7 +39,7 @@ function DateField({ id, label, value, error, onChange, placeholder }: DateField
           }`}
           aria-hidden="true"
         >
-          <span>{value ? formatDateForInputDisplay(value) : placeholder}</span>
+          <span>{value ? formatShiftDateForDisplay(value) : placeholder}</span>
           <Calendar aria-hidden="true" size={18} className="text-muted-foreground" />
         </div>
 
@@ -102,22 +81,17 @@ function SelectField({ id, label, value, error, disabled, placeholder, options, 
       <label htmlFor={id} className="sr-only">
         {label}
       </label>
-      <select
+      <CustomSelect
         id={id}
+        ariaLabel={label}
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
-        className="h-11 w-full rounded-md border border-border bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
-      >
-        <option value="">{placeholder}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        invalid={!!error}
+        describedBy={error ? errorId : undefined}
+        placeholder={placeholder}
+        options={options}
+        onChange={onChange}
+      />
       {error ? (
         <p id={errorId} role="alert" className="text-sm text-red-600">
           {error}
@@ -207,7 +181,7 @@ export function ShiftRegistrationForm({
   return (
     <form id="work-setup-form" onSubmit={handleSubmit} noValidate className={cn('flex flex-col gap-4', className)}>
       <section className="flex flex-col gap-2" aria-labelledby="time-location-title">
-        <h2 id="time-location-title" className="text-base font-semibold">
+        <h2 id="time-location-title" className="type-section-title">
           {t('workSetup.timeLocation')}
         </h2>
         <div className="grid grid-cols-[3fr_2fr] gap-2" data-testid="time-location-row-1">

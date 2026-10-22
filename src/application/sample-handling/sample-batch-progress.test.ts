@@ -45,6 +45,76 @@ describe('deriveSampleBatchProgress', () => {
     expect(progress('SAP', 16)).toMatchObject({ producedIncrementCount: 8, inHouseBagCount: 8 })
   })
 
+  it('derives SAP eligible bags from Master sampling positions at the current Setup Trip', () => {
+    expect(progress('SAP', 5)).toMatchObject({
+      currentTrip: 5,
+      producedIncrementCount: 2,
+      producedBagEquivalent: 2,
+      deliveredBagEquivalent: 0,
+      inHouseBagCount: 2,
+    })
+    expect(progress('SAP', 10)).toMatchObject({
+      currentTrip: 10,
+      producedIncrementCount: 5,
+      producedBagEquivalent: 5,
+    })
+    expect(progress('SAP', 5).producedBagEquivalent).toBe(progress('SAP', 4).producedBagEquivalent)
+    expect(progress('SAP', 6).producedBagEquivalent).toBe(3)
+  })
+
+  it('keeps delivery progress scoped to its own Pile and Batch', () => {
+    const pileId = fixturePileId('S1_01')
+    const registration = {
+      pileId,
+      oreCode: must(parseOreCode('SAP')),
+      batch: must(parseBatchNumber(1)),
+      rit: must(parseRitNumber(5)),
+    }
+    const deliveredForOtherBatch = {
+      pileId,
+      batchNumber: must(parseBatchNumber(2)),
+      sampledRitNumbers: [must(parseRitNumber(2)), must(parseRitNumber(4))],
+      delivery: { status: 'DELIVERED' },
+    } as unknown as SamplePosition
+
+    const result = deriveSampleBatchProgress(registration, buildFixtureMasterData(), [deliveredForOtherBatch])!
+
+    expect(result).toMatchObject({
+      producedBagEquivalent: 2,
+      deliveredBagEquivalent: 0,
+      inHouseBagCount: 2,
+    })
+  })
+
+  it('tracks partial and full SAP dispatch without treating zero dispatch as zero In House', () => {
+    const pileId = fixturePileId('S1_01')
+    const registration = {
+      pileId,
+      oreCode: must(parseOreCode('SAP')),
+      batch: must(parseBatchNumber(1)),
+      rit: must(parseRitNumber(5)),
+    }
+    const deliveredAt = (rit: number) => ({
+      pileId,
+      batchNumber: registration.batch,
+      sampledRitNumbers: [must(parseRitNumber(rit))],
+      delivery: { status: 'DELIVERED' },
+    }) as unknown as SamplePosition
+
+    expect(deriveSampleBatchProgress(registration, buildFixtureMasterData())).toMatchObject({
+      deliveredBagEquivalent: 0,
+      inHouseBagCount: 2,
+    })
+    expect(deriveSampleBatchProgress(registration, buildFixtureMasterData(), [deliveredAt(2)])).toMatchObject({
+      deliveredBagEquivalent: 1,
+      inHouseBagCount: 1,
+    })
+    expect(deriveSampleBatchProgress(registration, buildFixtureMasterData(), [deliveredAt(2), deliveredAt(4)])).toMatchObject({
+      deliveredBagEquivalent: 2,
+      inHouseBagCount: 0,
+    })
+  })
+
   it('uses configured LIM packing as two increments per physical bag', () => {
     expect(progress('LIM', 5)).toMatchObject({ producedIncrementCount: 1, inHouseBagCount: 1 })
     expect(progress('LIM', 10)).toMatchObject({ producedIncrementCount: 2, inHouseBagCount: 1 })

@@ -1,5 +1,4 @@
 import { useTranslation } from 'react-i18next'
-import type { SupportedLanguage } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { Shift } from '@/domain/shift/shift'
@@ -12,8 +11,7 @@ interface ResumeShiftCardProps {
 }
 
 export function ResumeShiftCard({ shift, onResume, onStartNew }: ResumeShiftCardProps) {
-  const { t, i18n } = useTranslation()
-  const language = i18n.language as SupportedLanguage
+  const { t } = useTranslation()
 
   return (
     <Card>
@@ -23,7 +21,7 @@ export function ResumeShiftCard({ shift, onResume, onStartNew }: ResumeShiftCard
       <CardContent>
         <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
           <dt className="text-muted-foreground">{t('shiftStart.fields.date')}</dt>
-          <dd className="text-right font-medium">{formatShiftDateForDisplay(shift.date, language)}</dd>
+          <dd className="text-right font-medium">{formatShiftDateForDisplay(shift.date)}</dd>
 
           <dt className="text-muted-foreground">{t('shiftStart.fields.shiftCode')}</dt>
           <dd className="text-right font-medium">{shift.shiftCode}</dd>

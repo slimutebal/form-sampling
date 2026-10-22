@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, Outlet, useLocation } from 'react-router'
 import { localOperationalStore } from '@/app/local-operational-store'
@@ -10,10 +11,20 @@ import { Card, CardContent } from '@/components/ui/card'
 import type { LocalShiftWorkspace } from '@/infrastructure/local-db/local-operational-store'
 
 /** The active-shell page context every route nested under `AppLayout` reads via `useOutletContext<ActiveWorkspaceContext>()`. */
+export type WorkSetupTab = 'sample' | 'fleet'
+
 export interface ActiveWorkspaceContext {
   readonly workspace: LocalShiftWorkspace
   /** Re-reads the workspace from `LocalOperationalStore` (Phase 18 "Add Pile" correction) — call after a write that changes the stored workspace (e.g. `addPileToWorkspace`) so every page sharing this context observes the fresh state, not a stale copy. */
   readonly refreshWorkspace: () => void
+  /**
+   * The WORK SETUP subtab belongs to the active shell rather than the route
+   * child. A workspace refresh temporarily replaces the child while its
+   * IndexedDB read is in flight; retaining this here prevents a local Sample
+   * mutation from silently returning the operator to Fleet.
+   */
+  readonly activeWorkSetupTab?: WorkSetupTab
+  readonly setActiveWorkSetupTab?: (tab: WorkSetupTab) => void
 }
 
 /**
@@ -30,14 +41,21 @@ export interface ActiveWorkspaceContext {
 export function AppLayout() {
   const { t } = useTranslation()
   const [phase, handleRetry] = useCurrentWorkspace(localOperationalStore)
+  const [activeWorkSetupTab, setActiveWorkSetupTab] = useState<WorkSetupTab>('fleet')
   const { pathname } = useLocation()
   const setupRoute = pathname === '/regist'
 
+  useEffect(() => {
+    const openFleetTab = () => setActiveWorkSetupTab('fleet')
+    window.addEventListener('work-setup:open-fleet', openFleetTab)
+    return () => window.removeEventListener('work-setup:open-fleet', openFleetTab)
+  }, [])
+
   return (
-    <div className="safe-x mx-auto flex h-dvh min-h-0 w-full max-w-md flex-col overflow-hidden">
+    <div className="safe-x flex h-dvh min-h-0 w-full flex-col overflow-hidden">
       <SafeAreaTopCap />
       {!setupRoute ? <GlobalStatusBar syncReader={localOperationalStore} activeShiftReader={localOperationalStore} /> : null}
-      <main className="min-h-0 flex-1 overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
+      <main className={setupRoute ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-y-auto scroll-pb-[var(--qps-nav-clearance)]'}>
         {phase.kind === 'loading' ? (
           <div className="px-5 py-4" aria-live="polite">
             <p className="text-sm text-muted-foreground">{t('activeShell.loading')}</p>
@@ -60,9 +78,17 @@ export function AppLayout() {
         {phase.kind === 'none' ? <Navigate to="/start" replace /> : null}
 
         {phase.kind === 'loaded' ? (
-          <Outlet
-            context={{ workspace: phase.workspace, refreshWorkspace: handleRetry } satisfies ActiveWorkspaceContext}
-          />
+          <>
+            <Outlet
+              context={{
+                workspace: phase.workspace,
+                refreshWorkspace: handleRetry,
+                activeWorkSetupTab,
+                setActiveWorkSetupTab,
+              } satisfies ActiveWorkspaceContext}
+            />
+            <div aria-hidden="true" className="qps-nav-scroll-clearance" />
+          </>
         ) : null}
       </main>
       <BottomNav />

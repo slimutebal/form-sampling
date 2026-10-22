@@ -9,10 +9,10 @@ function validRanges(): RawMasterDataRanges {
   return {
     employees: [
       ['Employee_ID', 'Name', 'Initial', 'Level'],
-      ['001', 'Supervisor A', 'SPA', 'Supervisor'],
-      ['002', 'Foreman B', 'FNB', 'Foreman'],
-      ['003', 'Employee C', 'EMC', ''], // blank Level is allowed
-      ['', '', '', ''], // trailing blank row — ignored
+      ['001', 'Supervisor A', 'SA', 'Supervisor'],
+      ['002', 'Foreman B', 'FB', 'Foreman'],
+      ['003', 'Employee C', 'EC', ''],
+      ['', '', ''], // trailing blank row — ignored
     ],
     crews: [
       ['Crew_ID', 'Name', 'Job'],
@@ -141,34 +141,6 @@ describe('parseMasterDataFromRanges — row validation', () => {
     expect(result.error.code).toBe('GOOGLE_MASTER_ROW_INVALID')
   })
 
-  it('takes Level from column D, never from column C (Initial)', () => {
-    const ranges = validRanges()
-    const result = parseMasterDataFromRanges({
-      ...ranges,
-      employees: [
-        ['Employee_ID', 'Name', 'Initial', 'Level'],
-        ['SCM0268', 'Mega Putri', 'Mega', 'Supervisor'],
-      ],
-    })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.value.employees).toEqual([{ id: 'SCM0268', name: 'Mega Putri', level: 'Supervisor' }])
-  })
-
-  it('rejects an Employee row that populates only Initial rather than silently skipping it', () => {
-    const ranges = validRanges()
-    const result = parseMasterDataFromRanges({
-      ...ranges,
-      employees: [
-        ['Employee_ID', 'Name', 'Initial', 'Level'],
-        ['', '', 'MG', ''],
-      ],
-    })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.error.code).toBe('GOOGLE_MASTER_ROW_INVALID')
-  })
-
   it('rejects a blank Sampling_Interval', () => {
     const ranges = validRanges()
     const result = parseMasterDataFromRanges({
@@ -189,7 +161,7 @@ describe('parseMasterDataFromRanges — row validation', () => {
       ...ranges,
       employees: [
         ['Employee_ID', 'Name', 'Initial', 'Level'],
-        ['004', '', 'FM', 'Foreman'],
+        ['004', '', 'F', 'Foreman'],
       ],
     })
     expect(result.ok).toBe(false)

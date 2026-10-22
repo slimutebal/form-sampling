@@ -56,6 +56,7 @@ export interface ShiftExportInput {
   readonly masterData: MasterData
   /** Explicit, caller-supplied manpower for this shift (ROADMAP Phase 14 §3). Defaults to none. */
   readonly manpowerAssignments?: readonly ManpowerAssignment[]
+  readonly checkerPersonId?: string
   /** The Report sheet's human-readable language — independent of the app's own UI language. Defaults to `'id'`. */
   readonly reportLanguage?: ReportLanguage
 }
@@ -183,6 +184,7 @@ export function buildShiftExportSnapshot(input: ShiftExportInput): Result<ShiftE
     clock,
     masterData,
     manpowerAssignments = [],
+    checkerPersonId,
     reportLanguage = DEFAULT_REPORT_LANGUAGE,
   } = input
 
@@ -358,6 +360,7 @@ export function buildShiftExportSnapshot(input: ShiftExportInput): Result<ShiftE
     samplePositions,
     masterData,
     manpowerAssignments,
+    checkerPersonId,
   })
   if (!reportResult.ok) {
     return reportResult

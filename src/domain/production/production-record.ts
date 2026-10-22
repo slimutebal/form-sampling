@@ -46,9 +46,10 @@ export type ProductionCorrectionType = (typeof PRODUCTION_CORRECTION_TYPES)[numb
  * The mutable fields of a ProductionRecord — everything that can change
  * over the record's life via a correction, as opposed to `transaction`
  * (the immutable original HaulageTransaction, never corrected).
- * `physicalCondition`/`contamination` are `null` only for a legacy
- * migrated record, where no operator ever observed them (do not invent a
- * default). `remark` is `null` when absent or blank. `truckValidation` is
+ * `physicalCondition`/`contamination` are `null` for an unsampled ACCEPT
+ * record (and for legacy migrated records), where no operator observation
+ * is required or available. `remark` is `null` when absent or blank.
+ * `truckValidation` is
  * the Wrong Truck classification for the *current* effective Front/Truck
  * — it starts out equal to `transaction.truckValidation` (Phase 2/3) and
  * only ever diverges from it once a Phase 4 EDIT_FIELDS correction
@@ -118,8 +119,12 @@ export type ProductionRecord = Brand<ProductionRecordData, 'ProductionRecord'>
 
 export interface CreateProductionRecordParams {
   readonly transaction: HaulageTransaction
-  readonly physicalCondition: PhysicalCondition
-  readonly contamination: Contamination
+  /**
+   * Observations are absent for an unsampled ACCEPT record.  Legacy records
+   * and any record requiring observation retain their explicit values.
+   */
+  readonly physicalCondition?: PhysicalCondition | null
+  readonly contamination?: Contamination | null
   readonly disposition: Disposition
   /** Optional; blank or whitespace-only is normalized to `null`. */
   readonly remark?: string | null
@@ -146,13 +151,31 @@ function normalizeRemark(remark: string | null | undefined): string | null {
 export function createProductionRecord(
   params: CreateProductionRecordParams,
 ): Result<ProductionRecord, DomainError> {
-  if (!isPhysicalCondition(params.physicalCondition)) {
+  const observationsRequired = params.transaction.samplingEvaluation.sampleRequired || params.disposition === 'REJECT'
+  const physicalCondition = params.physicalCondition ?? null
+  const contamination = params.contamination ?? null
+  const hasCondition = physicalCondition !== null
+  const hasContamination = contamination !== null
+
+  if (observationsRequired && (!hasCondition || !hasContamination)) {
+    return err({
+      code: 'PRODUCTION_OBSERVATIONS_REQUIRED',
+      message: 'PhysicalCondition and Contamination are required for sampled or rejected production',
+    })
+  }
+  if (hasCondition !== hasContamination) {
+    return err({
+      code: 'PRODUCTION_OBSERVATIONS_INCOMPLETE',
+      message: 'PhysicalCondition and Contamination must be recorded together',
+    })
+  }
+  if (physicalCondition !== null && !isPhysicalCondition(physicalCondition)) {
     return err({
       code: 'INVALID_PHYSICAL_CONDITION',
       message: `Invalid PhysicalCondition: ${String(params.physicalCondition)}`,
     })
   }
-  if (!isContamination(params.contamination)) {
+  if (contamination !== null && !isContamination(contamination)) {
     return err({
       code: 'INVALID_CONTAMINATION',
       message: `Invalid Contamination: ${String(params.contamination)}`,
@@ -173,8 +196,8 @@ export function createProductionRecord(
       fleetId: params.transaction.fleetId,
       truckId: params.transaction.truckId,
       truckValidation: params.transaction.truckValidation,
-      physicalCondition: params.physicalCondition,
-      contamination: params.contamination,
+      physicalCondition,
+      contamination,
       disposition: params.disposition,
       remark: normalizeRemark(params.remark),
       status: 'ACTIVE',

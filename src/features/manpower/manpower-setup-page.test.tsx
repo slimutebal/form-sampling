@@ -85,7 +85,7 @@ describe('ManpowerSetupPage', () => {
     expect(screen.getAllByText('Penanggung Jawab')).toHaveLength(2)
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
 
     expect(onManpowerReady).toHaveBeenCalledWith([
       { personId: 'SCM0333', name: 'Raharjo Rahman', jobDeskCode: 'Checker', isPic: true },
@@ -93,7 +93,7 @@ describe('ManpowerSetupPage', () => {
     ])
   })
 
-  it('prefills Job Desk from the Crew master jobCode and does not show a PIC label for Crew', async () => {
+  it('normalizes a Crew master jobCode to Sampler and does not show a PIC label', async () => {
     const onManpowerReady = vi.fn()
     const user = userEvent.setup()
     renderPage(onManpowerReady)
@@ -104,7 +104,7 @@ describe('ManpowerSetupPage', () => {
     expect(screen.getAllByLabelText('Job Desk')[0]).toHaveValue('Sampler')
     expect(screen.queryByText('Penanggung Jawab')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
 
     expect(onManpowerReady).toHaveBeenCalledWith([
       { personId: '260225', name: 'Andri Tani Kusuma', jobDeskCode: 'Sampler', isPic: false },
@@ -127,7 +127,7 @@ describe('ManpowerSetupPage', () => {
     const user = userEvent.setup()
     renderPage(onManpowerReady)
 
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
 
     expect(onManpowerReady).toHaveBeenCalledWith([])
   })

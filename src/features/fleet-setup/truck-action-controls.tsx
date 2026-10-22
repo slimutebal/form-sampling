@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { CustomSelect } from '@/components/ui/custom-select'
 
 /**
  * Shared "pick a truck, then Add/Remove" control, used by both the
@@ -41,20 +42,15 @@ export function TruckAction({
       <label htmlFor={id} className="text-sm font-medium">
         {label}
       </label>
-      {compact ? <div className="relative"><input aria-label={label} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={label} className="h-11 w-full rounded-md border border-border bg-background px-3 text-base" />{query.trim() ? <div className="scrollbar-none absolute bottom-full left-0 z-30 mb-1 max-h-44 w-full overflow-y-auto rounded-md border border-border bg-background p-1 shadow-lg">{matchingOptions.map((truckId) => <button key={truckId} type="button" className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-muted" onClick={() => { onAction(truckId); onValueChange(''); setQuery('') }}>{truckId}</button>)}{matchingOptions.length === 0 ? <p className="p-2 text-sm text-muted-foreground">No matching truck.</p> : null}</div> : null}</div> : <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-        <select
+      {compact ? <div className="relative"><input aria-label={label} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={label} className="h-11 w-full rounded-md border border-border bg-input px-3 text-base text-foreground focus:border-focus-accent focus:bg-input-focus focus:outline-none focus:ring-2 focus:ring-focus-accent/60" />{query.trim() ? <div className="scrollbar-none absolute bottom-full left-0 z-30 mb-1 max-h-44 w-full overflow-y-auto rounded-md border border-border bg-surface-elevated p-1 text-foreground shadow-lg">{matchingOptions.map((truckId) => <button key={truckId} type="button" className="block w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-muted hover:text-foreground focus-visible:bg-focus-accent-soft focus-visible:text-foreground focus-visible:outline-none" onClick={() => { onAction(truckId); onValueChange(''); setQuery('') }}>{truckId}</button>)}{matchingOptions.length === 0 ? <p className="p-2 text-sm text-muted-foreground">No matching truck.</p> : null}</div> : null}</div> : <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <CustomSelect
           id={id}
+          ariaLabel={label}
           value={value}
-          onChange={(event) => onValueChange(event.target.value)}
-          className="h-11 min-w-0 rounded-md border border-border bg-background px-3 text-base"
-        >
-          <option value="">—</option>
-          {options.map((truckId) => (
-            <option key={truckId} value={truckId}>
-              {truckId}
-            </option>
-          ))}
-        </select>
+          placeholder="—"
+          options={options.map((truckId) => ({ value: truckId, label: truckId }))}
+          onChange={onValueChange}
+        />
         <Button type="button" onClick={handleAction} disabled={!actionEnabled}>
           {actionLabel}
         </Button>

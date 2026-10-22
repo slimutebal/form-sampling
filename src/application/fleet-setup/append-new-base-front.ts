@@ -1,5 +1,6 @@
 import { parseTruckIds } from '@/application/fleet-setup/create-fleet-setup-from-draft'
-import { parseFleetId, parsePileId } from '@/domain/common/identifiers'
+import { fleetNumberSuggestion } from '@/application/fleet-setup/fleet-editor-rules'
+import { parseFleetId, parsePileId, type PileId } from '@/domain/common/identifiers'
 import { parseSectorCode } from '@/domain/common/codes'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err, ok } from '@/domain/common/result'
@@ -7,8 +8,11 @@ import { createBaseFleetDefinition, type FleetDefinition } from '@/domain/fleet/
 import { resolveEffectiveFleetAgainstMaster, type EffectiveFleet } from '@/domain/fleet/fleet-resolution'
 import { createFleetSetup, type FleetSetup } from '@/domain/fleet/fleet-setup'
 import { createFrontDefinition, createFrontId, frontNumberFromFrontId, nextFrontNumber, type FrontDefinition } from '@/domain/fleet/front'
+import { parseExcaCode } from '@/domain/fleet/exca-code'
+import type { FleetAssignmentIdentity } from '@/domain/fleet/fleet-assignment-identity'
 import { parseHaulerCode } from '@/domain/master/master-codes'
 import { findPileArea, type MasterData } from '@/domain/master/master-data'
+import { validateFleetDestinationMaterials } from '@/domain/fleet/fleet-destination-material'
 
 export interface AppendNewBaseFrontParams {
   readonly fleetSetup: FleetSetup
@@ -19,8 +23,14 @@ export interface AppendNewBaseFrontParams {
   readonly frontNumber?: number
   /** Required — unlike a continuation, a brand-new independent Front has no reference to inherit a Destination from (Phase 18 §2). */
   readonly destinationPileId: string
+  /** All selected destinations; the first remains the legacy primary destination. */
+  readonly destinationPileIds?: readonly string[]
+  /** Explicit Exca selected by the operator. Omitted only for legacy-compatible active records. */
+  readonly excaCode?: string
   readonly truckIds: readonly string[]
   readonly fleetId: string
+  /** Immutable assignment snapshot from the originating Shift workspace. */
+  readonly assignmentIdentity?: FleetAssignmentIdentity
 }
 
 export interface AppendNewBaseFrontResult {
@@ -53,22 +63,33 @@ export function appendNewBaseFront(params: AppendNewBaseFrontParams): Result<App
   const haulerCode = parseHaulerCode(params.haulerCode)
   if (!haulerCode.ok) return haulerCode
 
-  const trimmedDestination = params.destinationPileId.trim()
-  if (!trimmedDestination) {
+  const requestedDestinations = params.destinationPileIds?.length ? params.destinationPileIds : [params.destinationPileId]
+  if (!requestedDestinations.length || requestedDestinations.some((destination) => !destination.trim())) {
     return err({
       code: 'FLEET_DESTINATION_REQUIRED',
       message: 'A Destination Pile is required for a new independent BASE Front',
     })
   }
-  const parsedPileId = parsePileId(trimmedDestination)
-  if (!parsedPileId.ok) return parsedPileId
-  const pileArea = findPileArea(params.masterData, parsedPileId.value)
-  if (!pileArea) {
-    return err({
-      code: 'FLEET_DESTINATION_PILE_NOT_FOUND',
-      message: `Destination Pile_ID ${trimmedDestination} was not found in this Sector's master`,
-    })
+  if (new Set(requestedDestinations.map((destination) => destination.trim())).size !== requestedDestinations.length) {
+    return err({ code: 'FLEET_DESTINATION_DUPLICATE', message: 'A Fleet cannot contain the same destination Pile more than once' })
   }
+  // Build with a mutable local collection; `createFrontDefinition` exposes it
+  // through the domain's readonly contract.
+  const destinationPileIds: PileId[] = []
+  for (const destination of [...new Set(requestedDestinations.map((value) => value.trim()))]) {
+    const parsedPileId = parsePileId(destination)
+    if (!parsedPileId.ok) return parsedPileId
+    const pileArea = findPileArea(params.masterData, parsedPileId.value)
+    if (!pileArea) {
+      return err({
+        code: 'FLEET_DESTINATION_PILE_NOT_FOUND',
+        message: `Destination Pile_ID ${destination} was not found in this Sector's master`,
+      })
+    }
+    destinationPileIds.push(pileArea.pileId)
+  }
+  const materialValidation = validateFleetDestinationMaterials(params.masterData, destinationPileIds.map(String))
+  if (!materialValidation.ok) return materialValidation
 
   let frontNumber: number
   if (params.frontNumber !== undefined) {
@@ -77,15 +98,33 @@ export function appendNewBaseFront(params: AppendNewBaseFrontParams): Result<App
     const existingNumbers = params.fleetSetup.fronts
       .filter((front) => front.sectorCode === sectorCode.value)
       .map((front) => frontNumberFromFrontId(front.frontId))
-    const nextNumber = nextFrontNumber(existingNumbers)
-    if (!nextNumber.ok) return nextNumber
-    frontNumber = nextNumber.value
+    const suggested = fleetNumberSuggestion(sectorCode.value, existingNumbers)
+    if (suggested.exhausted) {
+      const next = nextFrontNumber(existingNumbers)
+      if (!next.ok) return err(next.error)
+      return err({
+        code: 'FRONT_NUMBER_LIMIT_REACHED',
+        message: `Front number limit has already been reached for Sector ${sectorCode.value}`,
+      })
+    }
+    frontNumber = Number(suggested.suggested.split('/')[1])
   }
 
   const newFrontId = createFrontId(sectorCode.value, frontNumber)
   if (!newFrontId.ok) return newFrontId
 
-  const newFront = createFrontDefinition(newFrontId.value, sectorCode.value, haulerCode.value, pileArea.pileId)
+  const excaCode = params.excaCode === undefined ? undefined : parseExcaCode(params.excaCode)
+  if (excaCode && !excaCode.ok) return excaCode
+  const resolvedExcaCode = excaCode?.ok ? excaCode.value : undefined
+
+  const newFront = createFrontDefinition(
+    newFrontId.value,
+    sectorCode.value,
+    haulerCode.value,
+    destinationPileIds[0],
+    resolvedExcaCode,
+    destinationPileIds,
+  )
 
   const truckIds = parseTruckIds(params.truckIds)
   if (!truckIds.ok) return truckIds
@@ -94,6 +133,7 @@ export function appendNewBaseFront(params: AppendNewBaseFrontParams): Result<App
     fleetId: fleetId.value,
     frontId: newFrontId.value,
     truckIds: truckIds.value,
+    assignmentIdentity: params.assignmentIdentity,
   })
   if (!newFleet.ok) return newFleet
 
@@ -101,6 +141,7 @@ export function appendNewBaseFront(params: AppendNewBaseFrontParams): Result<App
     {
       fronts: [...params.fleetSetup.fronts, newFront],
       fleets: [...params.fleetSetup.fleets, newFleet.value],
+      ...(params.fleetSetup.operationalState ? { operationalState: params.fleetSetup.operationalState } : {}),
     },
     params.masterData,
   )

@@ -11,6 +11,7 @@ import type { ShiftSummarySyncStatusReader } from '@/application/pwa/sync-presen
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/components/ui/cn'
+import { ThemeSwitcher } from '@/components/shared/ThemeSwitcher'
 
 export interface GlobalStatusBarProps {
   readonly syncReader: ShiftSummarySyncStatusReader
@@ -90,12 +91,14 @@ export function GlobalStatusBar({ syncReader, activeShiftReader }: GlobalStatusB
           {syncLabel}
         </span>
 
+        <ThemeSwitcher className="ml-auto" />
+
         {pwaState.needRefresh && (
           <button
             type="button"
             onClick={() => setUpdateExpanded((value) => !value)}
             aria-expanded={updateExpanded}
-            className="ml-auto flex min-h-6 items-center gap-1 font-medium text-primary"
+            className="flex min-h-6 items-center gap-1 font-medium text-primary"
           >
             <RefreshCw aria-hidden="true" size={14} />
             {t('pwa.updateAvailable')}

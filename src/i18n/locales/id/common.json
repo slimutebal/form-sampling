@@ -23,7 +23,10 @@
     "date": "Tanggal",
     "shift": "Shift",
     "continue": "Lanjut",
-    "resumeNotFound": "Catatan tidak ditemukan di perangkat ini."
+    "resumeNotFound": "Catatan tidak ditemukan di perangkat ini.",
+    "selectedDate": "Tanggal catatan: {{date}}",
+    "masterDataLoading": "Memuat master data…",
+    "masterDataConfigUnavailable": "Master data belum dikonfigurasi untuk versi aplikasi ini."
     ,"eyebrow": "Platform kendali mutu"
     ,"productTitle": "Sistem Catatan Produksi & Sampling"
     ,"greeting": "Selamat pagi,"
@@ -89,7 +92,7 @@
     "form": {
       "pageTitle": "WORK SETUP",
       "title": "WORK SETUP",
-      "submit": "Lanjut"
+      "submit": "Next"
     },
     "review": {
       "title": "Registrasi Siap",
@@ -132,7 +135,16 @@
   },
   "workSetup": {
     "timeLocation": "Waktu & Lokasi",
-    "manpower": "Manpower"
+    "manpower": "Manpower",
+    "location": "Loc",
+    "schedule": "Date · Shift",
+    "dayShift": "Day Shift",
+    "nightShift": "Night Shift"
+  },
+  "setupReview": {
+    "title": "TINJAUAN SETUP KERJA",
+    "backToFleet": "Back to Fleet",
+    "finish": "Selesaikan Setup"
   },
   "manpower": {
     "title": "Atur Manpower",
@@ -141,28 +153,36 @@
     "noResults": "Tidak ada personel yang cocok.",
     "add": "+ Tambah",
     "selectedPersonnel": "Personel Terpilih",
-    "supervisors": "Pengawas",
+    "supervisors": "Shift Lead",
+    "shiftLead": "Lead",
+    "shiftLeads": "Lead",
+    "staff": "Staff",
     "crew": "Crew",
     "checker": "Checker",
+    "sampler": "Sampler",
     "checkerNamed": "Jadikan {{name}} sebagai Checker",
     "picCount": "{{count}} PIC",
-    "supervisorCount": "{{count}} Pengawas",
+    "supervisorCount": "{{count}} Lead",
+    "shiftLeadCount": "{{count}} Lead",
     "crewCount": "{{count}} Crew",
+    "complete": "Valid",
+    "incomplete": "Belum lengkap",
     "noPersonnel": "Belum ada personel yang ditambahkan.",
     "jobDesk": "Job Desk",
     "picLabel": "Penanggung Jawab",
     "remove": "Hapus",
     "removeNamed": "Hapus {{name}}",
-    "continue": "Lanjutkan",
+    "continue": "Next",
     "editTitle": "Ubah Manpower Shift",
     "save": "Simpan",
     "cancel": "Batal",
     "errors": {
       "checkerRequired": "Pilih tepat satu Checker sebelum melanjutkan.",
-      "supervisorRequired": "Minimal 1 Pengawas wajib dipilih.",
+      "supervisorRequired": "Minimal 1 Lead wajib dipilih.",
+      "shiftLeadRequired": "Tambahkan minimal 1 Lead.",
+      "crewRequired": "Tambahkan minimal 1 Crew.",
       "checkerMustBeStaff": "Checker yang dipilih harus merupakan Staff/PIC.",
       "duplicatePerson": "Personel ini sudah ditambahkan.",
-      "jobDeskRequired": "Job Desk wajib diisi.",
       "personNotFound": "Personel ini tidak ditemukan pada master Employee/Crew.",
       "storeContextInvalid": "Workspace shift aktif tidak ditemukan.",
       "generic": "Terjadi kesalahan pada setup manpower."
@@ -201,7 +221,7 @@
     "searchPileToAddPlaceholder": "Cari Pile_ID / Stockpile_Code…",
     "noPileCandidates": "Pile tidak ditemukan.",
     "noActiveFront": "Tidak ada Front aktif untuk Pile ini.",
-    "backToPiles": "Kembali ke Daftar Pile",
+    "backToPiles": "Back to Pile List",
     "errors": {
       "pileNotFound": "Pile ini bukan bagian dari workspace shift aktif.",
       "duplicatePile": "Pile ini sudah aktif pada shift ini.",
@@ -265,6 +285,7 @@
     "fleetCount": "{{count}} Fleet",
     "addFleet": "+ Fleet",
     "addFleetTitle": "TAMBAH FLEET",
+    "editFleet": "UBAH FLEET",
     "noFleets": "Belum ada Fleet terdaftar.",
     "frontCode": "Kode Front",
     "company": "Company",
@@ -309,9 +330,9 @@
     "review": "Tinjau Setup Fleet",
     "readyTitle": "Setup Fleet Siap",
     "readyDescription": "Semua front dan fleet efektif valid.",
-    "back": "Kembali",
+    "back": "Back",
     "edit": "Ubah",
-    "continue": "Lanjutkan",
+    "continue": "Next",
     "noFronts": "Belum ada front yang dikonfigurasi.",
     "errors": {
       "empty": "Tambahkan minimal satu Fleet sebelum melanjutkan.",
@@ -332,6 +353,7 @@
       "haulerMismatch": "Setiap truck efektif harus berasal dari Hauler yang dipilih.",
       "dependency": "Front ini tidak dapat dihapus karena masih menjadi acuan fleet lain.",
       "destinationNotFound": "Pile tujuan ini tidak ditemukan di master data Sektor ini.",
+      "destinationCompanyConflict": "Pile_Id sudah digunakan oleh Fleet dari Company berbeda. Pilih Pile_Id lain.",
       "destinationRequired": "Pilih Destination/Pile.",
       "excaRequired": "Masukkan nomor lambung Exca.",
       "excaInvalid": "Nomor lambung Exca harus terdiri dari 1 sampai 4 digit.",

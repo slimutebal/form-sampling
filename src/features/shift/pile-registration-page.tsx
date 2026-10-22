@@ -7,6 +7,7 @@ import { parseBatchNumber } from '@/domain/batch/batch-number'
 import { parseRitNumber } from '@/domain/batch/rit-number'
 import { deriveSampleBatchProgress } from '@/application/sample-handling/sample-batch-progress'
 import { Button } from '@/components/ui/button'
+import { CustomSelect } from '@/components/ui/custom-select'
 import type { MasterData } from '@/domain/master/master-data'
 import type { Shift } from '@/domain/shift/shift'
 import { SampleProgressSummary } from '@/features/registration/sample-progress-summary'
@@ -35,6 +36,8 @@ export function PileRegistrationPage({
   const [batch, setBatch] = useState('')
   const [rit, setRit] = useState('')
   const [status, setStatus] = useState<PileRegistrationStatus>('ACTIVE')
+  const [sampleInHouse, setSampleInHouse] = useState('')
+  const [editingRegistration, setEditingRegistration] = useState<PileRegistrationDraft>()
   const [error, setError] = useState<string>()
 
   const candidates = useMemo(() => {
@@ -84,6 +87,23 @@ export function PileRegistrationPage({
     setBatch('')
     setRit('')
     setStatus('ACTIVE')
+    setSampleInHouse('')
+    setEditingRegistration(undefined)
+    setError(undefined)
+  }
+
+  function registrationKey(row: PileRegistrationDraft): string {
+    return `${row.pileId}-${row.batch}`
+  }
+
+  function beginEdit(row: PileRegistrationDraft) {
+    setEditingRegistration(row)
+    setSelectedPileId(row.pileId as string)
+    setQuery('')
+    setBatch(String(row.batch))
+    setRit(String(row.rit))
+    setStatus(row.status)
+    setSampleInHouse(row.sampleInHouse === undefined ? '' : String(row.sampleInHouse))
     setError(undefined)
   }
 
@@ -102,35 +122,45 @@ export function PileRegistrationPage({
       setError('Trip is required and must be a positive number.')
       return
     }
-    if (registrations.some((row) => row.pileId === selectedPile.pileId && row.batch === parsedBatch.value)) {
+    if (registrations.some((row) => row !== editingRegistration && row.pileId === selectedPile.pileId && row.batch === parsedBatch.value)) {
       setError('This Pile ID and Batch are already registered.')
       return
     }
-    updateRegistrations([
-      ...registrations,
-      {
-        pileId: selectedPile.pileId,
-        oreCode: selectedPile.oreCode,
-        batch: parsedBatch.value,
-        rit: parsedRit.value,
-        status,
-      },
-    ])
+    const parsedSampleInHouse = sampleInHouse.trim() ? Number(sampleInHouse) : undefined
+    if (parsedSampleInHouse !== undefined && (!Number.isInteger(parsedSampleInHouse) || parsedSampleInHouse < 0)) {
+      setError('Sample In House must be a whole number of zero or more.')
+      return
+    }
+    if (parsedSampleInHouse !== undefined && progress && parsedSampleInHouse > progress.maximumPhysicalInHouseBags) {
+      setError(`Maximum possible In House is ${progress.maximumPhysicalInHouseBags} bags.`)
+      return
+    }
+    const next: PileRegistrationDraft = {
+      pileId: selectedPile.pileId,
+      oreCode: selectedPile.oreCode,
+      batch: parsedBatch.value,
+      rit: parsedRit.value,
+      status,
+      ...(parsedSampleInHouse === undefined ? {} : { sampleInHouse: parsedSampleInHouse }),
+    }
+    updateRegistrations(editingRegistration
+      ? registrations.map((row) => row === editingRegistration ? next : row)
+      : [...registrations, next])
     clearEntry()
   }
 
   return (
-    <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <header className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-border px-3 py-3">
         <Button type="button" variant="secondary" className="border border-emerald-700 text-emerald-800 hover:bg-emerald-50" onClick={onBack}>
           ← Back
         </Button>
-        <h1 className="min-w-0 text-center text-lg font-extrabold tracking-wide">SAMPLE SETUP</h1>
-        <Button type="button" onClick={() => onRegistrationsReady(registrations)}>Next →</Button>
+        <h1 className="type-page-title min-w-0 text-center">SAMPLE SETUP</h1>
+        <Button type="button" variant="focus" onClick={() => onRegistrationsReady(registrations)}>Next →</Button>
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-5 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         <div className="flex shrink-0 items-center justify-between gap-3">
-          <h2 className="text-base font-semibold">Registered Samples</h2>
+          <h2 className="type-section-title">Registered Samples</h2>
           <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-sm font-medium text-emerald-900">
             {registrations.length} Samples
           </span>
@@ -140,37 +170,35 @@ export function PileRegistrationPage({
           <table className="w-full text-left text-sm">
             <thead className="sticky top-0 bg-muted text-muted-foreground">
               <tr>
-                <th className="w-10 px-2 py-2" aria-label="Delete" />
+                <th className="w-16 px-2 py-2" aria-label="Actions" />
                 <th className="px-2 py-2 font-medium">Pile_ID</th>
                 <th className="px-2 py-2 font-medium">Batch</th>
                 <th className="px-2 py-2 font-medium">Trip</th>
                 <th className="px-2 py-2 font-medium">Status</th>
+                <th className="px-2 py-2 font-medium">In House</th>
               </tr>
             </thead>
             <tbody>
               {sortedRegistrations.map((row) => {
                 const inactive = row.status === 'INACTIVE'
                 return (
-                  <tr key={`${row.pileId}-${row.batch}`} className={inactive ? 'text-red-700' : 'text-emerald-700'}>
+                  <tr key={registrationKey(row)} className={inactive ? 'text-red-700' : 'text-emerald-700'}>
                     <td className="px-2 py-2 align-middle">
-                      <button
-                        type="button"
-                        aria-label={`Remove ${row.pileId} batch ${String(row.batch).padStart(3, '0')}`}
-                        className="font-semibold text-red-600"
-                        onClick={() => updateRegistrations(registrations.filter((candidate) => candidate !== row))}
-                      >
-                        x
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button type="button" aria-label={`Edit ${row.pileId} batch ${String(row.batch).padStart(3, '0')}`} className="text-primary" onClick={() => beginEdit(row)}>Edit</button>
+                        <button type="button" aria-label={`Remove ${row.pileId} batch ${String(row.batch).padStart(3, '0')}`} className="font-semibold text-red-600" onClick={() => updateRegistrations(registrations.filter((candidate) => candidate !== row))}>x</button>
+                      </div>
                     </td>
                     <td className="px-2 py-2 font-medium">{row.pileId}</td>
                     <td className="px-2 py-2">{String(row.batch).padStart(3, '0')}</td>
                     <td className="px-2 py-2">{String(row.rit).padStart(3, '0')}</td>
                     <td className="px-2 py-2">{inactive ? 'Inactive' : 'Active'}</td>
+                    <td className="px-2 py-2">{row.sampleInHouse ?? 0}</td>
                   </tr>
                 )
               })}
               {registrations.length === 0 ? (
-                <tr><td colSpan={5} className="px-2 py-5 text-center text-muted-foreground">No samples registered yet.</td></tr>
+                <tr><td colSpan={6} className="px-2 py-5 text-center text-muted-foreground">No samples registered yet.</td></tr>
               ) : null}
             </tbody>
           </table>
@@ -178,6 +206,13 @@ export function PileRegistrationPage({
 
         <div className="relative shrink-0 pt-3">
           <div className="mb-3 rounded-md border border-border bg-muted/30 px-3 py-2"><SampleProgressSummary progress={progress} /></div>
+          <section className="mb-3 rounded-md border border-border bg-background p-3">
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="setup-sample-in-house" className="type-subsection-title">Sample In House</label>
+              <input id="setup-sample-in-house" aria-label="Sample In House" inputMode="numeric" value={sampleInHouse} onChange={(event) => { setSampleInHouse(event.target.value); setError(undefined) }} placeholder="0" className="h-10 w-20 rounded-md border border-border bg-background px-2 text-right text-sm" />
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">Jumlah bag fisik yang masih berada di In House untuk Batch ini.</p>
+          </section>
           <div className="grid w-full grid-cols-[minmax(0,1.8fr)_minmax(0,.5fr)_minmax(0,.5fr)_minmax(0,1.1fr)_40px] gap-1">
           <div className="relative min-w-0">
             <label className="sr-only" htmlFor="setup-pile-search">Cari Pile/Stockpile</label>
@@ -205,8 +240,8 @@ export function PileRegistrationPage({
           </div>
           <div className="min-w-0"><label className="sr-only" htmlFor="setup-pile-batch">Batch</label><input id="setup-pile-batch" inputMode="numeric" value={batch} onChange={(event) => { setBatch(event.target.value); setError(undefined) }} placeholder="Batch" className="h-11 w-full min-w-0 rounded-md border border-border bg-background px-1 text-xs" /></div>
           <div className="min-w-0"><label className="sr-only" htmlFor="setup-pile-rit">Trip</label><input id="setup-pile-rit" inputMode="numeric" value={rit} onChange={(event) => { setRit(event.target.value); setError(undefined) }} placeholder="Trip" className="h-11 w-full min-w-0 rounded-md border border-border bg-background px-1 text-xs" /></div>
-          <div className="min-w-0"><label className="sr-only" htmlFor="setup-pile-status">Status</label><select id="setup-pile-status" value={status} onChange={(event) => { setStatus(event.target.value as PileRegistrationStatus); setError(undefined) }} className="h-11 w-full min-w-0 rounded-md border border-border bg-background px-1 text-xs"><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></div>
-          <Button type="button" aria-label="Add Sample" className="h-11 w-10 min-w-10 px-0" onClick={handleAdd}>+</Button>
+          <div className="min-w-0"><label className="sr-only" htmlFor="setup-pile-status">Status</label><CustomSelect id="setup-pile-status" ariaLabel="Status" value={status} onChange={(value) => { setStatus(value as PileRegistrationStatus); setError(undefined) }} placeholder="Status" options={[{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]} className="h-11 text-xs" /></div>
+          <Button type="button" aria-label={editingRegistration ? 'Update Sample' : 'Add Sample'} className="h-11 w-10 min-w-10 px-0" onClick={handleAdd}>{editingRegistration ? '✓' : '+'}</Button>
           </div>
           {error ? <p role="alert" className="absolute bottom-full left-0 mb-1 text-sm text-red-700">{error}</p> : null}
         </div>

@@ -1,0 +1,235 @@
+/* QPS Bottom Navigation — canonical adaptive layout.
+   Replace the previous BottomNavAdaptive.css; do not append this file.
+   Keeps original SVG shapes, route behavior, REC button and trend animations. */
+
+/* ONE set of dimensions. The pill fits its tracks, with no leftover space
+   pushed to one side. All three tabs and REC stay centered as a group. */
+.qps-bottom-nav {
+  --qps-bottom-nav-active: #008750; /* light theme: readable dark green */
+}
+
+:root[data-theme='dark'] .qps-bottom-nav,
+.dark .qps-bottom-nav {
+  --qps-bottom-nav-active: #00ff00;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .qps-bottom-nav {
+    --qps-bottom-nav-active: #00ff00;
+  }
+}
+
+.qps-bottom-nav .qps-bottom-nav__frame {
+  display: grid;
+  width: max-content;
+  max-width: calc(100vw - 1rem);
+  grid-template-columns: max-content var(--qps-nav-height);
+  gap: 0.625rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.qps-bottom-nav .qps-bottom-nav__frame > .qps-bottom-nav__tabs {
+  --qps-nav-track-compact: clamp(3.25rem, 14vw, 4.25rem);
+  --qps-nav-track-expanded: clamp(7.25rem, 27vw, 8.75rem);
+  box-sizing: border-box;
+  display: grid;
+  width: calc(
+    var(--qps-nav-track-compact) +
+    var(--qps-nav-track-compact) +
+    var(--qps-nav-track-compact) + 10px
+  );
+  min-width: 0;
+  max-width: none;
+  height: var(--qps-nav-height);
+  grid-template-columns:
+    var(--qps-nav-track-compact)
+    var(--qps-nav-track-compact)
+    var(--qps-nav-track-compact);
+  justify-content: center; /* replaces the old justify-content: end */
+  align-items: center;
+  transition:
+    width var(--qps-bottom-nav-motion),
+    grid-template-columns var(--qps-bottom-nav-motion);
+}
+
+/* Each expanded state changes which column owns the extra width. */
+.qps-bottom-nav .qps-bottom-nav__frame > .qps-bottom-nav__tabs:is(
+  .qps-bottom-nav__tabs--setup-active,
+  .qps-bottom-nav__tabs--review-active,
+  .qps-bottom-nav__tabs--report-active
+) {
+  width: calc(
+    var(--qps-nav-track-expanded) +
+    var(--qps-nav-track-compact) +
+    var(--qps-nav-track-compact) + 10px
+  );
+}
+.qps-bottom-nav .qps-bottom-nav__frame > .qps-bottom-nav__tabs--setup-active {
+  grid-template-columns:
+    var(--qps-nav-track-expanded)
+    var(--qps-nav-track-compact)
+    var(--qps-nav-track-compact);
+}
+.qps-bottom-nav .qps-bottom-nav__frame > .qps-bottom-nav__tabs--review-active {
+  grid-template-columns:
+    var(--qps-nav-track-compact)
+    var(--qps-nav-track-expanded)
+    var(--qps-nav-track-compact);
+}
+.qps-bottom-nav .qps-bottom-nav__frame > .qps-bottom-nav__tabs--report-active {
+  grid-template-columns:
+    var(--qps-nav-track-compact)
+    var(--qps-nav-track-compact)
+    var(--qps-nav-track-expanded);
+}
+
+/* The content block of every tab is centered vertically in the pill.
+   Inactive: icon above text; Active: icon left and text right. */
+.qps-bottom-nav__tabs > .qps-bottom-nav__tab {
+  position: relative;
+  display: block;
+  min-width: 0;
+  height: 2.9375rem;
+}
+
+.qps-bottom-nav__tabs > .qps-bottom-nav__tab > :is(.qps-nav-setup, .qps-nav-review, .qps-nav-report) {
+  position: absolute;
+  top: 1px;
+  left: 50%;
+  width: 24px;
+  height: 24px;
+  transform: translateX(-50%);
+  transition:
+    top var(--qps-bottom-nav-motion),
+    left var(--qps-bottom-nav-motion),
+    width var(--qps-bottom-nav-motion),
+    height var(--qps-bottom-nav-motion);
+}
+
+.qps-bottom-nav__tabs > .qps-bottom-nav__tab > .qps-bottom-nav__label {
+  position: absolute;
+  top: 29px;
+  left: 50%;
+  height: 12px;
+  line-height: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  overflow: visible;
+  color: inherit;
+  transition:
+    top var(--qps-bottom-nav-motion),
+    left var(--qps-bottom-nav-motion),
+    font-size var(--qps-bottom-nav-motion),
+    line-height var(--qps-bottom-nav-motion);
+}
+
+.qps-bottom-nav__tabs > .qps-bottom-nav__tab > .qps-bottom-nav__indicator {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  width: 32px;
+  height: 3px;
+  transform: translateX(-50%);
+  transition:
+    width var(--qps-bottom-nav-motion),
+    background-color var(--qps-bottom-nav-motion);
+}
+
+/* Active icon and text share an equal vertical center (~22px). */
+.qps-bottom-nav__tabs > .qps-bottom-nav__tab--active > :is(.qps-nav-setup, .qps-nav-review, .qps-nav-report) {
+  top: 4px;
+  left: calc(50% - 30px);
+  width: 36px;
+  height: 36px;
+}
+.qps-bottom-nav__tabs > .qps-bottom-nav__tab--active > .qps-bottom-nav__label {
+  top: 13px;
+  left: calc(50% + 23px);
+  height: 18px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 18px;
+}
+.qps-bottom-nav__tabs > .qps-bottom-nav__tab--active > .qps-bottom-nav__indicator {
+  width: min(104px, calc(100% - 12px));
+  background: var(--qps-bottom-nav-active);
+}
+
+.qps-bottom-nav__tabs > .qps-bottom-nav__tab--active {
+  color: var(--qps-bottom-nav-active);
+}
+
+/* SETUP: retain theme-contrast arrows and continuously rotating gear. */
+.qps-bottom-nav .qps-bottom-nav__tab--setup.qps-bottom-nav__tab--active {
+  color: var(--qps-bottom-nav-active);
+}
+.qps-bottom-nav .qps-bottom-nav__tab--setup.qps-bottom-nav__tab--active .qps-nav-setup__gear path {
+  fill: var(--qps-bottom-nav-active);
+}
+.qps-bottom-nav .qps-bottom-nav__tab--setup.qps-bottom-nav__tab--active .qps-nav-setup__arrows path {
+  fill: var(--foreground);
+}
+.qps-bottom-nav .qps-bottom-nav__tab--setup.qps-bottom-nav__tab--active .qps-bottom-nav__indicator {
+  background: var(--qps-bottom-nav-active);
+}
+
+/* REVIEW and REPORT: original layered SVG. */
+.qps-bottom-nav__tabs :is(.qps-nav-review, .qps-nav-report) path {
+  fill: currentColor;
+  transition: fill var(--qps-bottom-nav-motion);
+}
+.qps-bottom-nav__tab--active .qps-nav-review__loop > path,
+.qps-bottom-nav__tab--active .qps-nav-report__chart > path {
+  fill: var(--foreground);
+}
+.qps-bottom-nav__tab--active .qps-nav-review__trend > path,
+.qps-bottom-nav__tab--active .qps-nav-report__trend > path {
+  fill: var(--qps-bottom-nav-active);
+}
+
+@media (max-width: 360px) {
+  .qps-bottom-nav__tabs > .qps-bottom-nav__tab--active > :is(.qps-nav-setup, .qps-nav-review, .qps-nav-report) {
+    left: calc(50% - 27px);
+    width: 32px;
+    height: 32px;
+    top: 6px;
+  }
+  .qps-bottom-nav__tabs > .qps-bottom-nav__tab--active > .qps-bottom-nav__label {
+    left: calc(50% + 22px);
+    font-size: 14px;
+  }
+}
+
+/* Trend runs once each time React remounts its SVG. */
+@media (prefers-reduced-motion: no-preference) {
+  .qps-bottom-nav__tab--active :is(.qps-nav-review__trend, .qps-nav-report__trend) {
+    transform-box: fill-box;
+    animation: qps-nav-trend-reveal 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+@keyframes qps-nav-trend-reveal {
+  0% {
+    clip-path: inset(0 100% 0 0);
+    opacity: 0.5;
+    transform: translate(-3px, 3px);
+  }
+  82% {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+    transform: translate(1px, -1px);
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qps-bottom-nav__tabs,
+  .qps-bottom-nav__tabs > .qps-bottom-nav__tab > :is(.qps-nav-setup, .qps-nav-review, .qps-nav-report, .qps-bottom-nav__label, .qps-bottom-nav__indicator),
+  .qps-bottom-nav__tabs :is(.qps-nav-review, .qps-nav-report) path {
+    transition: none;
+  }
+}

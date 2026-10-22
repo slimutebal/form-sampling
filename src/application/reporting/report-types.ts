@@ -30,6 +30,7 @@ export interface ManpowerAssignment {
   readonly personId: string
   readonly name: string
   readonly jobDeskCode: string
+  readonly isPic?: boolean
 }
 
 export interface ReportHeader {
@@ -124,6 +125,8 @@ export interface HaulageDetailRow {
   readonly truckStatusLabel: string
   readonly frontId: FrontId
   readonly fleetId: FleetId
+  /** Immutable full business ID when identity is persisted or deterministically resolvable. */
+  readonly fleetCode?: string
   readonly wrongTruckReasons: readonly WrongTruckReasonCode[]
   readonly wrongTruckReasonLabels: readonly string[]
 }

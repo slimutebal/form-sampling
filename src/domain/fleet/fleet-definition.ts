@@ -1,6 +1,19 @@
 import type { DomainError, Result } from '../common/result'
 import { err, ok } from '../common/result'
 import type { FleetId, FrontId, TruckId } from '../common/identifiers'
+import type { FleetAssignmentIdentity } from './fleet-assignment-identity'
+
+/** Immutable audit entry for an operational Exca reassignment. */
+export interface FleetExcaConfigurationRevision {
+  readonly revisionId: string
+  readonly fleetAssignmentId: FleetId
+  readonly previousExcaCode?: string
+  readonly excaCode: string
+  readonly effectiveAt: Date
+  readonly recordedAt: Date
+  readonly actorId?: string
+  readonly reason?: string
+}
 
 /**
  * A fleet definition is either a BASE fleet (an explicit truck list) or
@@ -20,6 +33,9 @@ export interface BaseFleetDefinition {
   readonly fleetId: FleetId
   readonly frontId: FrontId
   readonly truckIds: readonly TruckId[]
+  /** Present for assignments registered after identity persistence was introduced. */
+  readonly assignmentIdentity?: FleetAssignmentIdentity
+  readonly excaConfigurationHistory?: readonly FleetExcaConfigurationRevision[]
 }
 
 export interface DerivedFleetDefinition {
@@ -29,6 +45,9 @@ export interface DerivedFleetDefinition {
   readonly referenceFleetId: FleetId
   readonly addedTruckIds: readonly TruckId[]
   readonly removedTruckIds: readonly TruckId[]
+  /** Present for assignments registered after identity persistence was introduced. */
+  readonly assignmentIdentity?: FleetAssignmentIdentity
+  readonly excaConfigurationHistory?: readonly FleetExcaConfigurationRevision[]
 }
 
 /** Finds the first TruckId that appears more than once, or undefined. */
@@ -111,6 +130,8 @@ export function cloneFleetDefinition(fleet: FleetDefinition): FleetDefinition {
       fleetId: fleet.fleetId,
       frontId: fleet.frontId,
       truckIds: [...fleet.truckIds],
+      ...(fleet.assignmentIdentity ? { assignmentIdentity: { ...fleet.assignmentIdentity } } : {}),
+      ...(fleet.excaConfigurationHistory ? { excaConfigurationHistory: fleet.excaConfigurationHistory.map((revision) => ({ ...revision })) } : {}),
     }
   }
   return {
@@ -120,6 +141,8 @@ export function cloneFleetDefinition(fleet: FleetDefinition): FleetDefinition {
     referenceFleetId: fleet.referenceFleetId,
     addedTruckIds: [...fleet.addedTruckIds],
     removedTruckIds: [...fleet.removedTruckIds],
+    ...(fleet.assignmentIdentity ? { assignmentIdentity: { ...fleet.assignmentIdentity } } : {}),
+    ...(fleet.excaConfigurationHistory ? { excaConfigurationHistory: fleet.excaConfigurationHistory.map((revision) => ({ ...revision })) } : {}),
   }
 }
 
@@ -127,6 +150,8 @@ export interface CreateBaseFleetDefinitionParams {
   readonly fleetId: FleetId
   readonly frontId: FrontId
   readonly truckIds: readonly TruckId[]
+  readonly assignmentIdentity?: FleetAssignmentIdentity
+  readonly excaConfigurationHistory?: readonly FleetExcaConfigurationRevision[]
 }
 
 /**
@@ -141,6 +166,8 @@ export function createBaseFleetDefinition(params: CreateBaseFleetDefinitionParam
     fleetId: params.fleetId,
     frontId: params.frontId,
     truckIds: [...params.truckIds],
+    ...(params.assignmentIdentity ? { assignmentIdentity: { ...params.assignmentIdentity } } : {}),
+    ...(params.excaConfigurationHistory ? { excaConfigurationHistory: params.excaConfigurationHistory.map((revision) => ({ ...revision })) } : {}),
   }
   const validated = validateFleetDefinitionTruckLists(candidate)
   if (!validated.ok) {
@@ -155,6 +182,8 @@ export interface CreateDerivedFleetDefinitionParams {
   readonly referenceFleetId: FleetId
   readonly addedTruckIds: readonly TruckId[]
   readonly removedTruckIds: readonly TruckId[]
+  readonly assignmentIdentity?: FleetAssignmentIdentity
+  readonly excaConfigurationHistory?: readonly FleetExcaConfigurationRevision[]
 }
 
 /**
@@ -173,6 +202,8 @@ export function createDerivedFleetDefinition(
     referenceFleetId: params.referenceFleetId,
     addedTruckIds: [...params.addedTruckIds],
     removedTruckIds: [...params.removedTruckIds],
+    ...(params.assignmentIdentity ? { assignmentIdentity: { ...params.assignmentIdentity } } : {}),
+    ...(params.excaConfigurationHistory ? { excaConfigurationHistory: params.excaConfigurationHistory.map((revision) => ({ ...revision })) } : {}),
   }
   const validated = validateFleetDefinitionTruckLists(candidate)
   if (!validated.ok) {

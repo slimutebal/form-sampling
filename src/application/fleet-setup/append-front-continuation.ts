@@ -1,5 +1,6 @@
 import { parseTruckIds } from '@/application/fleet-setup/create-fleet-setup-from-draft'
-import { parseFleetId, parseFrontId, parsePileId } from '@/domain/common/identifiers'
+import { fleetNumberSuggestion } from '@/application/fleet-setup/fleet-editor-rules'
+import { parseFleetId, parseFrontId, parsePileId, type PileId } from '@/domain/common/identifiers'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err, ok } from '@/domain/common/result'
 import { createDerivedFleetDefinition, type FleetDefinition } from '@/domain/fleet/fleet-definition'
@@ -8,12 +9,16 @@ import { createFleetSetup, type FleetSetup } from '@/domain/fleet/fleet-setup'
 import {
   createFrontDefinition,
   createFrontId,
+  destinationPileIdsForFront,
   frontNumberFromFrontId,
   nextFrontNumber,
   type FrontDefinition,
 } from '@/domain/fleet/front'
 import { deriveFrontLineage } from '@/domain/fleet/front-lineage'
+import { parseExcaCode } from '@/domain/fleet/exca-code'
+import type { FleetAssignmentIdentity } from '@/domain/fleet/fleet-assignment-identity'
 import { findPileArea, type MasterData } from '@/domain/master/master-data'
+import { validateFleetDestinationMaterials } from '@/domain/fleet/fleet-destination-material'
 
 export interface AppendFrontContinuationParams {
   readonly fleetSetup: FleetSetup
@@ -24,9 +29,15 @@ export interface AppendFrontContinuationParams {
   readonly frontNumber?: number
   /** Blank/omitted inherits the reference Front's current destination. */
   readonly destinationPileId?: string
+  /** All selected destinations; omission inherits the referenced Front's set. */
+  readonly destinationPileIds?: readonly string[]
+  /** Explicit Exca selected by the operator. Omitted only for legacy-compatible active records. */
+  readonly excaCode?: string
   readonly addedTruckIds: readonly string[]
   readonly removedTruckIds: readonly string[]
   readonly fleetId: string
+  /** Immutable assignment snapshot from the originating Shift workspace. */
+  readonly assignmentIdentity?: FleetAssignmentIdentity
 }
 
 export interface AppendFrontContinuationResult {
@@ -90,34 +101,56 @@ export function appendFrontContinuation(
     const existingNumbers = params.fleetSetup.fronts
       .filter((front) => front.sectorCode === referenceFront.sectorCode)
       .map((front) => frontNumberFromFrontId(front.frontId))
-    const nextNumber = nextFrontNumber(existingNumbers)
-    if (!nextNumber.ok) return nextNumber
-    frontNumber = nextNumber.value
+    const suggested = fleetNumberSuggestion(referenceFront.sectorCode, existingNumbers)
+    if (suggested.exhausted) {
+      const next = nextFrontNumber(existingNumbers)
+      if (!next.ok) return err(next.error)
+      return err({
+        code: 'FRONT_NUMBER_LIMIT_REACHED',
+        message: `Front number limit has already been reached for Sector ${referenceFront.sectorCode}`,
+      })
+    }
+    frontNumber = Number(suggested.suggested.split('/')[1])
   }
 
   const newFrontId = createFrontId(referenceFront.sectorCode, frontNumber)
   if (!newFrontId.ok) return newFrontId
 
-  const trimmedDestination = params.destinationPileId?.trim()
-  let destinationPileId = referenceFront.destinationPileId
-  if (trimmedDestination) {
-    const parsedPileId = parsePileId(trimmedDestination)
+  const requestedDestinations = params.destinationPileIds?.length
+    ? params.destinationPileIds
+    : params.destinationPileId?.trim() ? [params.destinationPileId] : destinationPileIdsForFront(referenceFront)
+  if (new Set(requestedDestinations.map((destination) => destination.trim())).size !== requestedDestinations.length) {
+    return err({ code: 'FLEET_DESTINATION_DUPLICATE', message: 'A Fleet cannot contain the same destination Pile more than once' })
+  }
+  // Keep construction mutable, then pass the completed collection to the
+  // readonly domain contract without changing its primary-destination order.
+  const destinationPileIds: PileId[] = []
+  for (const destination of [...new Set(requestedDestinations.map((value) => value.trim()))]) {
+    const parsedPileId = parsePileId(destination)
     if (!parsedPileId.ok) return parsedPileId
     const pileArea = findPileArea(params.masterData, parsedPileId.value)
     if (!pileArea) {
       return err({
         code: 'FLEET_DESTINATION_PILE_NOT_FOUND',
-        message: `Destination Pile_ID ${trimmedDestination} was not found in this Sector's master`,
+        message: `Destination Pile_ID ${destination} was not found in this Sector's master`,
       })
     }
-    destinationPileId = pileArea.pileId
+    destinationPileIds.push(pileArea.pileId)
   }
+  const materialValidation = validateFleetDestinationMaterials(params.masterData, destinationPileIds.map(String))
+  if (!materialValidation.ok) return materialValidation
+
+  const excaCode = params.excaCode === undefined ? undefined : parseExcaCode(params.excaCode)
+  if (excaCode && !excaCode.ok) return excaCode
+  const resolvedExcaCode = excaCode?.ok ? excaCode.value : undefined
 
   const newFront = createFrontDefinition(
     newFrontId.value,
     referenceFront.sectorCode,
     referenceFront.haulerCode,
-    destinationPileId,
+    destinationPileIds[0],
+    resolvedExcaCode,
+    destinationPileIds,
   )
 
   const addedTruckIds = parseTruckIds(params.addedTruckIds)
@@ -131,6 +164,7 @@ export function appendFrontContinuation(
     referenceFleetId: referenceFleet.fleetId,
     addedTruckIds: addedTruckIds.value,
     removedTruckIds: removedTruckIds.value,
+    assignmentIdentity: params.assignmentIdentity,
   })
   if (!newFleet.ok) return newFleet
 
@@ -138,6 +172,7 @@ export function appendFrontContinuation(
     {
       fronts: [...params.fleetSetup.fronts, newFront],
       fleets: [...params.fleetSetup.fleets, newFleet.value],
+      ...(params.fleetSetup.operationalState ? { operationalState: params.fleetSetup.operationalState } : {}),
     },
     params.masterData,
   )

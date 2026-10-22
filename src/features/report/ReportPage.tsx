@@ -131,11 +131,14 @@ export function ReportPage() {
           productionRecords: phase.productionRecords,
           samplePositions: phase.samplePositions,
           masterData: workspace.masterData,
+          fleetSetup: workspace.fleetSetup,
           manpowerAssignments: workspace.manpower.map((assignment) => ({
             personId: assignment.personId,
             name: assignment.name,
             jobDeskCode: assignment.jobDeskCode,
+            isPic: assignment.isPic,
           })),
+          checkerPersonId: workspace.checkerPersonId,
         }),
       ] as const,
   )

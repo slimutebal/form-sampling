@@ -6,7 +6,9 @@ import {
   operationalFleetOptionForFront,
   operationalFleetOptions,
   operationalFleetOptionsForDestinationPile,
+  operationalFleetOptionsForDestinationPileTruck,
   operationalFleetOptionsForPile,
+  operationalTruckOptionsForDestinationPile,
 } from './operational-fleet-options'
 import {
   buildFixtureFleetSetup,
@@ -14,9 +16,11 @@ import {
   fixtureFleetId,
   fixtureFrontId,
   fixturePileId,
+  fixtureTruckId,
   FIXTURE_FLEET_ID,
   FIXTURE_FRONT_ID,
   FIXTURE_IN_FLEET_TRUCK_ID,
+  FIXTURE_WRONG_TRUCK_TRUCK_ID,
 } from '@/test/fixtures/haulage-operation-test-fixtures'
 import { parseHaulerCode } from '@/domain/master/master-codes'
 import type { MasterData } from '@/domain/master/master-data'
@@ -49,6 +53,20 @@ function buildScopedFleetSetup(masterData: MasterData): FleetSetup {
   )
   const fleet3 = must(createBaseFleetDefinition({ fleetId: fixtureFleetId('FLEET-3'), frontId: front3.frontId, truckIds: [] }))
 
+  return must(createFleetSetup({ fronts: [front1, front2, front3], fleets: [fleet1, fleet2, fleet3] }, masterData))
+}
+
+function buildTruckFirstFleetSetup(masterData: MasterData): FleetSetup {
+  const sector = masterData.sectors[0]!.code
+  const hauler = must(parseHaulerCode('H1'))
+  const destination = fixturePileId('DEST-A')
+  const otherDestination = fixturePileId('DEST-B')
+  const front1 = createFrontDefinition(fixtureFrontId('F1'), sector, hauler, destination)
+  const front2 = createFrontDefinition(fixtureFrontId('F2'), sector, hauler, destination)
+  const front3 = createFrontDefinition(fixtureFrontId('F3'), sector, hauler, otherDestination)
+  const fleet1 = must(createBaseFleetDefinition({ fleetId: fixtureFleetId('FLEET-1'), frontId: front1.frontId, truckIds: [fixtureTruckId(FIXTURE_IN_FLEET_TRUCK_ID)] }))
+  const fleet2 = must(createBaseFleetDefinition({ fleetId: fixtureFleetId('FLEET-2'), frontId: front2.frontId, truckIds: [fixtureTruckId(FIXTURE_IN_FLEET_TRUCK_ID), fixtureTruckId(FIXTURE_WRONG_TRUCK_TRUCK_ID)] }))
+  const fleet3 = must(createBaseFleetDefinition({ fleetId: fixtureFleetId('FLEET-3'), frontId: front3.frontId, truckIds: [fixtureTruckId(FIXTURE_WRONG_TRUCK_TRUCK_ID)] }))
   return must(createFleetSetup({ fronts: [front1, front2, front3], fleets: [fleet1, fleet2, fleet3] }, masterData))
 }
 
@@ -159,6 +177,45 @@ describe('operationalFleetOptionsForDestinationPile', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.value).toEqual([])
+  })
+
+  it('offers an active Fleet at each of its selected destinations', () => {
+    const masterData = buildFixtureMasterData()
+    const sector = masterData.sectors[0]!.code
+    const hauler = must(parseHaulerCode('H1'))
+    const front = createFrontDefinition(
+      fixtureFrontId('F1'),
+      sector,
+      hauler,
+      fixturePileId('DEST-A'),
+      undefined,
+      [fixturePileId('DEST-A'), fixturePileId('DEST-B')],
+    )
+    const fleet = must(createBaseFleetDefinition({ fleetId: fixtureFleetId('FLEET-1'), frontId: front.frontId, truckIds: [] }))
+    const setup = must(createFleetSetup({ fronts: [front], fleets: [fleet] }, masterData))
+
+    expect(operationalFleetOptionsForDestinationPile(masterData, setup, fixturePileId('DEST-A'))).toMatchObject({ ok: true, value: [{ fleetId: 'FLEET-1' }] })
+    expect(operationalFleetOptionsForDestinationPile(masterData, setup, fixturePileId('DEST-B'))).toMatchObject({ ok: true, value: [{ fleetId: 'FLEET-1' }] })
+  })
+})
+
+describe('truck-first destination options', () => {
+  it('deduplicates Trucks shared by active Fleets on the selected Pile and excludes another Pile', () => {
+    const masterData = buildFixtureMasterData()
+    const setup = buildTruckFirstFleetSetup(masterData)
+    const result = operationalTruckOptionsForDestinationPile(masterData, setup, fixturePileId('DEST-A'))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.map(String)).toEqual([FIXTURE_IN_FLEET_TRUCK_ID, FIXTURE_WRONG_TRUCK_TRUCK_ID])
+  })
+
+  it('keeps every eligible Fleet for a shared Truck instead of choosing one arbitrarily', () => {
+    const masterData = buildFixtureMasterData()
+    const setup = buildTruckFirstFleetSetup(masterData)
+    const result = operationalFleetOptionsForDestinationPileTruck(masterData, setup, fixturePileId('DEST-A'), FIXTURE_IN_FLEET_TRUCK_ID)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.map((option) => String(option.fleetId))).toEqual(['FLEET-1', 'FLEET-2'])
   })
 })
 

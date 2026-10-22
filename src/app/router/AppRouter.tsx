@@ -20,6 +20,7 @@ import { RegistrationPage } from '@/features/registration/RegistrationPage'
 import { ReportPage } from '@/features/report/ReportPage'
 import { SamplesPage } from '@/features/samples/SamplesPage'
 import { StartPage } from '@/features/shift/StartPage'
+import { WorkspaceBackupPage } from '@/features/workspace-backup/WorkspaceBackupPage'
 
 /**
  * `/piles/:pileId` (the old per-Pile haulage checker, Phase 18) is
@@ -54,6 +55,7 @@ export function AppRouter() {
       <MasterDataRefreshLifecycle />
       <Routes>
       <Route path="/" element={<WelcomePage />} />
+      <Route path="/workspace-backup" element={<WorkspaceBackupPage />} />
       <Route
         path="/start/*"
         element={

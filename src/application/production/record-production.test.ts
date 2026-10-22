@@ -13,9 +13,9 @@ import {
 } from '@/test/fixtures/haulage-operation-test-fixtures'
 
 const masterData = buildFixtureMasterData()
-const fleetSetup = buildFixtureFleetSetup(masterData)
-const shift = buildFixtureShift('SHIFT-1')
 const pile = buildFixtureSapPile('PILE-1')
+const fleetSetup = buildFixtureFleetSetup(masterData, pile.id)
+const shift = buildFixtureShift('SHIFT-1')
 const createdBy = fixtureEmployeeId('12345')
 const createdAt = new Date('2026-09-04T10:00:00.000Z')
 
@@ -73,16 +73,11 @@ describe('recordProduction', () => {
     expect(result.value.transaction.samplingEvaluation).toEqual({ sampleRequired: true, incrementNumber: 1 })
   })
 
-  it('still classifies a known truck outside the effective fleet as WRONG_TRUCK, never blocking the save', () => {
+  it('rejects a known Truck that is not assigned to an active Fleet serving this Pile', () => {
     const result = recordProduction({ ...baseParams(), selectedTruckId: FIXTURE_WRONG_TRUCK_TRUCK_ID })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.value.transaction.truckValidation).toEqual({
-      status: 'WRONG_TRUCK',
-      fleetId: FIXTURE_FLEET_ID,
-      truckId: FIXTURE_WRONG_TRUCK_TRUCK_ID,
-      reasons: ['NOT_IN_EFFECTIVE_FLEET'],
-    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('FLEET_TRUCK_NOT_AVAILABLE_FOR_PILE')
   })
 
   it('propagates a recordHaulage domain error (e.g. unknown truck) without building a ProductionRecord', () => {
@@ -98,5 +93,22 @@ describe('recordProduction', () => {
     if (!result.ok) return
     expect(result.value.productionRecord.effective.disposition).toBe('REJECT')
     expect(result.value.productionRecord.effective.status).toBe('ACTIVE')
+  })
+
+  it('stores no observation values for a non-INCR ACCEPT record', () => {
+    const result = recordProduction({ ...baseParams(), physicalCondition: null, contamination: null })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.productionRecord.effective.physicalCondition).toBeNull()
+    expect(result.value.productionRecord.effective.contamination).toBeNull()
+  })
+
+  it('requires observations for an INCR or REJECT record', () => {
+    const sampled = recordProduction({ ...baseParams(), nextPosition: fixturePosition(1, 2), physicalCondition: null, contamination: null })
+    expect(sampled.ok).toBe(false)
+    if (!sampled.ok) expect(sampled.error.code).toBe('PRODUCTION_OBSERVATIONS_REQUIRED')
+    const rejected = recordProduction({ ...baseParams(), disposition: 'REJECT', physicalCondition: null, contamination: null })
+    expect(rejected.ok).toBe(false)
+    if (!rejected.ok) expect(rejected.error.code).toBe('PRODUCTION_OBSERVATIONS_REQUIRED')
   })
 })

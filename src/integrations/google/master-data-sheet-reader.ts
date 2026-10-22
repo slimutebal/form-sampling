@@ -62,45 +62,18 @@ export interface RawMasterDataRanges {
   readonly oreSamplingConfigs: GoogleRows
 }
 
-/**
- * A header/row failure with its location kept as structured fields, so
- * diagnostics never need to read `message` (which can echo a cell value).
- * `code`/`message` are unchanged; `createMasterData` failures carry none
- * of these fields — their own code already names the rule that failed.
- */
-export interface MasterDataValidationError extends DomainError {
-  readonly table?: string
-  readonly rowNumber?: number
-  readonly causeCode?: string
-}
-
-function rowError(sheetLabel: string, rowIndex: number, cause: DomainError): MasterDataValidationError {
+function rowError(sheetLabel: string, rowIndex: number, cause: DomainError): DomainError {
   return {
     code: 'GOOGLE_MASTER_ROW_INVALID',
     message: `${sheetLabel} row ${rowIndex + 2}: ${cause.code} (${cause.message})`,
-    table: sheetLabel,
-    rowNumber: rowIndex + 2,
-    causeCode: cause.code,
   }
 }
 
-function requiredCellsMissing(sheetLabel: string, rowIndex: number): MasterDataValidationError {
+function requiredCellsMissing(sheetLabel: string, rowIndex: number): DomainError {
   return {
     code: 'GOOGLE_MASTER_ROW_INVALID',
     message: `${sheetLabel} row ${rowIndex + 2}: every required column must be populated`,
-    table: sheetLabel,
-    rowNumber: rowIndex + 2,
-    causeCode: 'GOOGLE_MASTER_REQUIRED_CELL_MISSING',
   }
-}
-
-function requireMasterHeaderRow(
-  values: GoogleRows,
-  expectedHeaders: readonly string[],
-  sheetLabel: string,
-): Result<GoogleRows, MasterDataValidationError> {
-  const header = requireExactHeaderRow(values, expectedHeaders, sheetLabel)
-  return header.ok ? header : { ok: false, error: { ...header.error, table: sheetLabel } }
 }
 
 /** Reads a Google Sheets `UNFORMATTED_VALUE` numeric cell — never coerces a string into a number (rule §4/§6). */
@@ -125,12 +98,10 @@ function parseEmployeeRows(dataRows: GoogleRows): Result<readonly EmployeeRefere
   const employees: EmployeeReference[] = []
   for (let index = 0; index < dataRows.length; index++) {
     const row = dataRows[index]
-    // Employees!A:D is Employee_ID | Name | Initial | Level. Initial (C) is part of the
-    // Google contract but has no domain field yet, so it is read only to keep the column
-    // positions honest — it is never stored as Level.
     if (isRowBlank(row, 4)) continue
     const idText = cellText(row[0])
     const name = cellText(row[1])
+    // Employees.Initial is source-only; EmployeeReference preserves Level from column D.
     const level = cellText(row[3])
     if (idText.length === 0 || name.length === 0) {
       return { ok: false, error: requiredCellsMissing('Employees', index) }
@@ -283,22 +254,22 @@ function parseOreSamplingConfigRows(dataRows: GoogleRows): Result<readonly OreSa
  * (Phase 16 §2E: no such Google sheet exists).
  */
 export function parseMasterDataFromRanges(ranges: RawMasterDataRanges): Result<MasterData, DomainError> {
-  const employeesHeader = requireMasterHeaderRow(ranges.employees, GOOGLE_MASTER_HEADERS.employees, 'Employees')
+  const employeesHeader = requireExactHeaderRow(ranges.employees, GOOGLE_MASTER_HEADERS.employees, 'Employees')
   if (!employeesHeader.ok) return employeesHeader
   const employees = parseEmployeeRows(employeesHeader.value)
   if (!employees.ok) return employees
 
-  const crewsHeader = requireMasterHeaderRow(ranges.crews, GOOGLE_MASTER_HEADERS.crews, 'Crews')
+  const crewsHeader = requireExactHeaderRow(ranges.crews, GOOGLE_MASTER_HEADERS.crews, 'Crews')
   if (!crewsHeader.ok) return crewsHeader
   const crews = parseCrewRows(crewsHeader.value)
   if (!crews.ok) return crews
 
-  const sectorsHeader = requireMasterHeaderRow(ranges.sectors, GOOGLE_MASTER_HEADERS.sectors, 'Sectors')
+  const sectorsHeader = requireExactHeaderRow(ranges.sectors, GOOGLE_MASTER_HEADERS.sectors, 'Sectors')
   if (!sectorsHeader.ok) return sectorsHeader
   const sectors = parseSectorRows(sectorsHeader.value)
   if (!sectors.ok) return sectors
 
-  const samplingHousesHeader = requireMasterHeaderRow(
+  const samplingHousesHeader = requireExactHeaderRow(
     ranges.samplingHouses,
     GOOGLE_MASTER_HEADERS.samplingHouses,
     'Sampling_Houses',
@@ -307,22 +278,22 @@ export function parseMasterDataFromRanges(ranges: RawMasterDataRanges): Result<M
   const samplingHouses = parseSamplingHouseRows(samplingHousesHeader.value)
   if (!samplingHouses.ok) return samplingHouses
 
-  const pileAreasHeader = requireMasterHeaderRow(ranges.pileAreas, GOOGLE_MASTER_HEADERS.pileAreas, 'Pile_Areas')
+  const pileAreasHeader = requireExactHeaderRow(ranges.pileAreas, GOOGLE_MASTER_HEADERS.pileAreas, 'Pile_Areas')
   if (!pileAreasHeader.ok) return pileAreasHeader
   const pileAreas = parsePileAreaRows(pileAreasHeader.value)
   if (!pileAreas.ok) return pileAreas
 
-  const haulersHeader = requireMasterHeaderRow(ranges.haulers, GOOGLE_MASTER_HEADERS.haulers, 'Haulers')
+  const haulersHeader = requireExactHeaderRow(ranges.haulers, GOOGLE_MASTER_HEADERS.haulers, 'Haulers')
   if (!haulersHeader.ok) return haulersHeader
   const haulers = parseHaulerRows(haulersHeader.value)
   if (!haulers.ok) return haulers
 
-  const trucksHeader = requireMasterHeaderRow(ranges.trucks, GOOGLE_MASTER_HEADERS.trucks, 'Trucks')
+  const trucksHeader = requireExactHeaderRow(ranges.trucks, GOOGLE_MASTER_HEADERS.trucks, 'Trucks')
   if (!trucksHeader.ok) return trucksHeader
   const trucks = parseTruckRows(trucksHeader.value)
   if (!trucks.ok) return trucks
 
-  const oreSamplingConfigsHeader = requireMasterHeaderRow(
+  const oreSamplingConfigsHeader = requireExactHeaderRow(
     ranges.oreSamplingConfigs,
     GOOGLE_MASTER_HEADERS.oreSamplingConfigs,
     'Ore_Sampling_Config',

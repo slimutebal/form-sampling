@@ -5,7 +5,10 @@ import type { FleetId, FrontId } from '../common/identifiers'
 import type { MasterData } from '../master/master-data'
 import type { FrontDefinition } from './front'
 import { cloneFleetDefinition, validateFleetDefinitionTruckLists, type FleetDefinition } from './fleet-definition'
-import { findFrontReferenceBranching } from './front-lineage'
+import { deriveFrontLineage, findFrontReferenceBranching } from './front-lineage'
+import { destinationPileIdsForFront } from './front'
+import { validateFleetAssignmentIdentity } from './fleet-assignment-identity'
+import type { FleetOperationalState } from './fleet-operational-state'
 
 /**
  * Raw shape of a Front/Fleet catalog. Any caller can construct this
@@ -17,6 +20,8 @@ import { findFrontReferenceBranching } from './front-lineage'
 export interface FleetSetupInput {
   readonly fronts: readonly FrontDefinition[]
   readonly fleets: readonly FleetDefinition[]
+  /** Absent on legacy workspaces; see `deriveFrontLineage` compatibility path. */
+  readonly operationalState?: FleetOperationalState
 }
 
 /**
@@ -76,6 +81,61 @@ function findFleetReferenceCycle(fleets: readonly FleetDefinition[]): FleetId | 
       visited.add(current.fleetId)
       current = byId.get(current.referenceFleetId)
     }
+  }
+  return undefined
+}
+
+/**
+ * A destination Pile may be worked by more than one active Fleet, but all
+ * of those Fleets must be from the same Company. Historical Fronts are
+ * deliberately excluded: their former assignments remain part of the
+ * immutable lineage, not an active claim on the Pile.
+ */
+function findActivePileCompanyConflict(input: FleetSetupInput): {
+  readonly pileId: string
+  readonly existingCompany: string
+  readonly conflictingCompany: string
+} | undefined {
+  const activeFrontIds = new Set(deriveFrontLineage(input).activeFrontIds)
+  const frontById = new Map(input.fronts.map((front) => [front.frontId, front]))
+  const companyByPileId = new Map<string, string>()
+
+  for (const fleet of input.fleets) {
+    if (!activeFrontIds.has(fleet.frontId)) continue
+    const front = frontById.get(fleet.frontId)
+    // Missing Fronts are reported by the referential validation below. Do not
+    // dereference one here, so the rest of the setup can still be validated.
+    if (!front) continue
+    for (const destinationPileId of destinationPileIdsForFront(front)) {
+      const pileId = destinationPileId as string
+      const existingCompany = companyByPileId.get(pileId)
+      if (existingCompany !== undefined && existingCompany !== front.haulerCode) {
+        return { pileId, existingCompany, conflictingCompany: front.haulerCode }
+      }
+      companyByPileId.set(pileId, front.haulerCode)
+    }
+  }
+  return undefined
+}
+
+/** An Exca is an operating unit and cannot be effective on two active Fleets. */
+function findActiveExcaConflict(input: FleetSetupInput): {
+  readonly excaCode: string
+  readonly existingFleetId: string
+  readonly conflictingFleetId: string
+} | undefined {
+  const activeFrontIds = new Set(deriveFrontLineage(input).activeFrontIds)
+  const frontById = new Map(input.fronts.map((front) => [front.frontId, front]))
+  const fleetByExca = new Map<string, string>()
+  for (const fleet of input.fleets) {
+    if (!activeFrontIds.has(fleet.frontId)) continue
+    const excaCode = frontById.get(fleet.frontId)?.excaCode
+    if (!excaCode) continue
+    const existingFleetId = fleetByExca.get(excaCode)
+    if (existingFleetId && existingFleetId !== fleet.fleetId) {
+      return { excaCode, existingFleetId, conflictingFleetId: fleet.fleetId }
+    }
+    fleetByExca.set(excaCode, fleet.fleetId)
   }
   return undefined
 }
@@ -149,6 +209,32 @@ export function createFleetSetup(input: FleetSetupInput, masterData: MasterData)
     }
   }
 
+  // New assignments carry an immutable Shift snapshot. Legacy fleets may
+  // legitimately have no snapshot, so they remain readable without a
+  // synthetic code. Within a setup a business code is unique by contract.
+  const frontById = new Map(input.fronts.map((front) => [front.frontId, front]))
+  const identityCodes = new Set<string>()
+  for (const fleet of input.fleets) {
+    const identity = fleet.assignmentIdentity
+    if (!identity) continue
+    const validIdentity = validateFleetAssignmentIdentity(identity)
+    if (!validIdentity.ok) return validIdentity
+    const front = frontById.get(fleet.frontId)
+    if (!front || identity.fleetAssignmentId !== fleet.fleetId || identity.frontId !== fleet.frontId || identity.company !== front.haulerCode || identity.sectorCode !== front.sectorCode) {
+      return err<DomainError>({
+        code: 'FLEET_IDENTITY_ASSIGNMENT_MISMATCH',
+        message: `Fleet identity for ${fleet.fleetId} does not match its Fleet or Front snapshot`,
+      })
+    }
+    if (identityCodes.has(identity.fleetCode)) {
+      return err<DomainError>({
+        code: 'DUPLICATE_FLEET_CODE',
+        message: `Duplicate Fleet business code in workspace: ${identity.fleetCode}`,
+      })
+    }
+    identityCodes.add(identity.fleetCode)
+  }
+
   const cyclicFleetId = findFleetReferenceCycle(input.fleets)
   if (cyclicFleetId !== undefined) {
     return err<DomainError>({
@@ -165,9 +251,35 @@ export function createFleetSetup(input: FleetSetupInput, masterData: MasterData)
     })
   }
 
+  const pileCompanyConflict = findActivePileCompanyConflict(input)
+  if (pileCompanyConflict !== undefined) {
+    return err<DomainError>({
+      code: 'PILE_ASSIGNED_TO_DIFFERENT_COMPANY',
+      message: `Pile ${pileCompanyConflict.pileId} is already assigned to active Fleet(s) from Company ${pileCompanyConflict.existingCompany}; ${pileCompanyConflict.conflictingCompany} cannot share it`,
+    })
+  }
+
+  const excaConflict = findActiveExcaConflict(input)
+  if (excaConflict !== undefined) {
+    return err<DomainError>({
+      code: 'EXCA_ASSIGNED_TO_ACTIVE_FLEET',
+      message: `Exca ${excaConflict.excaCode} is already effective on active Fleet ${excaConflict.existingFleetId}; Fleet ${excaConflict.conflictingFleetId} cannot use it concurrently`,
+    })
+  }
+
   const snapshot: FleetSetupInput = {
-    fronts: [...input.fronts],
+    fronts: input.fronts.map((front) => ({
+      ...front,
+      ...(front.destinationPileIds ? { destinationPileIds: [...front.destinationPileIds] } : {}),
+    })),
     fleets: input.fleets.map(cloneFleetDefinition),
+    ...(input.operationalState ? {
+      operationalState: {
+        activationEvents: input.operationalState.activationEvents.map((event) => ({ ...event })),
+        configurationRevisions: input.operationalState.configurationRevisions.map((revision) => ({ ...revision, truckIds: [...revision.truckIds], destinationPileIds: [...revision.destinationPileIds] })),
+        formationTransferEvents: input.operationalState.formationTransferEvents.map((event) => ({ ...event })),
+      },
+    } : {}),
   }
   return ok(snapshot as FleetSetup)
 }

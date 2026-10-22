@@ -1,0 +1,169 @@
+
+/* =========================================
+   NAV SETUP — BASE
+   ========================================= */
+
+.qps-nav-setup {
+  display: block;
+  width: 24px;
+  height: 24px;
+  overflow: visible;
+}
+
+.qps-nav-setup__gear path,
+.qps-nav-setup__arrows path {
+  fill: currentColor;
+}
+
+.qps-nav-setup__gear {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* =========================================
+   NAVIGATION — SMOOTH WIDTH TRANSITION
+   ========================================= */
+
+.qps-bottom-nav__tabs {
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr);
+
+  transition:
+    grid-template-columns var(--qps-bottom-nav-motion);
+}
+
+.qps-bottom-nav__tabs.qps-bottom-nav__tabs--setup-active {
+  grid-template-columns:
+    minmax(0, 1.65fr)
+    minmax(0, 0.675fr)
+    minmax(0, 0.675fr);
+}
+
+/* =========================================
+   SETUP — POSITIONING
+   Height tetap 47px
+   ========================================= */
+
+.qps-bottom-nav__tabs > .qps-bottom-nav__tab--setup {
+  position: relative;
+  display: block;
+  height: 47px;
+  color: var(--qps-bottom-nav-inactive);
+}
+
+/* ICON — INACTIVE */
+.qps-bottom-nav__tab--setup > .qps-nav-setup {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 24px;
+  height: 24px;
+  transform: translateX(-50%);
+
+  transition:
+    left var(--qps-bottom-nav-motion),
+    top var(--qps-bottom-nav-motion),
+    width var(--qps-bottom-nav-motion),
+    height var(--qps-bottom-nav-motion);
+}
+
+/* TEXT — INACTIVE */
+.qps-bottom-nav__tab--setup > .qps-bottom-nav__label {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  height: 12px;
+  transform: translateX(-50%);
+  color: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 12px;
+  overflow: visible;
+  white-space: nowrap;
+
+  transition:
+    left var(--qps-bottom-nav-motion),
+    top var(--qps-bottom-nav-motion),
+    font-size var(--qps-bottom-nav-motion),
+    line-height var(--qps-bottom-nav-motion);
+}
+
+/* UNDERLINE — INACTIVE */
+.qps-bottom-nav__tab--setup > .qps-bottom-nav__indicator {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  width: 32px;
+  height: 3px;
+  transform: translateX(-50%);
+
+  transition:
+    width var(--qps-bottom-nav-motion),
+    background-color var(--qps-bottom-nav-motion);
+}
+
+/* =========================================
+   SETUP — ACTIVE
+   ========================================= */
+
+.qps-bottom-nav__tab--setup.qps-bottom-nav__tab--active {
+  color: var(--qps-bottom-nav-active);
+}
+
+/* ICON: 24px -> 36px, bergerak ke kiri */
+.qps-bottom-nav__tab--setup.qps-bottom-nav__tab--active
+> .qps-nav-setup {
+  top: 4px;
+  left: calc(50% - 26px);
+  width: 36px;
+  height: 36px;
+}
+
+/* TEXT: 11px -> 16px, bergerak ke kanan */
+.qps-bottom-nav__tab--setup.qps-bottom-nav__tab--active
+> .qps-bottom-nav__label {
+  top: 14px;
+  left: calc(50% + 26px);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+/* UNDERLINE: melebar */
+.qps-bottom-nav__tab--setup.qps-bottom-nav__tab--active
+> .qps-bottom-nav__indicator {
+  width: min(calc(100% - 12px), 104px);
+  background-color: var(--qps-bottom-nav-active);
+}
+
+/* Arrows mengikuti warna kontras tema */
+.qps-bottom-nav__tab--setup.qps-bottom-nav__tab--active
+.qps-nav-setup__arrows path {
+  fill: var(--foreground);
+}
+
+/* =========================================
+   GEAR — ACTIVE ROTATION
+   ========================================= */
+
+@media (prefers-reduced-motion: no-preference) {
+  .qps-bottom-nav__tab--setup.qps-bottom-nav__tab--active
+  .qps-nav-setup__gear {
+    animation: qps-setup-gear-spin 2.5s linear infinite;
+  }
+}
+
+@keyframes qps-setup-gear-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .qps-bottom-nav__tabs,
+  .qps-bottom-nav__tab--setup > * {
+    transition: none;
+  }
+}

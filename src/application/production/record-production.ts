@@ -1,8 +1,9 @@
 import type { BatchPosition } from '@/domain/batch/batch-position'
 import type { EmployeeId } from '@/domain/common/identifiers'
 import type { DomainError, Result } from '@/domain/common/result'
-import { ok } from '@/domain/common/result'
+import { err, ok } from '@/domain/common/result'
 import type { FleetSetup } from '@/domain/fleet/fleet-setup'
+import { operationalFleetOptionsForDestinationPileTruck } from '@/application/haulage-operation/operational-fleet-options'
 import { recordHaulage } from '@/application/haulage-operation/create-haulage-record'
 import type { HaulageTransaction } from '@/domain/haulage/haulage-transaction'
 import type { MasterData } from '@/domain/master/master-data'
@@ -25,8 +26,8 @@ export interface RecordProductionParams {
   readonly selectedTruckId: string
   readonly masterData: MasterData
   readonly fleetSetup: FleetSetup
-  readonly physicalCondition: PhysicalCondition
-  readonly contamination: Contamination
+  readonly physicalCondition?: PhysicalCondition | null
+  readonly contamination?: Contamination | null
   readonly disposition: Disposition
   /** Optional; blank or whitespace-only is normalized to `null` by `createProductionRecord`. */
   readonly remark?: string | null
@@ -60,6 +61,28 @@ export interface RecordProductionResult {
 export function recordProduction(
   params: RecordProductionParams,
 ): Result<RecordProductionResult, DomainError> {
+  if (!params.masterData.trucks.some((truck) => (truck.id as string) === params.selectedTruckId)) {
+    return err({
+      code: 'TRUCK_NOT_FOUND_IN_MASTER',
+      message: `Truck ${params.selectedTruckId} is not available in MasterData`,
+    })
+  }
+  const eligibleFleetOptions = operationalFleetOptionsForDestinationPileTruck(
+    params.masterData,
+    params.fleetSetup,
+    params.pile.id,
+    params.selectedTruckId,
+  )
+  if (!eligibleFleetOptions.ok) {
+    return err(eligibleFleetOptions.error)
+  }
+  if (!eligibleFleetOptions.value.some((option) => (option.fleetId as string) === params.selectedFleetId)) {
+    return err({
+      code: 'FLEET_TRUCK_NOT_AVAILABLE_FOR_PILE',
+      message: `Fleet ${params.selectedFleetId} is not active for Pile ${params.pile.id} with Truck ${params.selectedTruckId}`,
+    })
+  }
+
   const transactionResult = recordHaulage({
     generatedTransactionId: params.generatedTransactionId,
     shift: params.shift,

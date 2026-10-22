@@ -5,16 +5,20 @@ import {
   type AppendFrontContinuationResult,
 } from '@/application/fleet-setup/append-front-continuation'
 import { appendNewBaseFront, type AppendNewBaseFrontResult } from '@/application/fleet-setup/append-new-base-front'
-import { availableAddedTruckIds, truckOptionsForHauler } from '@/application/fleet-setup/effective-fleet-preview'
+import { eligiblePileIds, eligibleTruckIds, fleetNumberSuggestion } from '@/application/fleet-setup/fleet-editor-rules'
+import { availableAddedTruckIds } from '@/application/fleet-setup/effective-fleet-preview'
 import type { ActivatedPile } from '@/application/pile-master/activate-new-pile'
 import type { NewPileDraft } from '@/application/pile-master/create-pile-area-from-draft'
 import { Button } from '@/components/ui/button'
+import { CustomSelect } from '@/components/ui/custom-select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SearchableCombobox, type SearchableComboboxOption } from '@/components/shared/SearchableCombobox'
 import type { DomainError, Result } from '@/domain/common/result'
 import { resolveEffectiveFleetAgainstMaster } from '@/domain/fleet/fleet-resolution'
 import type { FleetSetup } from '@/domain/fleet/fleet-setup'
 import { deriveFrontLineage } from '@/domain/fleet/front-lineage'
+import { frontNumberFromFrontId } from '@/domain/fleet/front'
+import { buildExcaCode, excaNumberFromCode } from '@/domain/fleet/exca-code'
 import type { MasterData } from '@/domain/master/master-data'
 import { createPile, type Pile } from '@/domain/pile/pile'
 import type { PileRegistrationDraft } from '@/application/pile-registration/pile-registration-draft'
@@ -42,6 +46,16 @@ export interface FrontContinuationEditorProps {
   formId?: string
   hideActions?: boolean
   compactSelectedTrucks?: boolean
+  /** Active Work Setup selects the mode explicitly before opening this editor. */
+  initialMode?: 'BASE' | 'CONTINUATION'
+  /** An explicit source selected from the Active Work Setup source sheet. */
+  initialReferenceFrontId?: string
+  /** Effective Truck membership captured when that source was explicitly selected. */
+  initialSelectedTruckIds?: readonly string[]
+  /** Company already selected in the Active Work Setup source sheet. */
+  initialCompany?: string
+  /** Destination Pile already selected in the Active Work Setup source sheet. */
+  initialDestinationPileId?: string
 }
 
 /**
@@ -49,10 +63,10 @@ export interface FrontContinuationEditorProps {
  * TWO modes off one Fleet Reference selector, mirroring the pre-shift
  * `FrontEditor`'s BASE/DERIVED split:
  *
- *  - CONTINUATION (Fleet Reference = an ACTIVE Front): Front No is
- *    always auto-derived, Hauler/Destination/effective trucks are
- *    inherited from the reference (Destination stays editable), and the
- *    reference Front becomes HISTORICAL once saved (`appendFrontContinuation`).
+ *  - CONTINUATION (Fleet Reference = an ACTIVE Front): the reference is
+ *    explicit. The Active Work Setup source-sheet flow keeps its chosen
+ *    Company/Destination and preselects the source Fleet's effective
+ *    Trucks, which the operator may then edit before saving the derived Fleet.
  *  - BASE (Fleet Reference = "Tidak Ada"): a compact version of the
  *    initial Fleet Setup's BASE front — the operator picks a Hauler, a
  *    Destination (required — there is no reference to inherit one from),
@@ -79,6 +93,11 @@ export function FrontContinuationEditor({
   formId,
   hideActions = false,
   compactSelectedTrucks = false,
+  initialMode,
+  initialReferenceFrontId,
+  initialSelectedTruckIds,
+  initialCompany,
+  initialDestinationPileId,
 }: FrontContinuationEditorProps) {
   const { t } = useTranslation()
   const referenceSelectId = useId()
@@ -92,26 +111,95 @@ export function FrontContinuationEditor({
     () => fleetSetup.fronts.filter((front) => lineage.activeFrontIds.includes(front.frontId)),
     [fleetSetup.fronts, lineage.activeFrontIds],
   )
+  const existingFrontNumbers = useMemo(
+    () => fleetSetup.fronts
+      .filter((front) => front.sectorCode === shift.sectorCode)
+      .map((front) => frontNumberFromFrontId(front.frontId)),
+    [fleetSetup.fronts, shift.sectorCode],
+  )
+  const numberSuggestion = useMemo(
+    () => fleetNumberSuggestion(shift.sectorCode, existingFrontNumbers),
+    [existingFrontNumbers, shift.sectorCode],
+  )
+  const availableFrontNumbers = useMemo(
+    () => Array.from({ length: 25 }, (_, index) => index + 1)
+      .filter((number) => !existingFrontNumbers.includes(number))
+      .map((number) => String(number).padStart(2, '0')),
+    [existingFrontNumbers],
+  )
+  const suggestedFrontNumber = numberSuggestion.suggested.split('/')[1] ?? ''
 
-  const [referenceFrontId, setReferenceFrontId] = useState<string>(() => activeFronts[0]?.frontId ?? '')
+  const [referenceFrontId, setReferenceFrontId] = useState<string>(() => initialReferenceFrontId ?? (initialMode === undefined ? activeFronts[0]?.frontId ?? '' : ''))
   const referenceFront = fleetSetup.fronts.find((front) => front.frontId === referenceFrontId)
   const referenceFleet = fleetSetup.fleets.find((fleet) => fleet.frontId === referenceFrontId)
   // "Tidak Ada" (Fleet Reference blank) means a brand-new independent
   // BASE Front (Phase 18 §2), not "nothing chosen yet" — the default
   // state above already picks the first ACTIVE Front when one exists.
-  const mode: 'CONTINUATION' | 'BASE' = referenceFrontId === '' ? 'BASE' : 'CONTINUATION'
+  const mode: 'CONTINUATION' | 'BASE' = initialMode ?? (referenceFrontId === '' ? 'BASE' : 'CONTINUATION')
 
-  const [destinationPileId, setDestinationPileId] = useState<string>(() => referenceFront?.destinationPileId ?? '')
+  const isCompanyDestinationFirstFlow = initialCompany !== undefined && initialDestinationPileId !== undefined
+  function sourceTruckSelection(sourceFrontId: string, company: string): readonly string[] {
+    const sourceFleet = fleetSetup.fleets.find((fleet) => fleet.frontId === sourceFrontId)
+    if (!sourceFleet) return []
+    const effective = resolveEffectiveFleetAgainstMaster(masterData, fleetSetup, sourceFleet.fleetId)
+    if (!effective.ok) return []
+    return eligibleSourceTruckIds(effective.value.truckIds.map((truckId) => truckId as string), company)
+  }
+  function eligibleSourceTruckIds(candidateTruckIds: readonly string[], company: string): readonly string[] {
+    const eligibleTruckIdsForCompany = new Set(
+      masterData.trucks
+        .filter((truck) => truck.haulerCode === company)
+        .map((truck) => truck.id as string),
+    )
+    return candidateTruckIds.filter((truckId) => eligibleTruckIdsForCompany.has(truckId))
+  }
+  const [destinationPileId, setDestinationPileId] = useState<string>(() => initialDestinationPileId ?? referenceFront?.destinationPileId ?? '')
   const [destinationQuery, setDestinationQuery] = useState('')
   const [creatingDestination, setCreatingDestination] = useState(false)
   const [addedTruckIds, setAddedTruckIds] = useState<readonly string[]>([])
   const [removedTruckIds, setRemovedTruckIds] = useState<readonly string[]>([])
   const [selectedAddTruck, setSelectedAddTruck] = useState('')
   const [selectedRemoveTruck, setSelectedRemoveTruck] = useState('')
-  const [haulerCode, setHaulerCode] = useState('')
-  const [baseTruckIds, setBaseTruckIds] = useState<readonly string[]>([])
+  const [haulerCode, setHaulerCode] = useState(() => initialCompany ?? (initialReferenceFrontId ? fleetSetup.fronts.find((front) => front.frontId === initialReferenceFrontId)?.haulerCode ?? '' : initialMode === undefined ? activeFronts[0]?.haulerCode ?? '' : ''))
+  const [frontNumber, setFrontNumber] = useState(() => suggestedFrontNumber)
+  const [excaNumber, setExcaNumber] = useState(() => excaNumberFromCode(referenceFront?.excaCode))
+  const [pendingFrontNumber, setPendingFrontNumber] = useState<string>()
+  const [baseTruckIds, setBaseTruckIds] = useState<readonly string[]>(() =>
+    initialMode === 'CONTINUATION' && initialReferenceFrontId
+      ? initialSelectedTruckIds
+        ? eligibleSourceTruckIds(initialSelectedTruckIds, initialCompany ?? referenceFront?.haulerCode ?? '')
+        : sourceTruckSelection(initialReferenceFrontId, initialCompany ?? referenceFront?.haulerCode ?? '')
+      : [],
+  )
   const [selectedBaseTruck, setSelectedBaseTruck] = useState('')
   const [submitErrorCode, setSubmitErrorCode] = useState<string>()
+
+  function resetForCompany(nextHaulerCode: string) {
+    setHaulerCode(nextHaulerCode)
+    setReferenceFrontId('')
+    setDestinationPileId('')
+    setDestinationQuery('')
+    setCreatingDestination(false)
+    setAddedTruckIds([])
+    setRemovedTruckIds([])
+    setBaseTruckIds([])
+    setSelectedAddTruck('')
+    setSelectedRemoveTruck('')
+    setSelectedBaseTruck('')
+    setFrontNumber(suggestedFrontNumber)
+    setExcaNumber('')
+    setSubmitErrorCode(undefined)
+  }
+
+  function requestFrontNumber(nextFrontNumber: string) {
+    const selected = Number(nextFrontNumber)
+    const suggested = Number(suggestedFrontNumber)
+    if (selected > suggested) {
+      setPendingFrontNumber(nextFrontNumber)
+      return
+    }
+    setFrontNumber(nextFrontNumber)
+  }
 
   function handleReferenceChange(value: string) {
     const front = fleetSetup.fronts.find((candidate) => candidate.frontId === value)
@@ -123,10 +211,10 @@ export function FrontContinuationEditor({
     setRemovedTruckIds([])
     setSelectedAddTruck('')
     setSelectedRemoveTruck('')
-    setHaulerCode('')
-    setBaseTruckIds([])
+    setBaseTruckIds(value ? sourceTruckSelection(value, (front?.haulerCode as string | undefined) ?? '') : [])
     setSelectedBaseTruck('')
     setSubmitErrorCode(undefined)
+    setExcaNumber(excaNumberFromCode(front?.excaCode))
   }
 
   const inheritedTruckIds = useMemo(() => {
@@ -141,13 +229,30 @@ export function FrontContinuationEditor({
   const removeOptions = inheritedTruckIds.filter(
     (id) => !addedTruckIds.includes(id) && !removedTruckIds.includes(id),
   )
-  const baseTruckOptions = truckOptionsForHauler(masterData, haulerCode).filter((id) => !baseTruckIds.includes(id))
+  const baseTruckOptions = eligibleTruckIds(
+    masterData.trucks.map((truck) => ({ truckId: truck.id as string, company: truck.haulerCode as string })),
+    haulerCode,
+    baseTruckIds,
+  ).map((truck) => truck.truckId)
+  const continuationAddedTruckIds = useMemo(
+    () => isCompanyDestinationFirstFlow
+      ? baseTruckIds.filter((truckId) => !inheritedTruckIds.some((inheritedTruckId) => String(inheritedTruckId) === truckId))
+      : addedTruckIds,
+    [addedTruckIds, baseTruckIds, inheritedTruckIds, isCompanyDestinationFirstFlow],
+  )
+  const continuationRemovedTruckIds = useMemo(
+    () => isCompanyDestinationFirstFlow
+      ? inheritedTruckIds.filter((truckId) => !baseTruckIds.includes(truckId))
+      : removedTruckIds,
+    [baseTruckIds, inheritedTruckIds, isCompanyDestinationFirstFlow, removedTruckIds],
+  )
 
   const destinationCandidates: readonly SearchableComboboxOption[] = useMemo(() => {
     const normalized = destinationQuery.trim().toLowerCase()
     if (!normalized) return []
     const activePileIds = new Set(pileRegistrations.filter((registration) => registration.status === 'ACTIVE').map((registration) => registration.pileId))
-    return masterData.pileAreas
+    const assignments = activeFronts.map((front) => ({ company: front.haulerCode as string, pileId: front.destinationPileId as string | undefined, truckIds: [], active: true }))
+    return eligiblePileIds(masterData.pileAreas, assignments, haulerCode)
       .filter(
         (pileArea) =>
           pileArea.sectorCode === shift.sectorCode &&
@@ -160,45 +265,60 @@ export function FrontContinuationEditor({
         label: pileArea.pileId as string,
         description: `${pileArea.oreCode} · ${pileArea.stockpileCode}`,
       }))
-  }, [destinationQuery, masterData.pileAreas, pileRegistrations, shift.sectorCode])
+  }, [activeFronts, destinationQuery, haulerCode, masterData.pileAreas, pileRegistrations, shift.sectorCode])
 
   const selectedDestination = destinationPileId
     ? masterData.pileAreas.find((pileArea) => pileArea.pileId === destinationPileId)
     : undefined
 
+  const selectedExca = useMemo(
+    () => (excaNumber.trim() ? buildExcaCode(haulerCode, excaNumber) : undefined),
+    [excaNumber, haulerCode],
+  )
+  const excaCode = selectedExca?.ok ? selectedExca.value : undefined
+
   const candidate = useMemo(
-    () =>
-      mode === 'CONTINUATION'
+    () => {
+      if (selectedExca && !selectedExca.ok) return selectedExca
+      return mode === 'CONTINUATION'
         ? appendFrontContinuation({
             fleetSetup,
             masterData,
             referenceFrontId,
+            frontNumber: frontNumber ? Number(frontNumber) : undefined,
             destinationPileId: destinationPileId || undefined,
-            addedTruckIds,
-            removedTruckIds,
+            excaCode,
+            addedTruckIds: continuationAddedTruckIds,
+            removedTruckIds: continuationRemovedTruckIds,
             fleetId,
           })
         : appendNewBaseFront({
             fleetSetup,
             masterData,
             sectorCode: shift.sectorCode,
+            frontNumber: frontNumber ? Number(frontNumber) : undefined,
             haulerCode,
             destinationPileId,
+            excaCode,
             truckIds: baseTruckIds,
             fleetId,
-          }),
+          })
+    },
     [
       mode,
       fleetSetup,
       masterData,
       referenceFrontId,
       destinationPileId,
-      addedTruckIds,
-      removedTruckIds,
+      continuationAddedTruckIds,
+      continuationRemovedTruckIds,
       haulerCode,
       baseTruckIds,
+      frontNumber,
       fleetId,
       shift.sectorCode,
+      selectedExca,
+      excaCode,
     ],
   )
 
@@ -227,56 +347,69 @@ export function FrontContinuationEditor({
       </CardHeader>
       <CardContent>
         <form id={formId} onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
+          {isCompanyDestinationFirstFlow ? (
+            <section className="grid gap-2 rounded-md bg-muted p-3 text-sm">
+              <p><span className="text-muted-foreground">{t('fleetSetup.hauler')}: </span>{haulerCode}</p>
+              <p><span className="text-muted-foreground">{t('fleetSetup.destinationPile')}: </span>{destinationPileId}</p>
+              {mode === 'CONTINUATION' ? <p><span className="text-muted-foreground">{t('fleetSetup.referenceFleet')}: </span>{referenceFrontId}</p> : null}
+            </section>
+          ) : null}
+          {!isCompanyDestinationFirstFlow ? <>
+           <div className="flex flex-col gap-1.5">
             <span className="text-sm font-medium">{t('fleetActive.newFront')}</span>
             <output className="min-h-11 break-all rounded-md border border-border bg-muted px-3 py-2.5">
               {candidate.ok ? candidate.value.newFront.frontId : '—'}
             </output>
-          </div>
+           </div>
 
-          <div className="flex flex-col gap-1.5">
+           <div className="flex flex-col gap-1.5">
+             <label htmlFor={haulerSelectId} className="text-sm font-medium">{t('fleetSetup.hauler')}</label>
+             <CustomSelect
+               id={haulerSelectId}
+               ariaLabel={t('fleetSetup.hauler')}
+               disabled={!!initialReferenceFrontId}
+               value={haulerCode}
+               onChange={resetForCompany}
+               placeholder="â€”"
+               preferAbove
+               options={masterData.haulers.map((hauler) => ({ value: hauler.code as string, label: hauler.code as string }))}
+             />
+           </div>
+
+           <div className="flex flex-col gap-1.5">
             <label htmlFor={referenceSelectId} className="text-sm font-medium">
               {t('fleetSetup.referenceFleet')}
             </label>
-            <select
+            <CustomSelect
               id={referenceSelectId}
+              ariaLabel={t('fleetSetup.referenceFleet')}
+              disabled={!haulerCode || !!initialReferenceFrontId}
               value={referenceFrontId}
-              onChange={(event) => handleReferenceChange(event.target.value)}
-              className="h-11 rounded-md border border-border bg-background px-3 text-base"
-            >
-              <option value="">{t('fleetSetup.noReference')}</option>
-              {activeFronts.map((front) => (
-                <option key={front.frontId} value={front.frontId}>
-                  {front.frontId}
-                </option>
-              ))}
-            </select>
-          </div>
+              onChange={handleReferenceChange}
+              placeholder={t('fleetSetup.noReference')}
+              preferAbove
+              options={[
+                { value: '', label: t('fleetSetup.noReference') },
+                ...activeFronts
+                  .filter((front) => front.haulerCode === haulerCode)
+                  .map((front) => ({ value: front.frontId as string, label: front.frontId as string })),
+              ]}
+            />
+           </div>
 
-          {mode === 'BASE' ? (
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor={haulerSelectId} className="text-sm font-medium">
-                {t('fleetSetup.hauler')}
-              </label>
-              <select
-                id={haulerSelectId}
-                value={haulerCode}
-                onChange={(event) => {
-                  setHaulerCode(event.target.value)
-                  setBaseTruckIds([])
-                  setSelectedBaseTruck('')
-                }}
-                className="h-11 rounded-md border border-border bg-background px-3 text-base"
-              >
-                <option value="">—</option>
-                {masterData.haulers.map((hauler) => (
-                  <option key={hauler.code} value={hauler.code}>
-                    {hauler.code}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
+           <div className="flex flex-col gap-1.5">
+             <label htmlFor="active-fleet-front-number" className="text-sm font-medium">Fleet ID</label>
+             <CustomSelect
+               id="active-fleet-front-number"
+               ariaLabel="Fleet ID"
+               disabled={!haulerCode || numberSuggestion.exhausted}
+               value={frontNumber}
+               onChange={requestFrontNumber}
+               placeholder={numberSuggestion.exhausted ? 'No Fleet ID available' : `BR${suggestedFrontNumber}`}
+               preferAbove
+               options={availableFrontNumbers.map((number) => ({ value: number, label: `${shift.sectorCode}/${number}` }))}
+             />
+           </div>
 
           {creatingDestination ? (
             <NewPileForm
@@ -306,6 +439,7 @@ export function FrontContinuationEditor({
           ) : (
             <SearchableCombobox
               label={t('fleetSetup.destinationPile')}
+              disabled={!haulerCode || (mode === 'CONTINUATION' && !referenceFrontId)}
               query={destinationQuery}
               onQueryChange={setDestinationQuery}
               options={destinationCandidates}
@@ -324,11 +458,40 @@ export function FrontContinuationEditor({
               noResultsContent={<p className="text-sm text-muted-foreground">{t('fleetSetup.destinationPileNotFound')}</p>}
               resultsAbove
             />
-          )}
+           )}
+          </> : null}
 
-          {mode === 'BASE' ? (
+          {isCompanyDestinationFirstFlow ? <>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="active-fleet-exca" className="text-sm font-medium">Exca ID</label>
+              <input
+                id="active-fleet-exca"
+                aria-label="Exca ID"
+                value={excaNumber}
+                inputMode="numeric"
+                onChange={(event) => setExcaNumber(event.target.value)}
+                placeholder="Exca number"
+                className="h-11 rounded-md border border-border bg-background px-3 text-sm"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="active-fleet-front-number" className="text-sm font-medium">Fleet ID</label>
+              <CustomSelect
+                id="active-fleet-front-number"
+                ariaLabel="Fleet ID"
+                disabled={!haulerCode || numberSuggestion.exhausted}
+                value={frontNumber}
+                onChange={requestFrontNumber}
+                placeholder={numberSuggestion.exhausted ? 'No Fleet ID available' : `${shift.sectorCode}/${suggestedFrontNumber}`}
+                preferAbove
+                options={availableFrontNumbers.map((number) => ({ value: number, label: `${shift.sectorCode}/${number}` }))}
+              />
+            </div>
+          </> : null}
+
+          {mode === 'BASE' || isCompanyDestinationFirstFlow ? (
             <section className="flex flex-col gap-3 rounded-lg border border-border p-3">
-              <h4 className="font-semibold">{t('fleetSetup.allowedTrucks')}</h4>
+              <h4 className="type-subsection-title">{isCompanyDestinationFirstFlow ? 'Selected Trucks' : t('fleetSetup.allowedTrucks')}</h4>
               <SelectedTrucks
                 truckIds={baseTruckIds}
                 actionLabel={(id) => t('fleetSetup.removeTruckNamed', { truckId: id })}
@@ -355,7 +518,7 @@ export function FrontContinuationEditor({
               <EffectiveFleetPreview truckIds={inheritedTruckIds} titleKey="fleetSetup.inheritedTrucks" />
 
               <section className="flex flex-col gap-3 rounded-lg border border-emerald-300 bg-emerald-50 p-3">
-                <h4 className="font-semibold text-emerald-950">{t('fleetSetup.addedTrucks')}</h4>
+                <h4 className="type-subsection-title text-emerald-950">{t('fleetSetup.addedTrucks')}</h4>
                 <SelectedTrucks
                   truckIds={addedTruckIds}
                   actionLabel={(id) => t('fleetSetup.removeAddedTruckNamed', { truckId: id })}
@@ -379,7 +542,7 @@ export function FrontContinuationEditor({
               </section>
 
               <section className="flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
-                <h4 className="font-semibold text-amber-950">{t('fleetSetup.removedTrucks')}</h4>
+                <h4 className="type-subsection-title text-amber-950">{t('fleetSetup.removedTrucks')}</h4>
                 <TruckAction
                   id={removeTruckSelectId}
                   label={t('fleetSetup.removeTruck')}
@@ -418,6 +581,7 @@ export function FrontContinuationEditor({
           </div> : null}
         </form>
       </CardContent>
+      {pendingFrontNumber ? <div role="dialog" aria-modal="true" aria-label="Confirm Fleet ID" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-3"><section className="w-full max-w-sm rounded-xl bg-background p-4 shadow-xl"><h3 className="type-dialog-title">Confirm Fleet ID</h3><p className="mt-2 text-sm text-muted-foreground">A smaller unused Fleet ID is available. Continue with {shift.sectorCode}/{pendingFrontNumber}?</p><div className="mt-4 grid grid-cols-2 gap-2"><Button type="button" variant="secondary" onClick={() => setPendingFrontNumber(undefined)}>Cancel</Button><Button type="button" onClick={() => { setFrontNumber(pendingFrontNumber); setPendingFrontNumber(undefined) }}>Continue</Button></div></section></div> : null}
     </Card>
   )
 }

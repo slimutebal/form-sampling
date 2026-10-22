@@ -1,20 +1,20 @@
 import type { MasterDataRemoteReader } from '@/application/google/google-ports'
-import type { MasterDataInvalidDetail, MasterDataRefreshError } from '@/application/google/master-data-refresh-diagnostics'
 import type { DomainError, Result } from '@/domain/common/result'
 import { err } from '@/domain/common/result'
 import type { MasterData } from '@/domain/master/master-data'
-import { GOOGLE_MASTER_HEADERS } from './google-sheet-contract'
-import {
-  parseMasterDataFromRanges,
-  type MasterDataValidationError,
-  type RawMasterDataRanges,
-} from './master-data-sheet-reader'
+import { cellText, GOOGLE_MASTER_HEADERS } from './google-sheet-contract'
+import { parseMasterDataFromRanges, type RawMasterDataRanges } from './master-data-sheet-reader'
 
 type Rows = readonly (readonly unknown[])[]
 type JsonpGlobal = Record<string, unknown>
 
 const JSONP_TIMEOUT_MS = 15_000
 let nextCallbackId = 0
+
+function logRemoteMasterData(event: string, details: Record<string, unknown>) {
+  if (!import.meta.env.DEV) return
+  console.info(`[master-data] ${event}`, details)
+}
 
 /**
  * JSONP adapter for the deployed Apps Script Web App. Apps Script responses
@@ -35,16 +35,30 @@ export class AppsScriptMasterDataRemoteReader implements MasterDataRemoteReader 
     try {
       body = await this.loadJsonp()
     } catch (failure) {
+      logRemoteMasterData('jsonp-failed', { code: failure === 'APPS_SCRIPT_TIMEOUT' ? 'APPS_SCRIPT_TIMEOUT' : 'APPS_SCRIPT_UNAVAILABLE' })
       return err(jsonpFailure(failure))
     }
 
     const ranges = toRanges(body)
-    if ('invalidTable' in ranges) {
-      return remoteInvalid({ stage: 'REMOTE_PAYLOAD', causeCode: 'MASTER_DATA_PAYLOAD_SHAPE_INVALID', table: ranges.invalidTable })
+    if (!ranges) {
+      logRemoteMasterData('remote-payload-invalid', { reason: 'MISSING_OR_INVALID_TABLES' })
+      return remoteInvalid()
     }
 
     const parsed = parseMasterDataFromRanges(ranges)
-    return parsed.ok ? parsed : remoteInvalid(validationDetail(parsed.error))
+    if (!parsed.ok) {
+      if (parsed.error.code === 'GOOGLE_MASTER_REQUIRED_HEADER_MISSING') {
+        logRequiredHeaderDetails(body)
+      }
+      logRemoteMasterData('remote-payload-invalid', { reason: parsed.error.code })
+      return remoteInvalid()
+    }
+    logRemoteMasterData('remote-payload-valid', {
+      employees: ranges.employees.length,
+      sectors: ranges.sectors.length,
+      pileAreas: ranges.pileAreas.length,
+    })
+    return parsed
   }
 
   private loadJsonp(): Promise<unknown> {
@@ -81,15 +95,14 @@ export class AppsScriptMasterDataRemoteReader implements MasterDataRemoteReader 
       try {
         script = document.createElement('script')
         script.async = true
-        // Credential-free CORS load: without it the browser sends Google
-        // session cookies, and with several signed-in accounts Google
-        // rewrites the URL to /macros/u/N/… which returns 404. Both the
-        // /exec redirect and the final googleusercontent response send
-        // `Access-Control-Allow-Origin: *`. Set before `src` so the request
-        // starts in CORS mode.
         script.crossOrigin = 'anonymous'
         script.src = this.masterDataUrl(callbackName)
-        script.onerror = () => fail('APPS_SCRIPT_UNAVAILABLE')
+        logRemoteMasterData('jsonp-request-started', { endpoint: new URL(this.endpoint).origin + new URL(this.endpoint).pathname })
+        script.onerror = () => {
+          // JSONP script errors intentionally expose no HTTP status to page JS.
+          logRemoteMasterData('jsonp-script-error', { reason: 'SCRIPT_LOAD_ERROR_NO_HTTP_STATUS' })
+          fail('APPS_SCRIPT_UNAVAILABLE')
+        }
         document.head.append(script)
       } catch {
         fail('APPS_SCRIPT_UNAVAILABLE')
@@ -122,19 +135,8 @@ function jsonpFailure(failure: unknown): DomainError {
     : { code: 'APPS_SCRIPT_UNAVAILABLE', message: 'Apps Script master-data is unavailable' }
 }
 
-/** The public code stays `MASTER_DATA_REMOTE_INVALID`; `detail` keeps the original cause for diagnostics. */
-function remoteInvalid(detail: MasterDataInvalidDetail): Result<never, MasterDataRefreshError> {
-  return err({ code: 'MASTER_DATA_REMOTE_INVALID', message: 'Apps Script master-data payload is invalid', detail })
-}
-
-/** Copies only codes and the sheet location — never the parser's `message`, which can echo a cell value. */
-function validationDetail(error: MasterDataValidationError): MasterDataInvalidDetail {
-  return {
-    stage: 'REMOTE_VALIDATION',
-    causeCode: error.causeCode ? `${error.code}/${error.causeCode}` : error.code,
-    ...(error.table !== undefined ? { table: error.table } : {}),
-    ...(error.rowNumber !== undefined ? { rowNumber: error.rowNumber } : {}),
-  }
+function remoteInvalid(): Result<never, DomainError> {
+  return err({ code: 'MASTER_DATA_REMOTE_INVALID', message: 'Apps Script master-data payload is invalid' })
 }
 
 function isRows(value: unknown): value is Rows {
@@ -144,45 +146,69 @@ function isRows(value: unknown): value is Rows {
 /**
  * Apps Script currently returns complete sheet rows for `tables`, even for
  * sheets whose app contract only consumes a leading range (for example,
- * `Employees!A:D` projects `Employee_ID | Name | Initial | Level` out of any
- * further columns the sheet may gain). Project only a verified leading
- * contract range here, and only when its header row matches; the parser below
- * still checks every required header and every required data value. A renamed,
- * reordered, or missing column inside the documented range is never accepted.
+ * `Employees!A:D` while the sheet also has columns beyond `Level`). Project
+ * only the required contract columns here; the parser below still checks
+ * every required header and every required data value. Required headers must
+ * remain exact, unique, and in their documented relative order. Extra columns
+ * may appear anywhere (for example Employees.Initial before Employees.Level).
  */
 function projectLeadingContractColumns(rows: Rows, headers: readonly string[]): Rows {
   const firstRow = rows[0]
-  const hasExpectedLeadingHeaders = firstRow !== undefined && headers.every(
-    (header, index) => String(firstRow[index] ?? '').trim() === header,
+  if (!firstRow) return rows
+  const headerPositions = headers.map((header) => firstRow.findIndex((cell) => cellText(cell) === header))
+  const eachRequiredHeaderAppearsOnce = headers.every(
+    (header) => firstRow.filter((cell) => cellText(cell) === header).length === 1,
   )
-  return hasExpectedLeadingHeaders ? rows.map((row) => row.slice(0, headers.length)) : rows
+  const keepsRequiredOrder = headerPositions.every((position, index) => index === 0 || position > headerPositions[index - 1])
+  if (headerPositions.some((position) => position < 0) || !eachRequiredHeaderAppearsOnce || !keepsRequiredOrder) {
+    return rows
+  }
+  return rows.map((row) => headerPositions.map((position) => row[position]))
 }
 
-const PAYLOAD_TABLES = [
-  'Employees',
-  'Crews',
-  'Sectors',
-  'Sampling_Houses',
-  'Pile_Areas',
-  'Haulers',
-  'Trucks',
-  'Ore_Sampling_Config',
-] as const
-
-/**
- * Accepts the documented `{ tables: { Sheet_Name: rows } }` payload only.
- * On rejection, names the first missing/non-row table (or `tables` itself).
- */
-function toRanges(body: unknown): RawMasterDataRanges | { readonly invalidTable: string } {
-  if (typeof body !== 'object' || body === null || !('tables' in body)) return { invalidTable: 'tables' }
+function logRequiredHeaderDetails(body: unknown) {
+  if (!import.meta.env.DEV || typeof body !== 'object' || body === null || !('tables' in body)) return
   const tables = body.tables
-  if (typeof tables !== 'object' || tables === null) return { invalidTable: 'tables' }
+  if (typeof tables !== 'object' || tables === null) return
+  const contracts: ReadonlyArray<readonly [string, readonly string[]]> = [
+    ['Employees', GOOGLE_MASTER_HEADERS.employees],
+    ['Crews', GOOGLE_MASTER_HEADERS.crews],
+    ['Sectors', GOOGLE_MASTER_HEADERS.sectors],
+    ['Sampling_Houses', GOOGLE_MASTER_HEADERS.samplingHouses],
+    ['Pile_Areas', GOOGLE_MASTER_HEADERS.pileAreas],
+    ['Haulers', GOOGLE_MASTER_HEADERS.haulers],
+    ['Trucks', GOOGLE_MASTER_HEADERS.trucks],
+    ['Ore_Sampling_Config', GOOGLE_MASTER_HEADERS.oreSamplingConfigs],
+  ]
+  for (const [table, expectedHeaders] of contracts) {
+    const candidate = (tables as Record<string, unknown>)[table]
+    const actualHeaders = Array.isArray(candidate) && Array.isArray(candidate[0])
+      ? candidate[0].map((cell) => cellText(cell))
+      : []
+    const missingHeaders = expectedHeaders.filter((header) => !actualHeaders.includes(header))
+    const expectedPositionsMatch = expectedHeaders.every((header, index) => actualHeaders[index] === header)
+    if (missingHeaders.length > 0 || !expectedPositionsMatch) {
+      logRemoteMasterData('required-header-missing', {
+        table,
+        missingHeader: missingHeaders[0] ?? expectedHeaders.find((header, index) => actualHeaders[index] !== header),
+        missingHeaders,
+        expectedHeaders,
+        actualHeaders,
+        reason: missingHeaders.length > 0 ? 'HEADER_NOT_PRESENT' : 'HEADER_POSITION_MISMATCH',
+      })
+    }
+  }
+}
+
+/** Accepts the documented `{ tables: { Sheet_Name: rows } }` payload only. */
+function toRanges(body: unknown): RawMasterDataRanges | undefined {
+  if (typeof body !== 'object' || body === null || !('tables' in body)) return undefined
+  const tables = body.tables
+  if (typeof tables !== 'object' || tables === null) return undefined
   const read = (name: string): Rows | undefined => {
     const value = (tables as Record<string, unknown>)[name]
     return isRows(value) ? value : undefined
   }
-  const invalidTable = PAYLOAD_TABLES.find((name) => !read(name))
-  if (invalidTable) return { invalidTable }
   const employees = read('Employees')
   const crews = read('Crews')
   const sectors = read('Sectors')
@@ -191,7 +217,7 @@ function toRanges(body: unknown): RawMasterDataRanges | { readonly invalidTable:
   const haulers = read('Haulers')
   const trucks = read('Trucks')
   const oreSamplingConfigs = read('Ore_Sampling_Config')
-  if (!employees || !crews || !sectors || !samplingHouses || !pileAreas || !haulers || !trucks || !oreSamplingConfigs) return { invalidTable: 'tables' }
+  if (!employees || !crews || !sectors || !samplingHouses || !pileAreas || !haulers || !trucks || !oreSamplingConfigs) return undefined
   return {
     employees: projectLeadingContractColumns(employees, GOOGLE_MASTER_HEADERS.employees),
     crews: projectLeadingContractColumns(crews, GOOGLE_MASTER_HEADERS.crews),

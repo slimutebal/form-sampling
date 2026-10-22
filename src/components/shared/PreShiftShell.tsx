@@ -27,7 +27,7 @@ interface PreShiftShellProps {
  */
 export function PreShiftShell({ children }: PreShiftShellProps) {
   return (
-    <div className="safe-top">
+    <div className="safe-top h-dvh overflow-hidden">
       <SafeAreaTopCap />
       {children}
     </div>

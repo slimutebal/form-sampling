@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import {
-  formatFrontId,
   type FleetSetupDraftEntry,
 } from '@/application/fleet-setup/fleet-setup-draft'
+import { formatFleetShortLabel } from '@/application/fleet-setup/fleet-assignment-identity'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EffectiveFleetPreview } from '@/features/fleet-setup/effective-fleet-preview'
@@ -38,11 +38,11 @@ export function FrontCard({
   onRemove,
 }: FrontCardProps) {
   const { t } = useTranslation()
-  const frontId = formatFrontId(sectorCode, entry.frontNumber)
+  const fleetLabel = formatFleetShortLabel(Number(entry.frontNumber))
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="break-all">{frontId}</CardTitle>
+        <CardTitle className="break-all">{fleetLabel}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-2">
@@ -65,7 +65,7 @@ export function FrontCard({
             {entry.kind === 'DERIVED'
               ? t('fleetSetup.frontReference', {
                   frontId: referenceFrontNumber
-                    ? formatFrontId(sectorCode, referenceFrontNumber)
+                    ? formatFleetShortLabel(Number(referenceFrontNumber))
                     : entry.referenceFleetId,
                 })
               : t('fleetSetup.noReference')}
@@ -80,7 +80,7 @@ export function FrontCard({
             type="button"
             variant="ghost"
             onClick={onRemove}
-            aria-label={t('fleetSetup.removeFrontNamed', { frontId })}
+            aria-label={t('fleetSetup.removeFrontNamed', { frontId: fleetLabel })}
           >
             {t('fleetSetup.removeFront')}
           </Button>

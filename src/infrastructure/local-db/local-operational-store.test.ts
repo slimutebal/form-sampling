@@ -8,10 +8,15 @@ import { createManpowerAssignment } from '../../domain/manpower/manpower-assignm
 import { parsePileAreaCode } from '../../domain/master/master-codes'
 import { createPileAreaReference } from '../../domain/master/references'
 import { parseDeliveryDestinationCode } from '../../domain/sample-handling/delivery-destination'
+import { appendFrontContinuation } from '../../application/fleet-setup/append-front-continuation'
+import { deriveFrontLineage } from '../../domain/fleet/front-lineage'
 import { createDeliveredDelivery, createNotPickedUpDelivery } from '../../domain/sample-handling/delivery-status'
 import type { Pile } from '../../domain/pile/pile'
 import {
   FIXTURE_EMPLOYEE_ID,
+  FIXTURE_FLEET_ID,
+  FIXTURE_FRONT_ID,
+  FIXTURE_IN_FLEET_TRUCK_ID,
   FIXTURE_WRONG_TRUCK_TRUCK_ID,
   buildFixtureFleetSetup,
   buildFixtureHaulageTransaction,
@@ -83,6 +88,45 @@ describe('LocalOperationalStore — shift workspace', () => {
     store.close()
   })
 
+  it('B1. persists a derived Fleet and retains its active successor after reopening IndexedDB', async () => {
+    const databaseName = uniqueDatabaseName()
+    const masterData = buildFixtureMasterData()
+    const sourceSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-FLEET-CONTINUATION')
+    const continuation = appendFrontContinuation({
+      fleetSetup: sourceSetup,
+      masterData,
+      referenceFrontId: FIXTURE_FRONT_ID,
+      frontNumber: 2,
+      addedTruckIds: [FIXTURE_WRONG_TRUCK_TRUCK_ID],
+      removedTruckIds: [FIXTURE_IN_FLEET_TRUCK_ID],
+      fleetId: 'FLEET-CONTINUATION',
+    })
+    expect(continuation.ok).toBe(true)
+    if (!continuation.ok) return
+
+    const firstStore = new LocalOperationalStore(databaseName)
+    expect(await firstStore.initializeShiftWorkspace({ shift, piles: [], masterData, fleetSetup: sourceSetup })).toMatchObject({ ok: true })
+    expect(await firstStore.appendFrontContinuation(shift.id, { fleetSetup: continuation.value.fleetSetup })).toMatchObject({ ok: true })
+    firstStore.close()
+
+    const reopenedStore = new LocalOperationalStore(databaseName)
+    const reloaded = await reopenedStore.loadShiftWorkspace(shift.id)
+    expect(reloaded.ok).toBe(true)
+    if (!reloaded.ok || !reloaded.value) return
+    const savedFleet = reloaded.value.fleetSetup.fleets.find((fleet) => fleet.fleetId === 'FLEET-CONTINUATION')
+    expect(savedFleet).toMatchObject({
+      kind: 'DERIVED',
+      frontId: 'S1/02',
+      referenceFleetId: FIXTURE_FLEET_ID,
+      addedTruckIds: [FIXTURE_WRONG_TRUCK_TRUCK_ID],
+      removedTruckIds: [FIXTURE_IN_FLEET_TRUCK_ID],
+    })
+    expect(deriveFrontLineage(reloaded.value.fleetSetup).activeFrontIds).toContain('S1/02')
+    expect(deriveFrontLineage(reloaded.value.fleetSetup).historicalFrontIds).toContain(FIXTURE_FRONT_ID)
+    reopenedStore.close()
+  })
+
   it('B2. an initialized workspace with no manpower argument defaults to an empty array, never undefined', async () => {
     const store = newStore()
     const masterData = buildFixtureMasterData()
@@ -130,6 +174,56 @@ describe('LocalOperationalStore — shift workspace', () => {
     reopenedStore.close()
   })
 
+  it('B3a. finds every exact local identity match without changing the current workspace, then resumes only the selected workspace', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const checker = createManpowerAssignment(FIXTURE_EMPLOYEE_ID, 'John Doe', 'Checker', true)
+    const firstShift = buildFixtureShift('SHIFT-IDENTITY-1')
+    const secondShift = buildFixtureShift('SHIFT-IDENTITY-2')
+
+    await store.initializeShiftWorkspace({ shift: firstShift, piles: [], masterData, fleetSetup, manpower: [checker] })
+    await store.initializeShiftWorkspace({ shift: secondShift, piles: [], masterData, fleetSetup, manpower: [checker] })
+
+    const matches = await store.findLocalWorkspaces({
+      date: '2026-09-04',
+      shiftCode: 'D',
+      sectorCode: 'S1',
+      samplingHouseCode: 'HOUSE-1',
+      checkerPersonId: FIXTURE_EMPLOYEE_ID,
+    })
+    expect(matches.ok).toBe(true)
+    if (!matches.ok) return
+    expect(matches.value.map((workspace) => workspace.shiftId).sort()).toEqual(['SHIFT-IDENTITY-1', 'SHIFT-IDENTITY-2'])
+
+    const resumed = await store.resumeLocalWorkspaceById(secondShift.id)
+    expect(resumed).toMatchObject({ ok: true, value: { shiftId: 'SHIFT-IDENTITY-2' } })
+    const current = await store.loadCurrentShiftWorkspace()
+    expect(current).toMatchObject({ ok: true, value: { shiftId: 'SHIFT-IDENTITY-2' } })
+    store.close()
+  })
+
+  it('B3b. discovery lists legacy and current workspaces without changing the current pointer or assigning a Checker', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const legacyShift = buildFixtureShift('SHIFT-LEGACY')
+    const currentShift = buildFixtureShift('SHIFT-CURRENT')
+
+    expect((await store.initializeShiftWorkspace({ shift: legacyShift, piles: [], masterData, fleetSetup })).ok).toBe(true)
+    expect((await store.initializeShiftWorkspace({ shift: currentShift, piles: [], masterData, fleetSetup })).ok).toBe(true)
+
+    const discovered = await store.listLocalWorkspaces()
+    expect(discovered.ok).toBe(true)
+    if (!discovered.ok) return
+    expect(discovered.value.map((workspace) => workspace.shiftId).sort()).toEqual(['SHIFT-CURRENT', 'SHIFT-LEGACY'])
+    expect(discovered.value.find((workspace) => workspace.shiftId === legacyShift.id)?.manpower).toEqual([])
+
+    const current = await store.loadCurrentShiftWorkspace()
+    expect(current).toMatchObject({ ok: true, value: { shiftId: 'SHIFT-CURRENT' } })
+    store.close()
+  })
+
   it('B4. pile registrations persist separately from unique operational Piles and retain repeated Pile IDs', async () => {
     const databaseName = uniqueDatabaseName()
     const masterData = buildFixtureMasterData()
@@ -137,7 +231,7 @@ describe('LocalOperationalStore — shift workspace', () => {
     const shift = buildFixtureShift('SHIFT-1')
     const pileRegistrations: readonly PileRegistrationDraft[] = [
       { pileId: fixturePileId('PILE-1'), oreCode: must(parseOreCode('SAP')), batch: must(parseBatchNumber(2)), rit: must(parseRitNumber(2)), status: 'ACTIVE' },
-      { pileId: fixturePileId('PILE-1'), oreCode: must(parseOreCode('SAP')), batch: must(parseBatchNumber(6)), rit: must(parseRitNumber(6)), status: 'ACTIVE' },
+      { pileId: fixturePileId('PILE-1'), oreCode: must(parseOreCode('SAP')), batch: must(parseBatchNumber(6)), rit: must(parseRitNumber(6)), status: 'ACTIVE', sampleInHouse: 3 },
       { pileId: fixturePileId('PILE-2'), oreCode: must(parseOreCode('SAP')), batch: must(parseBatchNumber(5)), rit: must(parseRitNumber(5)), status: 'INACTIVE' },
     ]
 

@@ -1,4 +1,5 @@
 import type { FleetSetup } from '@/domain/fleet/fleet-setup'
+import { destinationPileIdsForFront } from '@/domain/fleet/front'
 import { findPileArea, type MasterData } from '@/domain/master/master-data'
 import { createPile, type Pile } from '@/domain/pile/pile'
 
@@ -34,14 +35,12 @@ export function deriveActivePiles(params: DeriveActivePilesParams): readonly Pil
   }
 
   for (const front of params.fleetSetup.fronts) {
-    if (!front.destinationPileId || byId.has(front.destinationPileId)) {
-      continue
+    for (const destinationPileId of destinationPileIdsForFront(front)) {
+      if (byId.has(destinationPileId)) continue
+      const pileArea = findPileArea(params.masterData, destinationPileId)
+      if (!pileArea) continue
+      byId.set(pileArea.pileId, createPile(pileArea.pileId, pileArea.oreCode))
     }
-    const pileArea = findPileArea(params.masterData, front.destinationPileId)
-    if (!pileArea) {
-      continue
-    }
-    byId.set(pileArea.pileId, createPile(pileArea.pileId, pileArea.oreCode))
   }
 
   return [...byId.values()]

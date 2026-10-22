@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
 import {
   createManpowerFromDraft,
   type ManpowerDraftEntry,
@@ -112,12 +113,12 @@ export function ManpowerSetupPage({ shift, masterData, onManpowerReady, onBack }
         />
 
         <div className="flex flex-col gap-2">
-          <Button type="button" size="lg" className="w-full" onClick={handleContinue}>
-            {t('manpower.continue')}
+          <Button type="button" size="lg" variant="focus" className="w-full" onClick={handleContinue}>
+            Next <ArrowRight aria-hidden="true" size={18} />
           </Button>
           {onBack ? (
             <Button type="button" variant="secondary" className="w-full" onClick={onBack}>
-              {t('fleetSetup.back')}
+              <ArrowLeft aria-hidden="true" size={18} /> Back
             </Button>
           ) : null}
         </div>

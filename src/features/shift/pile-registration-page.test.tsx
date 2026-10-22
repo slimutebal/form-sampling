@@ -61,7 +61,8 @@ async function selectPile(user: ReturnType<typeof userEvent.setup>, query: strin
 async function fillEntry(user: ReturnType<typeof userEvent.setup>, batch: string, rit: string, status = 'ACTIVE') {
   await user.type(screen.getByLabelText('Batch'), batch)
   await user.type(screen.getByLabelText('Trip'), rit)
-  await user.selectOptions(screen.getByLabelText('Status'), status)
+  await user.click(screen.getByRole('combobox', { name: 'Status' }))
+  await user.click(screen.getByRole('option', { name: status === 'ACTIVE' ? 'Active' : 'Inactive' }))
 }
 
 describe('PileRegistrationPage', () => {
@@ -84,7 +85,7 @@ describe('PileRegistrationPage', () => {
     const user = userEvent.setup()
     const { onRegistrationsChange } = renderPage()
 
-    expect(screen.getByLabelText('Status')).toHaveValue('ACTIVE')
+    expect(screen.getByLabelText('Status')).toHaveValue('Active')
     await selectPile(user, 'STOCK-A')
     await fillEntry(user, '008', '006', 'INACTIVE')
     expect(screen.getByLabelText('Sample progress')).toHaveTextContent('3 / 10 Incr')
@@ -96,7 +97,7 @@ describe('PileRegistrationPage', () => {
     expect(screen.getByLabelText('Cari Pile/Stockpile')).toHaveValue('')
     expect(screen.getByLabelText('Batch')).toHaveValue('')
     expect(screen.getByLabelText('Trip')).toHaveValue('')
-    expect(screen.getByLabelText('Status')).toHaveValue('ACTIVE')
+    expect(screen.getByLabelText('Status')).toHaveValue('Active')
   })
 
   it('requires a selected master Pile, Batch, and Trip', async () => {
@@ -114,7 +115,7 @@ describe('PileRegistrationPage', () => {
     await user.click(screen.getByRole('button', { name: 'Add Sample' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Trip is required')
     await user.type(screen.getByLabelText('Trip'), '2')
-    expect(screen.getByLabelText('Status')).toHaveValue('ACTIVE')
+    expect(screen.getByLabelText('Status')).toHaveValue('Active')
   })
 
   it('allows the same Pile ID with another Batch but rejects the same Pile ID + Batch', async () => {
@@ -130,6 +131,29 @@ describe('PileRegistrationPage', () => {
     await fillEntry(user, '002', '002')
     await user.click(screen.getByRole('button', { name: 'Add Sample' }))
     expect(screen.getByRole('alert')).toHaveTextContent('already registered')
+  })
+
+  it('adds and edits the dedicated Sample In House value without replacing other registrations', async () => {
+    const user = userEvent.setup()
+    const { onRegistrationsChange } = renderPage([registration(2)])
+
+    await selectPile(user, 'S5_24')
+    await fillEntry(user, '006', '006')
+    await user.type(screen.getByLabelText('Sample In House'), '3')
+    await user.click(screen.getByRole('button', { name: 'Add Sample' }))
+    expect(onRegistrationsChange).toHaveBeenLastCalledWith([
+      registration(2),
+      { ...registration(6), sampleInHouse: 3 },
+    ])
+
+    await user.click(screen.getByRole('button', { name: 'Edit S5_24 batch 006' }))
+    await user.clear(screen.getByLabelText('Sample In House'))
+    await user.type(screen.getByLabelText('Sample In House'), '2')
+    await user.click(screen.getByRole('button', { name: 'Update Sample' }))
+    expect(onRegistrationsChange).toHaveBeenLastCalledWith([
+      registration(2),
+      { ...registration(6), sampleInHouse: 2 },
+    ])
   })
 
   it('preserves the draft when continuing and invokes Back independently', async () => {

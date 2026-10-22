@@ -6,10 +6,11 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { localOperationalStore } from '@/app/local-operational-store'
 import { parseOreCode, parseSamplingHouseCode, parseSectorCode } from '@/domain/common/codes'
 import { parseEmployeeId, parsePileId, parseTruckId } from '@/domain/common/identifiers'
-import { parseHaulerCode, parsePileAreaCode } from '@/domain/master/master-codes'
+import { parseCrewCode, parseHaulerCode, parsePileAreaCode } from '@/domain/master/master-codes'
 import { createMasterData, type MasterData } from '@/domain/master/master-data'
 import {
   createHaulerReference,
+  createCrewReference,
   createEmployeeReference,
   createPileAreaReference,
   createSamplingHouseReference,
@@ -18,6 +19,8 @@ import {
 } from '@/domain/master/references'
 import { createOreSamplingConfig, parseBatchSize, parsePackingConfigValue, parseSamplingInterval } from '@/domain/master/sampling-config'
 import i18n from '@/i18n'
+import { clearPreShiftSetupSession } from '@/infrastructure/device/pre-shift-setup-session-store'
+import { clearWorkSetupDraft } from '@/infrastructure/device/work-setup-draft-store'
 import { StartPage } from './StartPage'
 
 function must<T>(result: { ok: boolean; value?: T }): T {
@@ -35,8 +38,8 @@ function buildLargeCatalogMasterData(): MasterData {
   )
   return must(
     createMasterData({
-      employees: [createEmployeeReference(must(parseEmployeeId('RAHARJO-1')), 'Raharjo Rahman')],
-      crews: [],
+      employees: [createEmployeeReference(must(parseEmployeeId('RAHARJO-1')), 'Raharjo Rahman', 'Supervisor')],
+      crews: [createCrewReference(must(parseCrewCode('CREW-1')), 'Crew One', 'Sampler')],
       sectors: [createSectorReference(br1)],
       locations: [],
       samplingHouses: [createSamplingHouseReference(br1, sh01)],
@@ -70,6 +73,8 @@ function renderStartPage() {
 
 describe('StartPage setup orchestration — large master pile catalog', () => {
   beforeEach(async () => {
+    clearPreShiftSetupSession()
+    clearWorkSetupDraft()
     await i18n.changeLanguage('en')
     await localOperationalStore.replaceMasterDataCache(buildLargeCatalogMasterData(), new Date('2026-09-04'))
   })
@@ -80,14 +85,20 @@ describe('StartPage setup orchestration — large master pile catalog', () => {
 
     await screen.findByLabelText('Shift Date')
     fireEvent.change(screen.getByLabelText('Shift Date'), { target: { value: '2026-09-04' } })
-    fireEvent.change(screen.getByLabelText('Shift Code'), { target: { value: 'D' } })
-    fireEvent.change(screen.getByLabelText('Sector'), { target: { value: 'BR1' } })
-    fireEvent.change(screen.getByLabelText('Sampling House'), { target: { value: 'SH_01' } })
+    await user.click(screen.getByRole('combobox', { name: 'Shift Code' }))
+    await user.click(screen.getByRole('option', { name: 'D' }))
+    await user.click(screen.getByRole('combobox', { name: 'Sector' }))
+    await user.click(screen.getByRole('option', { name: 'BR1' }))
+    await user.click(screen.getByRole('combobox', { name: 'Sampling House' }))
+    await user.click(screen.getByRole('option', { name: 'SH_01' }))
     await user.type(screen.getByLabelText('Search NIK / Name'), 'Raharjo')
     await user.click(await screen.findByRole('button', { name: /Raharjo Rahman/ }))
+    await user.type(screen.getByLabelText('Search NIK / Name'), 'Crew One')
+    await user.click(await screen.findByRole('button', { name: /Crew One/ }))
     await user.click(screen.getByRole('button', { name: 'Next' }))
 
-    await user.click(await screen.findByRole('button', { name: 'New Setup' }))
+    expect(await screen.findByRole('heading', { name: 'Production Data Setup' })).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: /^Create New Production\b/i }))
     await user.type(screen.getByLabelText('Cari Pile/Stockpile'), 'PILE-1')
     await user.click(await screen.findByRole('button', { name: /^PILE-1\s+\D/ }))
     await user.type(screen.getByLabelText('Batch'), '001')
@@ -96,18 +107,18 @@ describe('StartPage setup orchestration — large master pile catalog', () => {
     await user.click(await screen.findByRole('button', { name: /^Next/ }))
 
     await user.click(screen.getByRole('button', { name: '+ Fleet' }))
-    await user.type(screen.getByLabelText('Front Code'), '01')
-    await user.click(screen.getByRole('button', { name: 'BR1/01' }))
-    await user.selectOptions(screen.getByLabelText('Company'), 'H1')
-    await user.type(screen.getByLabelText('Search Pile / Stockpile'), 'PILE-1')
-    await user.click(screen.getByRole('button', { name: /^PILE-1\s+\D/ }))
+    await user.click(screen.getByRole('combobox', { name: 'Company' }))
+    await user.click(screen.getByRole('option', { name: 'H1' }))
+    await user.type(screen.getByLabelText('Pile ID'), 'PILE-1')
+    await user.click(screen.getByRole('option', { name: /^PILE-1\s+\D/ }))
     await user.type(screen.getByLabelText('Exca Hull Number'), '1')
-    await user.type(screen.getByLabelText('Search Unit Truck'), 'T1')
+    await user.type(screen.getByLabelText('Truck'), 'T1')
     await user.click(screen.getByRole('button', { name: 'T1' }))
     await user.click(screen.getByRole('button', { name: 'Save Fleet' }))
 
     await user.click(await screen.findByRole('button', { name: /^Next/ }))
-
+    expect(await screen.findByRole('heading', { name: 'WORK SETUP REVIEW' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Finish Setup' }))
     await screen.findByText('PRODUCTION_PAGE_MARKER')
 
     const workspace = await localOperationalStore.loadCurrentShiftWorkspace()

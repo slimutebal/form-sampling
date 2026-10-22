@@ -16,7 +16,7 @@ export function EffectiveFleetPreview({
   return (
     <section className="rounded-lg border border-primary/20 bg-muted/60 p-3" aria-live="polite">
       <div className="flex items-center justify-between gap-3">
-        <h4 className="font-semibold">{t(titleKey)}</h4>
+        <h4 className="type-subsection-title">{t(titleKey)}</h4>
         <span className="text-sm font-medium">
           {t('fleetSetup.truckCount')}: {truckIds.length}
         </span>

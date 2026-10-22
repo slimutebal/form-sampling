@@ -23,7 +23,10 @@
     "date": "Date",
     "shift": "Shift",
     "continue": "Continue",
-    "resumeNotFound": "Record was not found on this device."
+    "resumeNotFound": "Record was not found on this device.",
+    "selectedDate": "Record date: {{date}}",
+    "masterDataLoading": "Loading master data…",
+    "masterDataConfigUnavailable": "Master data is not configured for this app build."
     ,"eyebrow": "Quality control platform"
     ,"productTitle": "Production & Sampling Record System"
     ,"greeting": "Good morning,"
@@ -132,7 +135,16 @@
   },
   "workSetup": {
     "timeLocation": "Time & Location",
-    "manpower": "Manpower"
+    "manpower": "Manpower",
+    "location": "Loc",
+    "schedule": "Date · Shift",
+    "dayShift": "Day Shift",
+    "nightShift": "Night Shift"
+  },
+  "setupReview": {
+    "title": "WORK SETUP REVIEW",
+    "backToFleet": "Back to Fleet",
+    "finish": "Finish Setup"
   },
   "manpower": {
     "title": "Manpower Setup",
@@ -141,13 +153,20 @@
     "noResults": "No matching personnel.",
     "add": "+ Add",
     "selectedPersonnel": "Selected Personnel",
-    "supervisors": "Supervisors",
+    "supervisors": "Shift Leads",
+    "shiftLead": "Lead",
+    "shiftLeads": "Lead",
+    "staff": "Staff",
     "crew": "Crew",
     "checker": "Checker",
+    "sampler": "Sampler",
     "checkerNamed": "Set {{name}} as Checker",
     "picCount": "{{count}} PIC",
-    "supervisorCount": "{{count}} Pengawas",
+    "supervisorCount": "{{count}} Lead",
+    "shiftLeadCount": "{{count}} Lead",
     "crewCount": "{{count}} Crew",
+    "complete": "Valid",
+    "incomplete": "Incomplete",
     "noPersonnel": "No personnel added yet.",
     "jobDesk": "Job Desk",
     "picLabel": "Penanggung Jawab",
@@ -159,10 +178,11 @@
     "cancel": "Cancel",
     "errors": {
       "checkerRequired": "Select exactly one Checker before continuing.",
-      "supervisorRequired": "At least 1 Supervisor is required.",
+      "supervisorRequired": "At least 1 Lead is required.",
+      "shiftLeadRequired": "Add at least 1 Lead.",
+      "crewRequired": "Add at least 1 Crew.",
       "checkerMustBeStaff": "The selected Checker must be a Staff/PIC person.",
       "duplicatePerson": "This person has already been added.",
-      "jobDeskRequired": "Job Desk is required.",
       "personNotFound": "This person was not found in the Employee/Crew master.",
       "storeContextInvalid": "The active shift workspace could not be found.",
       "generic": "Something went wrong with Manpower setup."
@@ -265,6 +285,7 @@
     "fleetCount": "{{count}} Fleet",
     "addFleet": "+ Fleet",
     "addFleetTitle": "TAMBAH FLEET",
+    "editFleet": "EDIT FLEET",
     "noFleets": "No Fleet registered yet.",
     "frontCode": "Front Code",
     "company": "Company",
@@ -332,6 +353,7 @@
       "haulerMismatch": "Every effective truck must belong to the selected Hauler.",
       "dependency": "This front cannot be removed because another fleet references it.",
       "destinationNotFound": "This destination Pile was not found in this Sector's master data.",
+      "destinationCompanyConflict": "This Pile_Id is already used by a Fleet from a different Company. Select another Pile_Id.",
       "destinationRequired": "Select a Destination/Pile.",
       "excaRequired": "Enter an Exca hull number.",
       "excaInvalid": "Exca hull number must contain 1 to 4 digits.",

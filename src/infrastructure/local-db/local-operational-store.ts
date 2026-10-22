@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie'
 import type {
+  FleetId,
   HaulageTransactionId,
   PileId,
   SamplePositionId,
@@ -7,7 +8,8 @@ import type {
 } from '../../domain/common/identifiers'
 import type { Result } from '../../domain/common/result'
 import { err, ok } from '../../domain/common/result'
-import type { FleetSetup } from '../../domain/fleet/fleet-setup'
+import { createFleetSetup, type FleetSetup } from '../../domain/fleet/fleet-setup'
+import { destinationPileIdsForFront } from '../../domain/fleet/front'
 import type { PendingBatchCarryOver } from '../../domain/handover/carry-over-pending-batch'
 import type { HandoverPendingSample } from '../../domain/handover/carry-over-pending-sample'
 import type { HaulageTransaction } from '../../domain/haulage/haulage-transaction'
@@ -18,6 +20,7 @@ import type { FreshPileStartPosition } from '../../domain/pile/fresh-pile-start-
 import { createPile, type Pile } from '../../domain/pile/pile'
 import { createLegacyProductionRecord, type ProductionRecord } from '../../domain/production/production-record'
 import { validateNoSampleOverlap } from '../../domain/sample-handling/sample-overlap'
+import { reactivateFleet, type ReactivateFleetParams } from '../../application/fleet-setup/reactivate-fleet'
 import type { SamplePosition } from '../../domain/sample-handling/sample-position'
 import type { Shift } from '../../domain/shift/shift'
 import type { PileRegistrationDraft } from '../../application/pile-registration/pile-registration-draft'
@@ -34,6 +37,13 @@ import {
   type ShiftSummarySyncRecord,
   type ShiftWorkspaceRecord,
 } from './records'
+import { resolveCheckerPersonId } from '@/application/manpower/checker-assignment'
+import {
+  createWorkspaceBackupEnvelope,
+  type WorkspaceBackupEnvelope,
+  type WorkspaceBackupPreview,
+  validateWorkspaceBackup,
+} from './workspace-backup'
 
 /**
  * Internal Dexie wrapper for the local operational database. Deliberately
@@ -166,6 +176,8 @@ export interface LocalShiftWorkspace {
   readonly pendingSamples: readonly HandoverPendingSample[]
   /** Manpower assigned to this shift (Phase 18 §4) — `[]` for a row written before this field existed. Always a concrete array, never `undefined`. */
   readonly manpower: readonly ManpowerAssignment[]
+  /** Exactly one current operational Checker when manpower is configured. */
+  readonly checkerPersonId?: string
   /** Pre-shift registration rows, including inactive and repeated Pile IDs. */
   readonly pileRegistrations: readonly PileRegistrationDraft[]
 }
@@ -186,6 +198,7 @@ export interface InitializeShiftWorkspaceParams {
   readonly pendingSamples?: readonly HandoverPendingSample[]
   /** Manpower assigned to this shift (Phase 18 §4). Optional so every existing pre-Phase-18 call site keeps compiling unchanged — defaults to `[]`. */
   readonly manpower?: readonly ManpowerAssignment[]
+  readonly checkerPersonId?: string
   /** Pre-shift registration rows; operational workspace `piles` remains unique by PileId. */
   readonly pileRegistrations?: readonly PileRegistrationDraft[]
   /**
@@ -199,6 +212,11 @@ export interface InitializeShiftWorkspaceParams {
    * previous-shift import ("Start Without Previous Shift").
    */
   readonly handoverImport?: ImportHistoryRecord
+}
+
+/** Test seam for proving Dexie's all-or-nothing restore transaction. Production never supplies it. */
+export interface LocalOperationalStoreOptions {
+  readonly onRestoreWorkspaceInserted?: () => void
 }
 
 type StoreResult<T> = Result<T, LocalDatabaseError>
@@ -250,7 +268,48 @@ function toWorkspace(record: ShiftWorkspaceRecord): LocalShiftWorkspace {
     pendingBatches: record.pendingBatches ?? [],
     pendingSamples: record.pendingSamples ?? [],
     manpower: record.manpower ?? [],
+    checkerPersonId: resolveCheckerPersonId(record.manpower ?? [], record.checkerPersonId),
     pileRegistrations: record.pileRegistrations ?? [],
+  }
+}
+
+function identitySnapshotEquals(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+/** Prevents an existing assignment's historical business snapshot changing on an edit. */
+function assertFleetIdentityContinuity(existing: FleetSetup, replacement: FleetSetup): void {
+  for (const currentFleet of existing.fleets) {
+    const currentIdentity = currentFleet.assignmentIdentity
+    if (!currentIdentity) continue
+    const replacementFleet = replacement.fleets.find((fleet) => fleet.fleetId === currentFleet.fleetId)
+    if (!replacementFleet?.assignmentIdentity || !identitySnapshotEquals(currentIdentity, replacementFleet.assignmentIdentity)) {
+      raiseExpectedError(
+        'FLEET_IDENTITY_IMMUTABLE',
+        `Fleet assignment ${currentFleet.fleetId} cannot have its persisted identity changed`,
+      )
+    }
+  }
+}
+
+/** Full business codes are unique across every locally managed workspace. */
+function assertNoFleetCodeCollision(
+  records: readonly ShiftWorkspaceRecord[],
+  candidate: FleetSetup,
+  candidateShiftId?: ShiftId,
+): void {
+  const existingCodes = new Set<string>()
+  for (const record of records) {
+    if (record.shiftId === candidateShiftId) continue
+    for (const fleet of record.fleetSetup.fleets) {
+      if (fleet.assignmentIdentity) existingCodes.add(fleet.assignmentIdentity.fleetCode)
+    }
+  }
+  for (const fleet of candidate.fleets) {
+    const code = fleet.assignmentIdentity?.fleetCode
+    if (code && existingCodes.has(code)) {
+      raiseExpectedError('DUPLICATE_FLEET_CODE', `Fleet business code ${code} already exists in another workspace`)
+    }
   }
 }
 
@@ -267,9 +326,11 @@ function toWorkspace(record: ShiftWorkspaceRecord): LocalShiftWorkspace {
  */
 export class LocalOperationalStore {
   private readonly db: LocalOperationalDatabase
+  private readonly onRestoreWorkspaceInserted?: () => void
 
-  constructor(databaseName: string = DEFAULT_LOCAL_DATABASE_NAME) {
+  constructor(databaseName: string = DEFAULT_LOCAL_DATABASE_NAME, options: LocalOperationalStoreOptions = {}) {
     this.db = new LocalOperationalDatabase(databaseName)
+    this.onRestoreWorkspaceInserted = options.onRestoreWorkspaceInserted
   }
 
   /** Closes the underlying IndexedDB connection (does not delete data). */
@@ -356,6 +417,18 @@ export class LocalOperationalStore {
     const handoverImportSnapshot: ImportHistoryRecord | undefined = params.handoverImport
       ? structuredClone(params.handoverImport)
       : undefined
+
+    // A branded FleetSetup is a compile-time guarantee only. Rebuild it
+    // against the snapshotted Master Data at this persistence boundary so a
+    // malformed or stale runtime payload cannot bypass active Pile/Company
+    // assignment validation before the workspace is written.
+    const validatedFleetSetup = createFleetSetup(fleetSetupSnapshot, masterDataSnapshot)
+    if (!validatedFleetSetup.ok) {
+      return err({
+        code: validatedFleetSetup.error.code,
+        message: validatedFleetSetup.error.message,
+      })
+    }
 
     // Carry-over integrity (Phase 12 critical fix): validated synchronously
     // against the snapshot, before the transaction opens, so an invalid
@@ -450,15 +523,21 @@ export class LocalOperationalStore {
             }
           }
 
+          assertNoFleetCodeCollision(
+            await this.db.shiftWorkspaces.toArray(),
+            validatedFleetSetup.value,
+          )
+
           const record: ShiftWorkspaceRecord = {
             shiftId,
             shift: shiftSnapshot,
             piles: pilesSnapshot,
             masterData: masterDataSnapshot,
-            fleetSetup: fleetSetupSnapshot,
+            fleetSetup: validatedFleetSetup.value,
             pendingBatches: pendingBatchesSnapshot,
             pendingSamples: pendingSamplesSnapshot,
             manpower: manpowerSnapshot,
+            checkerPersonId: resolveCheckerPersonId(manpowerSnapshot, params.checkerPersonId),
             pileRegistrations: pileRegistrationsSnapshot,
           }
           await this.db.shiftWorkspaces.add(record)
@@ -539,10 +618,70 @@ export class LocalOperationalStore {
           (candidate) =>
             (candidate.shift.date as string) === date &&
             (candidate.shift.shiftCode as string) === shiftCode &&
-            (candidate.manpower ?? []).some(
-              (assignment) => assignment.personId === checkerPersonId && assignment.jobDeskCode === 'Checker',
-            ),
+            resolveCheckerPersonId(candidate.manpower ?? [], candidate.checkerPersonId) === checkerPersonId,
         )
+        if (!record) return ok(undefined)
+        await this.db.metadata.put({ key: CURRENT_SHIFT_METADATA_KEY, value: record.shiftId })
+        return ok(toWorkspace(record))
+      })
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Finds local workspaces by their immutable operational identity without
+   * changing the current-workspace pointer. The landing resume flow uses this
+   * read first so that multiple matches are presented explicitly.
+   */
+  async findLocalWorkspaces(params: {
+    readonly date: string
+    readonly shiftCode: string
+    readonly sectorCode: string
+    readonly samplingHouseCode: string
+    readonly checkerPersonId: string
+  }): Promise<StoreResult<readonly LocalShiftWorkspace[]>> {
+    try {
+      const records = await this.db.shiftWorkspaces.toArray()
+      return ok(
+        records
+          .filter(
+            (candidate) =>
+              (candidate.shift.date as string) === params.date &&
+              (candidate.shift.shiftCode as string) === params.shiftCode &&
+              (candidate.shift.sectorCode as string) === params.sectorCode &&
+              (candidate.shift.samplingHouseCode as string) === params.samplingHouseCode &&
+              resolveCheckerPersonId(candidate.manpower ?? [], candidate.checkerPersonId) === params.checkerPersonId,
+          )
+          .map(toWorkspace),
+      )
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Lists every workspace stored on this browser origin without changing the
+   * current-workspace pointer. This is deliberately a recovery/discovery
+   * read: callers must require an explicit operator selection before calling
+   * `resumeLocalWorkspaceById`. In particular, it lets a legacy workspace
+   * whose pre-manpower row has no recorded Checker remain discoverable
+   * without inventing or writing a Checker assignment.
+   */
+  async listLocalWorkspaces(): Promise<StoreResult<readonly LocalShiftWorkspace[]>> {
+    try {
+      const records = await this.db.shiftWorkspaces.toArray()
+      return ok(records.map(toWorkspace))
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /** Marks a previously selected local workspace as current; it never creates or mutates the workspace itself. */
+  async resumeLocalWorkspaceById(shiftId: ShiftId): Promise<StoreResult<LocalShiftWorkspace | undefined>> {
+    try {
+      return await this.db.transaction('rw', this.db.shiftWorkspaces, this.db.metadata, async () => {
+        const record = await this.db.shiftWorkspaces.get(shiftId)
         if (!record) return ok(undefined)
         await this.db.metadata.put({ key: CURRENT_SHIFT_METADATA_KEY, value: record.shiftId })
         return ok(toWorkspace(record))
@@ -623,7 +762,7 @@ export class LocalOperationalStore {
     const startPositionSnapshot: FreshPileStartPosition = structuredClone(startPosition)
 
     try {
-      await this.db.transaction('rw', this.db.shiftWorkspaces, async () => {
+      await this.db.transaction('rw', this.db.shiftWorkspaces, this.db.productionRecords, async () => {
         const existing = await this.db.shiftWorkspaces.get(shiftId)
         if (!existing) {
           raiseExpectedError(
@@ -736,14 +875,14 @@ export class LocalOperationalStore {
    */
   async appendFrontContinuation(
     shiftId: ShiftId,
-    params: { readonly fleetSetup: FleetSetup; readonly activatePile?: Pile },
+    params: { readonly fleetSetup: FleetSetup; readonly activatePile?: Pile; readonly activatePiles?: readonly Pile[] },
   ): Promise<StoreResult<void>> {
     // Snapshot before the first `await`, mirroring every other write
     // method on this store (Phase 7 §29).
     const fleetSetupSnapshot: FleetSetup = structuredClone(params.fleetSetup)
-    const activatePileSnapshot: Pile | undefined = params.activatePile
-      ? structuredClone(params.activatePile)
-      : undefined
+    const activatePileSnapshots = structuredClone(
+      params.activatePiles ?? (params.activatePile ? [params.activatePile] : []),
+    ) as readonly Pile[]
 
     try {
       await this.db.transaction('rw', this.db.shiftWorkspaces, async () => {
@@ -755,18 +894,71 @@ export class LocalOperationalStore {
           )
         }
 
-        const piles =
-          activatePileSnapshot && !existing.piles.some((candidate) => candidate.id === activatePileSnapshot.id)
-            ? [...existing.piles, activatePileSnapshot]
-            : existing.piles
+        // Read the persisted workspace inside the same Dexie transaction,
+        // then revalidate the complete replacement snapshot against its
+        // Master Data. This makes Pile/Company validation and persistence a
+        // single atomic operation and never relies on a visible UI list.
+        const validatedFleetSetup = createFleetSetup(fleetSetupSnapshot, existing.masterData)
+        if (!validatedFleetSetup.ok) {
+          raiseExpectedError(validatedFleetSetup.error.code, validatedFleetSetup.error.message)
+        }
+        assertFleetIdentityContinuity(existing.fleetSetup, validatedFleetSetup.value)
+        assertNoFleetCodeCollision(
+          await this.db.shiftWorkspaces.toArray(),
+          validatedFleetSetup.value,
+          existing.shiftId,
+        )
+
+        const piles = [...existing.piles]
+        for (const pile of activatePileSnapshots) {
+          if (!piles.some((candidate) => candidate.id === pile.id)) piles.push(pile)
+        }
 
         await this.db.shiftWorkspaces.put({
           ...existing,
-          fleetSetup: fleetSetupSnapshot,
+          fleetSetup: validatedFleetSetup.value,
           piles,
         })
       })
       return ok(undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /** Atomically appends temporal reactivation events and its resulting FleetSetup. */
+  async reactivateFleet(
+    shiftId: ShiftId,
+    params: Omit<ReactivateFleetParams, 'fleetSetup' | 'masterData'>,
+  ): Promise<StoreResult<FleetSetup>> {
+    try {
+      let savedSetup: FleetSetup | undefined
+      await this.db.transaction('rw', this.db.shiftWorkspaces, this.db.productionRecords, async () => {
+        const existing = await this.db.shiftWorkspaces.get(shiftId)
+        if (!existing) raiseExpectedError('SHIFT_WORKSPACE_NOT_FOUND', `No shift workspace exists for ShiftId ${shiftId}`)
+        const result = reactivateFleet({ ...params, fleetSetup: existing.fleetSetup, masterData: existing.masterData })
+        if (!result.ok) raiseExpectedError(result.error.code, result.error.message)
+        const priorFleet = existing.fleetSetup.fleets.find((fleet) => fleet.fleetId === params.fleetId)
+        const nextFleet = result.value.fleetSetup.fleets.find((fleet) => fleet.fleetId === params.fleetId)
+        const priorFront = priorFleet ? existing.fleetSetup.fronts.find((front) => front.frontId === priorFleet.frontId) : undefined
+        const nextFront = nextFleet ? result.value.fleetSetup.fronts.find((front) => front.frontId === nextFleet.frontId) : undefined
+        if (priorFront && nextFront) {
+          const nextPiles = new Set(destinationPileIdsForFront(nextFront).map(String))
+          const records = await this.db.productionRecords.where('shiftId').equals(shiftId).toArray()
+          for (const pileId of destinationPileIdsForFront(priorFront).map(String)) {
+            if (nextPiles.has(pileId)) continue
+            if (records.some((record) => (record.productionRecord.transaction.fleetId === params.fleetId || record.productionRecord.effective.fleetId === params.fleetId) && record.productionRecord.transaction.pileId === pileId)) {
+              raiseExpectedError('FLEET_PILE_LOCKED_BY_PRODUCTION', `Pile ${pileId} has Production history for Fleet ${params.fleetId} and cannot be removed`)
+            }
+          }
+        }
+        assertFleetIdentityContinuity(existing.fleetSetup, result.value.fleetSetup)
+        assertNoFleetCodeCollision(await this.db.shiftWorkspaces.toArray(), result.value.fleetSetup, existing.shiftId)
+        await this.db.shiftWorkspaces.put({ ...existing, fleetSetup: result.value.fleetSetup })
+        savedSetup = result.value.fleetSetup
+      })
+      if (!savedSetup) return err({ code: 'FLEET_REACTIVATION_NOT_SAVED', message: 'Fleet reactivation did not produce a saved snapshot' })
+      return ok(savedSetup)
     } catch (caught) {
       return err(mapCaughtError(caught))
     }
@@ -794,6 +986,7 @@ export class LocalOperationalStore {
   async updateShiftManpower(
     shiftId: ShiftId,
     manpower: readonly ManpowerAssignment[],
+    checkerPersonId?: string,
   ): Promise<StoreResult<void>> {
     // Snapshot before the first `await`, mirroring every other write
     // method on this store (Phase 7 §29).
@@ -808,10 +1001,15 @@ export class LocalOperationalStore {
             `No shift workspace exists for ShiftId ${shiftId}`,
           )
         }
+        const checkerPersonIdSnapshot = resolveCheckerPersonId(
+          manpowerSnapshot,
+          checkerPersonId ?? existing.checkerPersonId,
+        )
 
         await this.db.shiftWorkspaces.put({
           ...existing,
           manpower: manpowerSnapshot,
+          checkerPersonId: checkerPersonIdSnapshot,
         })
       })
       return ok(undefined)
@@ -862,6 +1060,79 @@ export class LocalOperationalStore {
    */
   async updateActiveFrontFleet(shiftId: ShiftId, fleetSetup: FleetSetup): Promise<StoreResult<void>> {
     return this.appendFrontContinuation(shiftId, { fleetSetup })
+  }
+
+  /**
+   * Replaces an active Fleet setup only after reading persisted Production
+   * history in the same transaction. This is the edit-time guard used by Work
+   * Setup: any record referencing the selected identity, including rejected
+   * and voided records, permanently prevents rewriting its configuration.
+   * Add-truck updates deliberately pass `requireNoProduction: false`; their
+   * existing transactions remain immutable snapshots in `productionRecords`.
+   */
+  async updateActiveFrontFleetWithProductionGuard(
+    shiftId: ShiftId,
+    fleetId: FleetId,
+    fleetSetup: FleetSetup,
+    requireNoProduction: boolean,
+  ): Promise<StoreResult<void>> {
+    const snapshot: FleetSetup = structuredClone(fleetSetup)
+    try {
+      await this.db.transaction('rw', this.db.shiftWorkspaces, this.db.productionRecords, async () => {
+        const existing = await this.db.shiftWorkspaces.get(shiftId)
+        if (!existing) raiseExpectedError('SHIFT_WORKSPACE_NOT_FOUND', `Shift workspace ${shiftId} was not found`)
+
+        if (!snapshot.fleets.some((fleet) => fleet.fleetId === fleetId)) {
+          raiseExpectedError('FLEET_NOT_FOUND', `Fleet ${fleetId} was not found in the proposed configuration`)
+        }
+
+        const records = await this.db.productionRecords.where('shiftId').equals(shiftId).toArray()
+        if (requireNoProduction) {
+          const used = records.some((row) =>
+            row.productionRecord.transaction.fleetId === fleetId || row.productionRecord.effective.fleetId === fleetId,
+          )
+          if (used) {
+            raiseExpectedError(
+              'FLEET_CONFIGURATION_LOCKED_BY_PRODUCTION',
+              `Fleet ${fleetId} has Production history and can no longer be edited`,
+            )
+          }
+        }
+
+        // Operational edits after Production are allowed, but Piles already
+        // referenced by any original/effective Fleet record cannot disappear.
+        const previousFleet = existing.fleetSetup.fleets.find((fleet) => fleet.fleetId === fleetId)
+        const proposedFleet = snapshot.fleets.find((fleet) => fleet.fleetId === fleetId)
+        const previousFront = previousFleet ? existing.fleetSetup.fronts.find((front) => front.frontId === previousFleet.frontId) : undefined
+        const proposedFront = proposedFleet ? snapshot.fronts.find((front) => front.frontId === proposedFleet.frontId) : undefined
+        if (previousFront && proposedFront) {
+          const proposedPileIds = new Set(destinationPileIdsForFront(proposedFront).map(String))
+          const removedPileIds = destinationPileIdsForFront(previousFront).map(String).filter((pileId) => !proposedPileIds.has(pileId))
+          for (const pileId of removedPileIds) {
+            const used = records.some((row) =>
+              (row.productionRecord.transaction.fleetId === fleetId || row.productionRecord.effective.fleetId === fleetId) &&
+              row.productionRecord.transaction.pileId === pileId,
+            )
+            if (used) {
+              raiseExpectedError('FLEET_PILE_LOCKED_BY_PRODUCTION', `Pile ${pileId} has Production history for Fleet ${fleetId} and cannot be removed`)
+            }
+          }
+        }
+
+        const validated = createFleetSetup(snapshot, existing.masterData)
+        if (!validated.ok) raiseExpectedError(validated.error.code, validated.error.message)
+        assertFleetIdentityContinuity(existing.fleetSetup, validated.value)
+        assertNoFleetCodeCollision(
+          await this.db.shiftWorkspaces.toArray(),
+          validated.value,
+          existing.shiftId,
+        )
+        await this.db.shiftWorkspaces.put({ ...existing, fleetSetup: validated.value })
+      })
+      return ok(undefined)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
   }
 
   /**
@@ -1609,6 +1880,99 @@ export class LocalOperationalStore {
     try {
       const records = await this.db.shiftSummarySync.toArray()
       return ok(records)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Reads one complete shift-owned snapshot in a single Dexie read
+   * transaction. It never reads metadata, master-data cache, or import
+   * history: those tables have no safe one-workspace ownership relation.
+   */
+  async exportLocalWorkspaceBackup(shiftId: ShiftId): Promise<StoreResult<WorkspaceBackupEnvelope>> {
+    try {
+      const backup = await this.db.transaction(
+        'r',
+        this.db.shiftWorkspaces,
+        this.db.haulageTransactions,
+        this.db.samplePositions,
+        this.db.productionRecords,
+        this.db.shiftSummarySync,
+        async () => {
+          const workspace = await this.db.shiftWorkspaces.get(shiftId)
+          if (!workspace) raiseExpectedError('SHIFT_WORKSPACE_NOT_FOUND', `No shift workspace exists for ShiftId ${shiftId}`)
+          const [haulageTransactions, samplePositions, productionRecords, shiftSummarySync] = await Promise.all([
+            this.db.haulageTransactions.where('shiftId').equals(shiftId).toArray(),
+            this.db.samplePositions.where('shiftId').equals(shiftId).toArray(),
+            this.db.productionRecords.where('shiftId').equals(shiftId).toArray(),
+            this.db.shiftSummarySync.get(shiftId),
+          ])
+          return createWorkspaceBackupEnvelope(structuredClone({ workspace, haulageTransactions, samplePositions, productionRecords, shiftSummarySync: shiftSummarySync ?? null }))
+        },
+      )
+      return ok(backup)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /** Validates a parsed backup and current collision state without changing local data. */
+  async previewLocalWorkspaceBackup(backup: WorkspaceBackupEnvelope): Promise<StoreResult<WorkspaceBackupPreview>> {
+    try {
+      const preview = validateWorkspaceBackup(backup)
+      await this.db.transaction('r', this.db.shiftWorkspaces, this.db.haulageTransactions, this.db.samplePositions, this.db.productionRecords, this.db.shiftSummarySync, async () => {
+        const { workspace, haulageTransactions, samplePositions, productionRecords, shiftSummarySync } = backup.data
+        if (await this.db.shiftWorkspaces.get(workspace.shiftId)) raiseExpectedError('BACKUP_CONFLICT_SHIFT_WORKSPACE', `Workspace ${workspace.shiftId} already exists`)
+        assertNoFleetCodeCollision(await this.db.shiftWorkspaces.toArray(), workspace.fleetSetup)
+        for (const row of haulageTransactions) if (await this.db.haulageTransactions.get(row.id)) raiseExpectedError('BACKUP_CONFLICT_HAULAGE_ID', `Haulage transaction ${row.id} already exists`)
+        for (const row of samplePositions) if (await this.db.samplePositions.get(row.id)) raiseExpectedError('BACKUP_CONFLICT_SAMPLE_ID', `Sample position ${row.id} already exists`)
+        for (const row of productionRecords) if (await this.db.productionRecords.get(row.id)) raiseExpectedError('BACKUP_CONFLICT_PRODUCTION_ID', `Production record ${row.id} already exists`)
+        if (shiftSummarySync && await this.db.shiftSummarySync.get(shiftSummarySync.shiftId)) raiseExpectedError('BACKUP_CONFLICT_SHIFT_SUMMARY', `Shift summary outbox for ${shiftSummarySync.shiftId} already exists`)
+      })
+      return ok(preview)
+    } catch (caught) {
+      return err(mapCaughtError(caught))
+    }
+  }
+
+  /**
+   * Restores a previously validated snapshot with an explicit reject-on-any-
+   * collision policy. Validation and all collision checks are repeated in the
+   * same read-write transaction immediately before add-only writes; metadata
+   * is intentionally not touched, so a restore never activates a workspace.
+   */
+  async restoreLocalWorkspaceBackup(backup: WorkspaceBackupEnvelope): Promise<StoreResult<WorkspaceBackupPreview>> {
+    let preview: WorkspaceBackupPreview
+    try { preview = validateWorkspaceBackup(backup) } catch (caught) { return err(mapCaughtError(caught)) }
+    const snapshot = structuredClone(backup)
+    try {
+      await this.db.transaction(
+        'rw',
+        this.db.shiftWorkspaces,
+        this.db.haulageTransactions,
+        this.db.samplePositions,
+        this.db.productionRecords,
+        this.db.shiftSummarySync,
+        async () => {
+          // A stale preview cannot authorize a later collision.
+          validateWorkspaceBackup(snapshot)
+          const { workspace, haulageTransactions, samplePositions, productionRecords, shiftSummarySync } = snapshot.data
+          if (await this.db.shiftWorkspaces.get(workspace.shiftId)) raiseExpectedError('BACKUP_CONFLICT_SHIFT_WORKSPACE', `Workspace ${workspace.shiftId} already exists`)
+          assertNoFleetCodeCollision(await this.db.shiftWorkspaces.toArray(), workspace.fleetSetup)
+          for (const row of haulageTransactions) if (await this.db.haulageTransactions.get(row.id)) raiseExpectedError('BACKUP_CONFLICT_HAULAGE_ID', `Haulage transaction ${row.id} already exists`)
+          for (const row of samplePositions) if (await this.db.samplePositions.get(row.id)) raiseExpectedError('BACKUP_CONFLICT_SAMPLE_ID', `Sample position ${row.id} already exists`)
+          for (const row of productionRecords) if (await this.db.productionRecords.get(row.id)) raiseExpectedError('BACKUP_CONFLICT_PRODUCTION_ID', `Production record ${row.id} already exists`)
+          if (shiftSummarySync && await this.db.shiftSummarySync.get(shiftSummarySync.shiftId)) raiseExpectedError('BACKUP_CONFLICT_SHIFT_SUMMARY', `Shift summary outbox for ${shiftSummarySync.shiftId} already exists`)
+          await this.db.shiftWorkspaces.add(workspace)
+          this.onRestoreWorkspaceInserted?.()
+          if (haulageTransactions.length) await this.db.haulageTransactions.bulkAdd(haulageTransactions)
+          if (samplePositions.length) await this.db.samplePositions.bulkAdd(samplePositions)
+          if (productionRecords.length) await this.db.productionRecords.bulkAdd(productionRecords)
+          if (shiftSummarySync) await this.db.shiftSummarySync.add(shiftSummarySync)
+        },
+      )
+      return ok(preview)
     } catch (caught) {
       return err(mapCaughtError(caught))
     }

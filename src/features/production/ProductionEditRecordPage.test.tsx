@@ -105,7 +105,7 @@ describe('ProductionEditRecordPage', () => {
     mockRecords([buildRecord()])
     renderPage(4, 5, 'TX-5')
 
-    await screen.findByText(FIXTURE_IN_FLEET_TRUCK_ID)
+    expect(await screen.findByDisplayValue(FIXTURE_IN_FLEET_TRUCK_ID)).toHaveAccessibleName('Truck')
     expect(screen.getByText('S5_02 Batch 4 Trip 5')).toBeInTheDocument()
     expect(screen.getByLabelText('Front No')).toHaveValue('F1')
     expect(screen.getByRole('button', { name: 'Wet' })).toHaveAttribute('aria-pressed', 'true')
@@ -117,7 +117,7 @@ describe('ProductionEditRecordPage', () => {
   it('never exposes a Batch/Rit input — Switch Record is the only way to move a position', async () => {
     mockRecords([buildRecord()])
     renderPage(4, 5, 'TX-5')
-    await screen.findByText(FIXTURE_IN_FLEET_TRUCK_ID)
+    await screen.findByDisplayValue(FIXTURE_IN_FLEET_TRUCK_ID)
 
     expect(screen.queryByLabelText(/batch/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/^rit$/i)).not.toBeInTheDocument()
@@ -126,7 +126,7 @@ describe('ProductionEditRecordPage', () => {
   it('disables Save Changes until a reason is entered', async () => {
     mockRecords([buildRecord()])
     renderPage(4, 5, 'TX-5')
-    await screen.findByText(FIXTURE_IN_FLEET_TRUCK_ID)
+    await screen.findByDisplayValue(FIXTURE_IN_FLEET_TRUCK_ID)
 
     expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled()
   })
@@ -138,7 +138,7 @@ describe('ProductionEditRecordPage', () => {
       .spyOn(localOperationalStore, 'updateProductionRecordWithCorrection')
       .mockResolvedValue({ ok: true, value: undefined })
     renderPage(4, 5, 'TX-5')
-    await screen.findByText(FIXTURE_IN_FLEET_TRUCK_ID)
+    await screen.findByDisplayValue(FIXTURE_IN_FLEET_TRUCK_ID)
 
     await user.type(screen.getByLabelText('Correction Reason'), 'Salah input kondisi')
     await user.click(screen.getByRole('button', { name: 'Dry' }))
@@ -160,7 +160,7 @@ describe('ProductionEditRecordPage', () => {
       .spyOn(localOperationalStore, 'updateProductionRecordWithCorrection')
       .mockResolvedValue({ ok: true, value: undefined })
     renderPage(4, 5, 'TX-5')
-    await screen.findByText(FIXTURE_IN_FLEET_TRUCK_ID)
+    await screen.findByDisplayValue(FIXTURE_IN_FLEET_TRUCK_ID)
 
     await user.clear(screen.getByPlaceholderText('Remark (optional)'))
     await user.type(screen.getByLabelText('Correction Reason'), 'Hapus keterangan')
@@ -178,11 +178,11 @@ describe('ProductionEditRecordPage', () => {
       .spyOn(localOperationalStore, 'updateProductionRecordWithCorrection')
       .mockResolvedValue({ ok: true, value: undefined })
     renderPage(4, 5, 'TX-5')
-    await screen.findByText(FIXTURE_IN_FLEET_TRUCK_ID)
+    await screen.findByDisplayValue(FIXTURE_IN_FLEET_TRUCK_ID)
 
-    await user.click(screen.getByRole('button', { name: 'Change' }))
+    await user.clear(screen.getByLabelText('Truck'))
     await user.type(screen.getByLabelText('Truck'), FIXTURE_WRONG_TRUCK_TRUCK_ID)
-    await user.click(await screen.findByRole('button', { name: FIXTURE_WRONG_TRUCK_TRUCK_ID }))
+    await user.click(await screen.findByRole('option', { name: FIXTURE_WRONG_TRUCK_TRUCK_ID }))
     await user.type(screen.getByLabelText('Correction Reason'), 'Ganti truck')
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 

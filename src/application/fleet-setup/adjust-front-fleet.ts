@@ -90,6 +90,8 @@ export function adjustFrontFleet(params: AdjustFrontFleetParams): Result<AdjustF
       fleetId: existingFleet.fleetId,
       frontId: existingFleet.frontId,
       truckIds: desiredTruckIds.value,
+      assignmentIdentity: existingFleet.assignmentIdentity,
+      excaConfigurationHistory: existingFleet.excaConfigurationHistory,
     })
     if (!rebuilt.ok) return rebuilt
     updatedFleet = rebuilt.value
@@ -112,6 +114,8 @@ export function adjustFrontFleet(params: AdjustFrontFleetParams): Result<AdjustF
       referenceFleetId: existingFleet.referenceFleetId,
       addedTruckIds,
       removedTruckIds,
+      assignmentIdentity: existingFleet.assignmentIdentity,
+      excaConfigurationHistory: existingFleet.excaConfigurationHistory,
     })
     if (!rebuilt.ok) return rebuilt
     updatedFleet = rebuilt.value
@@ -121,6 +125,7 @@ export function adjustFrontFleet(params: AdjustFrontFleetParams): Result<AdjustF
     {
       fronts: params.fleetSetup.fronts,
       fleets: params.fleetSetup.fleets.map((fleet) => (fleet.fleetId === updatedFleet.fleetId ? updatedFleet : fleet)),
+      ...(params.fleetSetup.operationalState ? { operationalState: params.fleetSetup.operationalState } : {}),
     },
     params.masterData,
   )

@@ -1,9 +1,18 @@
 import Dexie from 'dexie'
 import { afterEach, describe, expect, it } from 'vitest'
 import { adjustFrontFleet } from '../../application/fleet-setup/adjust-front-fleet'
+import { reconfigureActiveFrontFleet } from '../../application/fleet-setup/reconfigure-active-front-fleet'
+import { buildExcaCode } from '../../domain/fleet/exca-code'
+import { createFleetSetup } from '../../domain/fleet/fleet-setup'
+import { createFrontDefinition } from '../../domain/fleet/front'
 import { createHaulageTransaction } from '../../domain/haulage/haulage-transaction'
+import { parseOreCode } from '../../domain/common/codes'
+import { createMasterData } from '../../domain/master/master-data'
+import { parsePileAreaCode } from '../../domain/master/master-codes'
+import { createPileAreaReference } from '../../domain/master/references'
 import {
   buildFixtureFleetSetup,
+  buildFixtureProductionRecord,
   buildFixtureMasterData,
   buildFixtureSapPile,
   buildFixtureShift,
@@ -12,6 +21,7 @@ import {
   fixtureShiftId,
   fixtureTransactionId,
   fixtureTruckId,
+  FIXTURE_FLEET_ID,
   FIXTURE_FRONT_ID,
   FIXTURE_IN_FLEET_TRUCK_ID,
   FIXTURE_WRONG_TRUCK_TRUCK_ID,
@@ -38,6 +48,66 @@ afterEach(async () => {
 })
 
 describe('LocalOperationalStore.updateActiveFrontFleet', () => {
+  it('persists an Exca revision through Edit Fleet reload without altering existing Production records', async () => {
+    const databaseName = uniqueDatabaseName()
+    const pile = buildFixtureSapPile('PILE-EXCA-HISTORY')
+    const fixtureMasterData = buildFixtureMasterData()
+    const stockpile = parsePileAreaCode('STOCK-EXCA')
+    const ore = parseOreCode('SAP')
+    expect(stockpile.ok && ore.ok).toBe(true)
+    if (!stockpile.ok || !ore.ok) return
+    const masterDataResult = createMasterData({
+      ...fixtureMasterData,
+      pileAreas: [createPileAreaReference(
+        fixtureMasterData.sectors[0]!.code,
+        stockpile.value,
+        pile.id,
+        ore.value,
+      )],
+    })
+    expect(masterDataResult.ok).toBe(true)
+    if (!masterDataResult.ok) return
+    const masterData = masterDataResult.value
+    const baseSetup = buildFixtureFleetSetup(masterData, pile.id)
+    const currentExca = buildExcaCode('H1', '698')
+    const nextExca = buildExcaCode('H1', '321')
+    expect(currentExca.ok && nextExca.ok).toBe(true)
+    if (!currentExca.ok || !nextExca.ok) return
+    const originalFront = baseSetup.fronts[0]!
+    const initialSetup = createFleetSetup({
+      fronts: [createFrontDefinition(originalFront.frontId, originalFront.sectorCode, originalFront.haulerCode, originalFront.destinationPileId, currentExca.value)],
+      fleets: baseSetup.fleets,
+    }, masterData)
+    expect(initialSetup.ok).toBe(true)
+    if (!initialSetup.ok) return
+    const shift = buildFixtureShift('SHIFT-EXCA-HISTORY')
+    const store = new LocalOperationalStore(databaseName)
+    await store.initializeShiftWorkspace({ shift, piles: [pile], masterData, fleetSetup: initialSetup.value })
+
+    const revised = reconfigureActiveFrontFleet({
+      fleetSetup: initialSetup.value,
+      masterData,
+      frontId: FIXTURE_FRONT_ID,
+      destinationPileIds: originalFront.destinationPileIds?.map(String) ?? (originalFront.destinationPileId ? [String(originalFront.destinationPileId)] : []),
+      excaCode: nextExca.value,
+      truckIds: [FIXTURE_IN_FLEET_TRUCK_ID],
+      excaRevision: { revisionId: 'EXCA-REVISION-1', fleetAssignmentId: fixtureFleetId(FIXTURE_FLEET_ID), previousExcaCode: currentExca.value, excaCode: nextExca.value, effectiveAt: new Date('2026-10-19T01:00:00Z'), recordedAt: new Date('2026-10-19T01:01:00Z'), actorId: 'CHECKER' },
+    })
+    expect(revised.ok).toBe(true)
+    if (!revised.ok) return
+    expect((await store.updateActiveFrontFleetWithProductionGuard(shift.id, fixtureFleetId(FIXTURE_FLEET_ID), revised.value.fleetSetup, false)).ok).toBe(true)
+    store.close()
+
+    const reopened = new LocalOperationalStore(databaseName)
+    const reloaded = await reopened.loadCurrentShiftWorkspace()
+    expect(reloaded).toMatchObject({ ok: true })
+    const fleet = reloaded.ok ? reloaded.value?.fleetSetup.fleets.find((candidate) => candidate.fleetId === fixtureFleetId(FIXTURE_FLEET_ID)) : undefined
+    const front = reloaded.ok && fleet ? reloaded.value?.fleetSetup.fronts.find((candidate) => candidate.frontId === fleet.frontId) : undefined
+    expect(front?.excaCode).toBe(nextExca.value)
+    expect(fleet?.excaConfigurationHistory).toMatchObject([{ revisionId: 'EXCA-REVISION-1', previousExcaCode: currentExca.value, excaCode: nextExca.value, actorId: 'CHECKER' }])
+    reopened.close()
+  })
+
   it('persists a persistent unit adjustment, and it survives close/reopen', async () => {
     const databaseName = uniqueDatabaseName()
     const masterData = buildFixtureMasterData()
@@ -161,6 +231,41 @@ describe('LocalOperationalStore.updateActiveFrontFleet', () => {
     expect(afterAdjustmentOldTruck.ok).toBe(true)
     if (afterAdjustmentOldTruck.ok) expect(afterAdjustmentOldTruck.value.truckValidation.status).toBe('WRONG_TRUCK')
 
+    store.close()
+  })
+
+  it('atomically blocks configuration edits after any Production history while allowing an additive truck update without rewriting history', async () => {
+    const store = newStore()
+    const masterData = buildFixtureMasterData()
+    const fleetSetup = buildFixtureFleetSetup(masterData)
+    const shift = buildFixtureShift('SHIFT-1')
+    const pile = buildFixtureSapPile('PILE-1')
+    await store.initializeShiftWorkspace({ shift, piles: [pile], masterData, fleetSetup })
+
+    const transaction = createHaulageTransaction({
+      id: fixtureTransactionId('TXN-HISTORY'), shiftId: shift.id, pile, batchPosition: fixturePosition(1, 1),
+      fleetId: fixtureFleetId('FLEET-A'), truckId: fixtureTruckId(FIXTURE_IN_FLEET_TRUCK_ID), masterData, fleetSetup,
+    })
+    expect(transaction.ok).toBe(true)
+    if (!transaction.ok) return
+    expect((await store.addHaulageTransaction(transaction.value)).ok).toBe(true)
+    const history = buildFixtureProductionRecord({ transaction: transaction.value, disposition: 'REJECT' })
+    expect((await store.addProductionRecord(history)).ok).toBe(true)
+
+    const adjusted = adjustFrontFleet({
+      fleetSetup, masterData, frontId: FIXTURE_FRONT_ID, truckIds: [FIXTURE_IN_FLEET_TRUCK_ID, FIXTURE_WRONG_TRUCK_TRUCK_ID],
+    })
+    expect(adjusted.ok).toBe(true)
+    if (!adjusted.ok) return
+
+    const edit = await store.updateActiveFrontFleetWithProductionGuard(shift.id, fixtureFleetId('FLEET-A'), adjusted.value.fleetSetup, true)
+    expect(edit.ok).toBe(false)
+    if (!edit.ok) expect(edit.error.code).toBe('FLEET_CONFIGURATION_LOCKED_BY_PRODUCTION')
+    expect(await store.getProductionRecord(transaction.value.id)).toEqual({ ok: true, value: history })
+
+    const addTruck = await store.updateActiveFrontFleetWithProductionGuard(shift.id, fixtureFleetId('FLEET-A'), adjusted.value.fleetSetup, false)
+    expect(addTruck.ok).toBe(true)
+    expect(await store.getProductionRecord(transaction.value.id)).toEqual({ ok: true, value: history })
     store.close()
   })
 })
