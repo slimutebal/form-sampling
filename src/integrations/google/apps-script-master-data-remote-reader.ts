@@ -95,6 +95,7 @@ export class AppsScriptMasterDataRemoteReader implements MasterDataRemoteReader 
       try {
         script = document.createElement('script')
         script.async = true
+        script.crossOrigin = 'anonymous'
         script.src = this.masterDataUrl(callbackName)
         logRemoteMasterData('jsonp-request-started', { endpoint: new URL(this.endpoint).origin + new URL(this.endpoint).pathname })
         script.onerror = () => {

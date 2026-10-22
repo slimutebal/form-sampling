@@ -92,6 +92,7 @@ describe('AppsScriptMasterDataRemoteReader', () => {
     const reader = new AppsScriptMasterDataRemoteReader('https://example.test/exec')
     const pending = reader.readMasterData()
     const script = jsonpScript()
+    expect(script.crossOrigin).toBe('anonymous')
     const callbackName = new URL(script.src).searchParams.get('callback') ?? ''
 
     script.dispatchEvent(new Event('error'))

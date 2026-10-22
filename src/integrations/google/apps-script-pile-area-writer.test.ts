@@ -69,6 +69,7 @@ describe('AppsScriptPileAreaWriter', () => {
     expect(url).toBe('https://script.example/exec')
     expect(init.method).toBe('POST')
     expect(init.mode).toBe('no-cors')
+    expect(init.credentials).toBe('omit')
     expect((init.headers as Record<string, string>)['Content-Type']).toBe('text/plain;charset=utf-8')
     expect(JSON.parse(init.body as string)).toEqual({
       action: 'addPileArea',

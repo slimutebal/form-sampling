@@ -41,6 +41,7 @@ export class AppsScriptPileAreaWriter implements PileAreaRemoteWriter {
       await fetch(this.endpoint, {
         method: 'POST',
         mode: 'no-cors',
+        credentials: 'omit',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
           action: 'addPileArea',
