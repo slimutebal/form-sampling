@@ -10,11 +10,11 @@ import { AppLayout } from './AppLayout'
 function renderLayout() {
   return render(
     <I18nextProvider i18n={i18n}>
-      <MemoryRouter initialEntries={['/home']}>
+      <MemoryRouter initialEntries={['/production']}>
         <Routes>
           <Route path="/start" element={<div>START_PAGE_MARKER</div>} />
           <Route element={<AppLayout />}>
-            <Route path="/home" element={<div>HOME_PAGE_MARKER</div>} />
+            <Route path="/production" element={<div>PRODUCTION_PAGE_MARKER</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -37,7 +37,7 @@ describe('AppLayout route guard', () => {
     renderLayout()
 
     expect(await screen.findByText('START_PAGE_MARKER')).toBeInTheDocument()
-    expect(screen.queryByText('HOME_PAGE_MARKER')).not.toBeInTheDocument()
+    expect(screen.queryByText('PRODUCTION_PAGE_MARKER')).not.toBeInTheDocument()
   })
 
   it('B. a workspace load failure shows a localized blocking/retry state, and never navigates away or clears data', async () => {
@@ -51,7 +51,7 @@ describe('AppLayout route guard', () => {
     renderLayout()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load the active shift workspace.')
-    expect(screen.queryByText('HOME_PAGE_MARKER')).not.toBeInTheDocument()
+    expect(screen.queryByText('PRODUCTION_PAGE_MARKER')).not.toBeInTheDocument()
     expect(screen.queryByText('START_PAGE_MARKER')).not.toBeInTheDocument()
     expect(spy).toHaveBeenCalled()
   })

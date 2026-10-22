@@ -308,8 +308,6 @@ APP
 │
 └── Active Shift
     │
-    ├── Home (+ Language, Master Data refresh, App version)
-    │
     ├── Fleet
     │   ├── Active Fronts (+ Add Front / continuation)
     │   └── Front History (read-only)
@@ -331,7 +329,7 @@ APP
 ```
 
 **Phase 18 amendment:** Manpower Setup is a real Start Shift step
-(Registration → Handover → Manpower → Fleet Setup → Home), not only a
+(Registration → Handover → Manpower → Fleet Setup → Production / ADD), not only a
 read-only view under More.
 
 **Active-shift Fleet management amendment (CONFIRMED):** the bottom nav's
@@ -1702,7 +1700,7 @@ directly from this Destination/Pile field's "no results" state, without
 leaving Fleet Setup. This matters because Fleet Setup always runs
 *before* `initializeShiftWorkspace` in the Start Shift flow
 (Registration → Handover → Manpower → Fleet Setup → workspace init once
-→ `/home`) — there is no `ShiftWorkspace` row yet at this point, so this
+→ `/production`) — there is no `ShiftWorkspace` row yet at this point, so this
 path cannot reuse `activateNewMasterPile`/`activateNewPile` (built around
 an already-initialized shift). Instead a setup-time-only operation
 (`createPileAreaForSetup` / `createAppsScriptPileAreaForSetup`,
@@ -3098,9 +3096,11 @@ Two field trial findings, both extending existing screens rather than
 introducing a new workflow (BUSINESS_RULES.md §5 BR-MAN-004/005, §9
 BR-FLEET-006, §10 BR-TRUCK-004).
 
-**Home — Manpower edit (Field Finding 1).** §26's Home Dashboard gains
-one compact row above the existing stat-tile grid, reusing the same
-Card primitive:
+**Manpower edit (Field Finding 1) — legacy.** Home has been removed
+(`/home` is now a compatibility redirect → `/production`). The
+operational manpower location is **SETUP → + → Manpower**
+(`ActiveManpowerDialog`). The text below describes the former Home
+row and is kept for history only:
 
 ```text
 MANPOWER
@@ -3136,8 +3136,9 @@ Job Desk [ Sampler ]
 
 Save/Cancel replace Continue/Back: **Save** revalidates the roster
 (`createManpowerFromDraft`, unchanged) and persists it via
-`LocalOperationalStore.updateShiftManpower`, then returns to Home;
-**Cancel** discards every in-progress change and returns to Home
+`LocalOperationalStore.updateShiftManpower`, then returns to
+`/production` (or `/regist` when explicitly requested);
+**Cancel** discards every in-progress change and returns to the same target
 without writing anything. No accidental shift restart is possible from
 this screen — it never touches shift date/code/sector/Sampling House,
 fleet, pile workspace, haulage, or sample handling.

@@ -392,8 +392,8 @@ yang hanya bisa diisi sekali pada saat Registrasi Shift tidak
 mencerminkan kondisi lapangan ini.
 
 Manpower adalah **roster shift saat ini (current shift roster)**, bukan
-snapshot registrasi yang beku. Operator dapat membuka Home → bagian
-Manpower → **Ubah/Edit**, mengubah roster (tambah/hapus personel, ubah
+snapshot registrasi yang beku. Operator dapat membuka SETUP → **+** →
+Manpower (`ActiveManpowerDialog`), mengubah roster (tambah/hapus personel, ubah
 Job Desk), lalu **Save** — tanpa melewati ulang Start / Registrasi
 Shift / Fleet Setup
 (`src/features/manpower/manpower-edit-page.tsx`,
@@ -405,7 +405,7 @@ Validasi yang dipakai persis sama dengan Manpower Setup awal —
 BR-MAN-001..003 tetap berlaku tanpa perkecualian saat mengedit: Staff
 selalu PIC otomatis, Crew tidak pernah PIC, Job Desk Crew tetap wajib
 diisi jika master-nya kosong. Tidak ada validasi bisnis yang
-diduplikasi pada layer UI Home.
+diduplikasi pada layer UI manpower aktif.
 
 Mengedit manpower **tidak pernah**:
 

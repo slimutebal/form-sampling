@@ -81,7 +81,7 @@ Live App.
 ### A. Mulai Shift
 
 Alur mulai shift: **Registrasi Shift → Handover (opsional) → Manpower →
-Fleet Setup → masuk workspace shift aktif (Beranda)**.
+Fleet Setup → masuk workspace shift aktif (Production / ADD)**.
 
 - **Registrasi Shift** — mengisi tanggal, shift (Siang/Malam), sector, dan
   sampling house untuk shift yang akan dimulai.
@@ -92,27 +92,20 @@ Fleet Setup → masuk workspace shift aktif (Beranda)**.
 - **Manpower** — memilih personel dari master Staff/Crew (pencarian
   nama/NIK). Penanggung Jawab (PIC) ditentukan otomatis dari sumber master
   personel tersebut, bukan dipilih manual. Roster ini dapat **diubah lagi
-  setelah shift berjalan** dari Beranda (lihat [Beranda](#b-beranda)) —
+  setelah shift berjalan** dari menu **SETUP → + → Manpower** —
   tidak perlu mengulang Registrasi Shift/Fleet Setup untuk pergantian
   crew/staff/dispatcher.
 - **Fleet Setup** — mendaftarkan Front awal (Sector/Front No, Hauler,
   Destination/Pile, daftar truck). Lihat detail lengkap di bagian
   [Fleet](#c-fleet).
 - Setelah Fleet Setup disimpan, workspace shift diaktifkan dan aplikasi
-  masuk ke **Beranda**.
+  masuk ke **Production / ADD**.
 
-### B. Beranda
+### B. Beranda (dihapus)
 
-Halaman ringkasan status shift aktif: shift/sector/sampling house yang
-sedang berjalan, jumlah pile aktif, dan navigasi cepat ke pekerjaan yang
-sedang berlangsung.
-
-- Ringkasan **Manpower** (jumlah Staff/Crew) ditampilkan dengan aksi
-  **Ubah** — membuka layar edit roster manpower shift saat ini
-  (tambah/hapus personel, ubah Job Desk), lalu **Simpan**. Ini tidak
-  mengulang Registrasi Shift/Fleet Setup dan tidak mengubah tanggal
-  shift, kode shift, sector, Sampling House, fleet, pile, maupun data
-  haulage/sample yang sudah tercatat.
+Halaman Beranda sudah dihapus. Path `/home` hanya tersisa sebagai redirect
+kompatibilitas ke `/production`. Ubah roster manpower shift aktif dilakukan
+dari **SETUP → + → Manpower**.
 
 ### C. Fleet
 

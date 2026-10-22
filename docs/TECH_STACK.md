@@ -278,7 +278,7 @@ Client-side routes conceptually:
 /
 ├── /start
 ├── /handover
-├── /home
+├── /home  (legacy compatibility redirect → /production)
 ├── /piles
 ├── /piles/:pileId
 ├── /samples
