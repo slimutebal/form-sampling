@@ -146,7 +146,7 @@ function isRows(value: unknown): value is Rows {
 /**
  * Apps Script currently returns complete sheet rows for `tables`, even for
  * sheets whose app contract only consumes a leading range (for example,
- * `Employees!A:C` while the sheet also has columns beyond `Level`). Project
+ * `Employees!A:D` while the sheet also has columns beyond `Level`). Project
  * only the required contract columns here; the parser below still checks
  * every required header and every required data value. Required headers must
  * remain exact, unique, and in their documented relative order. Extra columns
