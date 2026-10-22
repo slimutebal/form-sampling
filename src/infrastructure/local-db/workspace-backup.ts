@@ -19,6 +19,7 @@ const OMITTABLE_UNDEFINED_OPTIONAL_FIELDS = new Set([
   'sampleInHouse', 'continuationFromBatch', // PileRegistrationDraft
   'level', 'jobCode', // Master-data reference snapshots
   'dispatcherEmployeeId', // delivered SamplePosition
+  'checkerPersonId', // ShiftWorkspaceRecord written before checker identity was introduced
 ])
 
 export interface WorkspaceBackupData {

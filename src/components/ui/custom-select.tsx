@@ -68,7 +68,7 @@ export function CustomSelect({ id, ariaLabel, value, options, placeholder, disab
   }, [menuBoundaryRef, open, preferAbove, viewportOnly])
   function choose(option: CustomSelectOption) {
     if (option.disabled) return
-    onChange(option.value); setQuery(''); setIsFiltering(false); setOpen(false); inputRef.current?.focus()
+    onChange(option.value); setQuery(''); setIsFiltering(false); setOpen(false)
   }
   function move(direction: number) {
     if (matching.length) setActiveIndex((current) => (current + direction + matching.length) % matching.length)

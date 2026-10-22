@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseSectorCode } from '@/domain/common/codes'
+import { parseOreCode, parseSectorCode } from '@/domain/common/codes'
 import { parseFleetId, parseFrontId, parsePileId, parseTruckId } from '@/domain/common/identifiers'
 import type { Result } from '@/domain/common/result'
 import { buildExcaCode } from '@/domain/fleet/exca-code'
@@ -7,7 +7,9 @@ import { createBaseFleetDefinition, createDerivedFleetDefinition } from '@/domai
 import { createFrontDefinition } from '@/domain/fleet/front'
 import { deriveFrontLineage } from '@/domain/fleet/front-lineage'
 import { createFleetSetup } from '@/domain/fleet/fleet-setup'
-import { parseHaulerCode } from '@/domain/master/master-codes'
+import { parseHaulerCode, parsePileAreaCode } from '@/domain/master/master-codes'
+import { createMasterData } from '@/domain/master/master-data'
+import { createPileAreaReference } from '@/domain/master/references'
 import { buildFixtureMasterData } from '@/test/fixtures/haulage-operation-test-fixtures'
 import { reactivateFleet } from './reactivate-fleet'
 
@@ -18,7 +20,16 @@ function must<T>(result: Result<T>): T {
 
 describe('reactivateFleet', () => {
   it('treats 02 → 03 → 09 → 02 as temporal transfers, not a lineage cycle', () => {
-    const masterData = buildFixtureMasterData()
+    const fixtureMasterData = buildFixtureMasterData()
+    const masterData = must(createMasterData({
+      ...fixtureMasterData,
+      pileAreas: [createPileAreaReference(
+        fixtureMasterData.sectors[0]!.code,
+        must(parsePileAreaCode('STOCK-01')),
+        must(parsePileId('S5_01')),
+        must(parseOreCode('SAP')),
+      )],
+    }))
     const sector = must(parseSectorCode('S1'))
     const hauler = must(parseHaulerCode('H1'))
     const pile = must(parsePileId('S5_01'))

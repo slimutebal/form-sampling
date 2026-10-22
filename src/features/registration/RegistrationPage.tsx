@@ -24,6 +24,7 @@ import { ActiveFleetAddSheet } from '@/features/registration/active-fleet-add-sh
 import { ActiveManpowerDialog } from '@/features/registration/active-manpower-dialog'
 import { ActivePileRegistrationForm } from '@/features/registration/active-pile-registration'
 import { FleetRecordActionDialog, type FleetRecordActionMode } from '@/features/registration/fleet-record-action-dialog'
+import { formatFleetCompanyName } from '@/features/registration/format-fleet-company-name'
 import { formatShiftDateForDisplay } from '@/features/shift-registration/format-shift-date'
 import { ThemeSwitcher } from '@/components/shared/ThemeSwitcher'
 import {
@@ -97,11 +98,6 @@ function formatTruckDisplay(truckId: string): Readonly<{ compact: string; suffix
   const compact = /[A-Za-z]\d+_\d+$/.test(finalSegment) ? finalSegment : truckId
   const suffix = /(?:_|-)(\d+)$/.exec(compact)?.[1] ?? /\d+$/.exec(compact)?.[0] ?? compact
   return { compact, suffix }
-}
-
-/** Fleet list presentation only: source/master data keeps its registered name. */
-export function formatFleetCompanyName(company: string): string {
-  return company.replace(/^\s*pt\s+/i, '')
 }
 
 interface SetupPanelProps {

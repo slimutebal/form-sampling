@@ -6,6 +6,10 @@ import { buildExcaCode } from '../../domain/fleet/exca-code'
 import { createFleetSetup } from '../../domain/fleet/fleet-setup'
 import { createFrontDefinition } from '../../domain/fleet/front'
 import { createHaulageTransaction } from '../../domain/haulage/haulage-transaction'
+import { parseOreCode } from '../../domain/common/codes'
+import { createMasterData } from '../../domain/master/master-data'
+import { parsePileAreaCode } from '../../domain/master/master-codes'
+import { createPileAreaReference } from '../../domain/master/references'
 import {
   buildFixtureFleetSetup,
   buildFixtureProductionRecord,
@@ -46,8 +50,24 @@ afterEach(async () => {
 describe('LocalOperationalStore.updateActiveFrontFleet', () => {
   it('persists an Exca revision through Edit Fleet reload without altering existing Production records', async () => {
     const databaseName = uniqueDatabaseName()
-    const masterData = buildFixtureMasterData()
     const pile = buildFixtureSapPile('PILE-EXCA-HISTORY')
+    const fixtureMasterData = buildFixtureMasterData()
+    const stockpile = parsePileAreaCode('STOCK-EXCA')
+    const ore = parseOreCode('SAP')
+    expect(stockpile.ok && ore.ok).toBe(true)
+    if (!stockpile.ok || !ore.ok) return
+    const masterDataResult = createMasterData({
+      ...fixtureMasterData,
+      pileAreas: [createPileAreaReference(
+        fixtureMasterData.sectors[0]!.code,
+        stockpile.value,
+        pile.id,
+        ore.value,
+      )],
+    })
+    expect(masterDataResult.ok).toBe(true)
+    if (!masterDataResult.ok) return
+    const masterData = masterDataResult.value
     const baseSetup = buildFixtureFleetSetup(masterData, pile.id)
     const currentExca = buildExcaCode('H1', '698')
     const nextExca = buildExcaCode('H1', '321')

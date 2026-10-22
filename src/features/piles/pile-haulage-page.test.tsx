@@ -168,7 +168,7 @@ describe('PileHaulagePage', () => {
     expect(screen.queryByRole('button', { name: 'T2' })).not.toBeInTheDocument()
 
     await user.type(screen.getByLabelText('Truck'), 'T2')
-    expect(await screen.findByRole('button', { name: 'T2' })).toBeInTheDocument()
+    expect(await screen.findByRole('option', { name: 'T2' })).toBeInTheDocument()
   })
 
   it('G. a sample rit prominently shows Sample Required with its increment', async () => {
@@ -212,7 +212,7 @@ describe('PileHaulagePage', () => {
 
     await screen.findByText(FIXTURE_FRONT_ID)
     await user.type(screen.getByLabelText('Truck'), FIXTURE_WRONG_TRUCK_TRUCK_ID)
-    await user.click(await screen.findByRole('button', { name: FIXTURE_WRONG_TRUCK_TRUCK_ID }))
+    await user.click(await screen.findByRole('option', { name: FIXTURE_WRONG_TRUCK_TRUCK_ID }))
     await user.click(screen.getByRole('button', { name: 'Record Haulage' }))
 
     expect(await screen.findByText('Trip 1 recorded')).toBeInTheDocument()

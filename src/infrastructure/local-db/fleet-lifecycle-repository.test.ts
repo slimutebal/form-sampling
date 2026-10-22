@@ -6,6 +6,10 @@ import type { EmployeeId, PileId, ShiftId } from '../../domain/common/identifier
 import type { Result } from '../../domain/common/result'
 import { addFleetDestination, deriveLegacyFleetOperationalLifecycle, type AddFleetDestinationCommand, type FleetAssignmentId, type FleetCommandId, type FleetDestinationAssignmentId, type FleetLifecycleValidationContext, type FleetOperationalEventId } from '../../domain/fleet/operational-lifecycle'
 import { buildFixtureFleetSetup, buildFixtureHaulageTransaction, buildFixtureMasterData, buildFixtureProductionRecord, buildFixtureSapPile, buildFixtureShift, fixtureShiftId, FIXTURE_WRONG_TRUCK_TRUCK_ID } from './local-db-test-fixtures'
+import { parseOreCode } from '../../domain/common/codes'
+import { createMasterData } from '../../domain/master/master-data'
+import { parsePileAreaCode } from '../../domain/master/master-codes'
+import { createPileAreaReference } from '../../domain/master/references'
 import type { HaulageTransactionRecord, ProductionRecordRecord, ShiftWorkspaceRecord } from './records'
 import type {
   FleetCommandReceiptRecord,
@@ -64,7 +68,13 @@ afterEach(async () => {
 })
 
 async function seedWorkspace(db: LifecycleTestDatabase, shiftId: ShiftId = fixtureShiftId('SHIFT-1')): Promise<ShiftWorkspaceRecord> {
-  const masterData = buildFixtureMasterData()
+  const fixtureMasterData = buildFixtureMasterData()
+  const masterData = must(createMasterData({
+    ...fixtureMasterData,
+    // This migration fixture gives the legacy Front a canonical Master Data
+    // destination. Production fixtures deliberately remain pile-area-free.
+    pileAreas: [createPileAreaReference(fixtureMasterData.sectors[0]!.code, must(parsePileAreaCode('STOCK-1')), pile('PILE-1'), must(parseOreCode('SAP')))],
+  }))
   const workspace: ShiftWorkspaceRecord = {
     shiftId,
     shift: buildFixtureShift(shiftId as string),

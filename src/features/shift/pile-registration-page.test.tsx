@@ -85,7 +85,7 @@ describe('PileRegistrationPage', () => {
     const user = userEvent.setup()
     const { onRegistrationsChange } = renderPage()
 
-    expect(screen.getByLabelText('Status')).toHaveValue('ACTIVE')
+    expect(screen.getByLabelText('Status')).toHaveValue('Active')
     await selectPile(user, 'STOCK-A')
     await fillEntry(user, '008', '006', 'INACTIVE')
     expect(screen.getByLabelText('Sample progress')).toHaveTextContent('3 / 10 Incr')
@@ -97,7 +97,7 @@ describe('PileRegistrationPage', () => {
     expect(screen.getByLabelText('Cari Pile/Stockpile')).toHaveValue('')
     expect(screen.getByLabelText('Batch')).toHaveValue('')
     expect(screen.getByLabelText('Trip')).toHaveValue('')
-    expect(screen.getByLabelText('Status')).toHaveValue('ACTIVE')
+    expect(screen.getByLabelText('Status')).toHaveValue('Active')
   })
 
   it('requires a selected master Pile, Batch, and Trip', async () => {
@@ -115,7 +115,7 @@ describe('PileRegistrationPage', () => {
     await user.click(screen.getByRole('button', { name: 'Add Sample' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Trip is required')
     await user.type(screen.getByLabelText('Trip'), '2')
-    expect(screen.getByLabelText('Status')).toHaveValue('ACTIVE')
+    expect(screen.getByLabelText('Status')).toHaveValue('Active')
   })
 
   it('allows the same Pile ID with another Batch but rejects the same Pile ID + Batch', async () => {

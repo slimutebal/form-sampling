@@ -32,7 +32,8 @@ import {
   fixtureTransactionId,
   fixtureTruckId,
 } from '@/infrastructure/local-db/local-db-test-fixtures'
-import { formatFleetCompanyName, RegistrationPage } from './RegistrationPage'
+import { RegistrationPage } from './RegistrationPage'
+import { formatFleetCompanyName } from './format-fleet-company-name'
 
 vi.mock('@/app/local-operational-store', () => ({
   localOperationalStore: {
@@ -781,7 +782,7 @@ describe('RegistrationPage active-shift Setup', () => {
     expect(dialog.querySelector('[data-ui="manpower-dialog-search"]')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
     expect(screen.getByLabelText('Current Checker')).toBeInTheDocument()
-    expect(screen.getByLabelText('Current Checker')).toHaveClass('ClipboardPenLine')
+    expect(screen.getByLabelText('Current Checker')).toHaveClass('lucide-clipboard-pen-line')
     expect(dialog.querySelector('[data-ui="manpower-dialog-current-checker"]')).toHaveTextContent('Checker')
     expect(screen.getByRole('button', { name: 'Make Takdir Checker' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Make Supervisor One Checker' })).toBeInTheDocument()

@@ -85,6 +85,10 @@ export default defineConfig(({ mode }) => {
       globals: true,
       setupFiles: ['./src/test/setup.ts'],
       css: true,
+      // fake-indexeddb keeps named databases at worker scope. Several integration
+      // suites deliberately delete the shared test database during teardown, so
+      // concurrent files can otherwise close each other's active connections.
+      fileParallelism: false,
     },
   }
 })

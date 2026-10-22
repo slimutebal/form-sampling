@@ -157,9 +157,9 @@ describe('PilesListPage', () => {
     await user.type(searchInput, 'PILE')
 
     // PILE-1 (already active) and PILE-9 (a different Sector) must not appear.
-    expect(screen.getByRole('button', { name: /PILE-2/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /PILE-1/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /PILE-9/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /PILE-2/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /PILE-1/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /PILE-9/ })).not.toBeInTheDocument()
   })
 
   it('D. selecting a search result derives its Ore from master data (never typed manually) and persists via the store', async () => {
@@ -169,7 +169,7 @@ describe('PilesListPage', () => {
 
     await user.click(screen.getByRole('button', { name: '+ Add Pile' }))
     await user.type(screen.getByLabelText('Search Pile_ID / Stockpile_Code'), 'PILE-2')
-    await user.click(await screen.findByRole('button', { name: /PILE-2/ }))
+    await user.click(await screen.findByRole('option', { name: /PILE-2/ }))
 
     expect(store.calls).toHaveLength(1)
     expect(store.calls[0].pile.id).toBe('PILE-2')
@@ -186,7 +186,7 @@ describe('PilesListPage', () => {
 
     await user.click(screen.getByRole('button', { name: '+ Add Pile' }))
     await user.type(screen.getByLabelText('Search Pile_ID / Stockpile_Code'), 'PILE-2')
-    await user.click(await screen.findByRole('button', { name: /PILE-2/ }))
+    await user.click(await screen.findByRole('option', { name: /PILE-2/ }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('This Pile is already active in this shift.')
     expect(screen.queryByText(/Duplicate PileId in shift workspace/)).not.toBeInTheDocument()

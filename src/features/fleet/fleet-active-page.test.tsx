@@ -309,7 +309,7 @@ describe('FleetActivePage — new independent BASE Front (Phase 18 §2, Fleet Re
 
     expect(screen.getByRole('button', { name: '+ Add Front' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: '+ Add Front' }))
-    expect(screen.getByLabelText('Fleet Reference')).toHaveValue('')
+    expect(screen.getByLabelText('Fleet Reference')).toHaveValue('None')
     expect(screen.getByLabelText('Hauler')).toBeInTheDocument()
   })
 
@@ -331,7 +331,7 @@ describe('FleetActivePage — new independent BASE Front (Phase 18 §2, Fleet Re
 
     await user.click(screen.getByRole('button', { name: '+ Add Front' }))
     await chooseCustomOption(user, 'Fleet Reference', 'None')
-    expect(screen.getByRole('combobox', { name: 'Fleet Reference' })).toHaveValue('')
+    expect(screen.getByRole('combobox', { name: 'Fleet Reference' })).toHaveValue('None')
     await chooseCustomOption(user, 'Hauler', HAULER_2)
 
     await user.click(screen.getByRole('combobox', { name: 'Add Truck' }))
@@ -397,7 +397,7 @@ describe('FleetActivePage — new independent BASE Front (Phase 18 §2, Fleet Re
     await chooseCustomOption(user, 'Fleet Reference', 'None')
     await chooseCustomOption(user, 'Hauler', HAULER_2)
     await user.type(screen.getByLabelText('Destination/Pile'), 'L9_27')
-    await user.click(await screen.findByRole('button', { name: /L9_27/ }))
+    await user.click(await screen.findByRole('option', { name: /L9_27/ }))
     await chooseCustomOption(user, 'Add Truck', 'STM-A40_0001')
     await user.click(screen.getByRole('button', { name: 'Add Truck' }))
     expect(screen.getByText('S1/02', { selector: 'output' })).toBeInTheDocument() // auto-derived new Front No preview
