@@ -150,6 +150,26 @@ describe('WelcomePage', () => {
     expect(screen.queryByRole('button', { name: /language/i })).not.toBeInTheDocument()
   })
 
+  it('retries failed master-data loading once without reloading the landing page', async () => {
+    const user = userEvent.setup()
+    const retry = deferred<ReturnType<typeof ok<{ readonly masterData: MasterData }>>>()
+    store.readCachedMasterData
+      .mockRejectedValueOnce(new Error('temporary IndexedDB failure'))
+      .mockImplementationOnce(() => retry.promise)
+    renderLanding()
+
+    const retryButton = await screen.findByRole('button', { name: 'Try Again / Coba Lagi' })
+    await waitFor(() => expect(retryButton).toBeEnabled())
+    await user.click(retryButton)
+    expect(retryButton).toBeDisabled()
+    await user.click(retryButton)
+    expect(store.readCachedMasterData).toHaveBeenCalledTimes(2)
+
+    retry.resolve(ok({ masterData: buildLandingMasterData() }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Try Again / Coba Lagi' })).not.toBeInTheDocument())
+    expect(screen.getByText('Ore Quality Assurance')).toBeInTheDocument()
+  })
+
   it('opens New Record as an accessible modal, keeps typed checker text readable, and closes on Escape', async () => {
     const user = userEvent.setup()
     renderLanding()

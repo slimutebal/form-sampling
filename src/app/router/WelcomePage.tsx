@@ -192,6 +192,7 @@ export function WelcomePage() {
   const [modal, setModal] = useState<LandingModal>()
   const [masterData, setMasterData] = useState<MasterData>()
   const [masterDataStatus, setMasterDataStatus] = useState<MasterDataStatus>({ kind: 'loading' })
+  const [isRetryingMasterData, setIsRetryingMasterData] = useState(false)
   const [identity, setIdentity] = useState<WorkIdentity>({ values: defaults })
   const [matches, setMatches] = useState<readonly LocalShiftWorkspace[]>([])
   const [recoveryCandidates, setRecoveryCandidates] = useState<readonly LocalShiftWorkspace[]>()
@@ -200,23 +201,39 @@ export function WelcomePage() {
   const [isDiscovering, setIsDiscovering] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const mountedRef = useRef(true)
+  const masterDataRequestInFlightRef = useRef(false)
   const incompleteSetupPath = useMemo(() => recoverableSetupPath(), [])
 
-  useEffect(() => {
-    let cancelled = false
-    void loadLandingMasterData({
-      readCachedMasterData: () => localOperationalStore.readCachedMasterData(),
-      refreshMasterData: () => refreshAppsScriptMasterData(),
-      isOnline: () => navigator.onLine,
-    }).then((result) => {
-      if (cancelled) return
+  const loadMasterData = useCallback(async (isManualRetry = false) => {
+    if (masterDataRequestInFlightRef.current) return
+    masterDataRequestInFlightRef.current = true
+    if (isManualRetry) setIsRetryingMasterData(true)
+    setMasterDataStatus({ kind: 'loading' })
+    try {
+      const result = await loadLandingMasterData({
+        readCachedMasterData: () => localOperationalStore.readCachedMasterData(),
+        refreshMasterData: () => refreshAppsScriptMasterData(),
+        isOnline: () => navigator.onLine,
+      })
+      if (!mountedRef.current) return
       if (result.kind === 'ready') {
         setMasterData(result.masterData)
         setMasterDataStatus({ kind: 'ready' })
       } else setMasterDataStatus(result)
-    })
-    return () => { cancelled = true }
+    } catch {
+      if (mountedRef.current) setMasterDataStatus({ kind: 'failed', code: 'MASTER_DATA_UNAVAILABLE' })
+    } finally {
+      masterDataRequestInFlightRef.current = false
+      if (mountedRef.current) setIsRetryingMasterData(false)
+    }
   }, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+    void loadMasterData()
+    return () => { mountedRef.current = false }
+  }, [loadMasterData])
 
   const completeIdentity = isComplete(identity, masterData)
   useEffect(() => {
@@ -312,7 +329,7 @@ export function WelcomePage() {
           {incompleteSetupPath ? <button type="button" onClick={() => navigate(incompleteSetupPath)} className="flex w-full items-center gap-3 rounded-[1.4rem] border border-white/70 bg-white/95 p-2.5 text-left text-emerald-950 shadow-xl shadow-emerald-950/25 transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-accent"><span className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800"><FileCheck2 size={32} strokeWidth={1.8} /></span><span className="min-w-0 flex-1"><span className="type-section-title block">Continue Setup</span><span className="type-body-muted mt-1 block text-slate-500">Resume the unfinished setup on this device.</span></span><ChevronRight aria-hidden size={24} strokeWidth={2.2} /></button> : null}
           <button type="button" onClick={(event) => openModal('new', event.currentTarget)} className="flex w-full items-center gap-3 rounded-[1.4rem] border border-white/70 bg-white/95 p-2.5 text-left text-emerald-950 shadow-xl shadow-emerald-950/25 transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-accent"><span className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800"><FilePlus2 size={32} strokeWidth={1.8} /></span><span className="min-w-0 flex-1"><span className="type-section-title block">New Record</span><span className="type-body-muted mt-1 block text-slate-500">Create a production or sampling work record.</span></span><ChevronRight aria-hidden size={24} strokeWidth={2.2} /></button>
           <button type="button" onClick={() => navigate('/workspace-backup')} className="w-full rounded-xl border border-white/35 px-3 py-2 text-left text-sm font-semibold text-white hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-focus-accent">Workspace Backup &amp; Restore</button>
-          {masterDataMessage ? <p role={masterDataStatus.kind === 'loading' ? undefined : 'alert'} className="rounded-xl bg-emerald-950/75 p-3 text-sm text-white">{masterDataMessage}</p> : null}
+          {masterDataMessage ? <div role={masterDataStatus.kind === 'loading' ? undefined : 'alert'} className="rounded-xl bg-emerald-950/75 p-3 text-sm text-white"><p>{masterDataMessage}</p>{masterDataStatus.kind === 'failed' || isRetryingMasterData ? <button type="button" onClick={() => void loadMasterData(true)} disabled={masterDataStatus.kind === 'loading'} className="mt-2 min-h-9 rounded-lg border border-white/35 px-3 text-xs font-semibold hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-focus-accent disabled:cursor-not-allowed disabled:opacity-60">Try Again / Coba Lagi</button> : null}</div> : null}
         </section>
         <footer className="mt-auto grid grid-cols-3 gap-1 rounded-[1.35rem] border border-white/15 bg-emerald-950/85 px-2 py-3 text-center text-[10px] font-semibold text-white/90 shadow-xl backdrop-blur-md"><span className="flex flex-col items-center gap-1"><ShieldCheck size={23} className="text-lime-300" />QUALITY</span><span className="flex flex-col items-center gap-1 border-l border-white/20"><Truck size={23} className="text-lime-300" />PRODUCTION</span><span className="flex flex-col items-center gap-1 border-l border-white/20"><Users size={23} className="text-lime-300" />SAMPLING</span></footer>
       </div>
