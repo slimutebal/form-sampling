@@ -3,7 +3,7 @@ import { AppsScriptMasterDataRemoteReader } from './apps-script-master-data-remo
 
 const validPayload = {
   tables: {
-    Employees: [['Employee_ID', 'Name', 'Level']],
+    Employees: [['Employee_ID', 'Name', 'Initial', 'Level']],
     Crews: [['Crew_ID', 'Name', 'Job']],
     Sectors: [['Sector_Code'], ['BR1']],
     Sampling_Houses: [['Sector_Code', 'Sampling_House_Code'], ['BR1', 'SH1']],
@@ -54,14 +54,14 @@ describe('AppsScriptMasterDataRemoteReader', () => {
     expect((window as unknown as Record<string, unknown>)[url.searchParams.get('callback') ?? '']).toBeUndefined()
   })
 
-  it('retains Level while projecting verified leading contract columns from Apps Script rows', async () => {
+  it('retains Level from column D while projecting the four-column Employees contract', async () => {
     const reader = new AppsScriptMasterDataRemoteReader('https://example.test/exec')
     const pending = reader.readMasterData()
     callbackFor(jsonpScript())({
       ...validPayload,
       tables: {
         ...validPayload.tables,
-        Employees: [['Employee_ID', 'Name', 'Level', 'Initial'], ['SCM0268', 'Mega Putri', 'Supervisor', 'Mega']],
+        Employees: [['Employee_ID', 'Name', 'Initial', 'Level', 'Unused'], ['SCM0268', 'Mega Putri', 'Mega', 'Supervisor', 'ignored']],
       },
     })
 
@@ -71,7 +71,7 @@ describe('AppsScriptMasterDataRemoteReader', () => {
     })
   })
 
-  it('projects required Employees columns by their exact header names when Initial is inserted before Level', async () => {
+  it('does not shift Level into Initial when Apps Script returns complete Employees rows', async () => {
     const reader = new AppsScriptMasterDataRemoteReader('https://example.test/exec')
     const pending = reader.readMasterData()
     callbackFor(jsonpScript())({

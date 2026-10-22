@@ -29,7 +29,7 @@ values in `Ore_Sampling_Config` as JavaScript numbers.
 ```js
 callbackName({
   "tables": {
-    "Employees": [["Employee_ID", "Name"]],
+    "Employees": [["Employee_ID", "Name", "Initial", "Level"]],
     "Crews": [["Crew_ID", "Name", "Job"]],
     "Sectors": [["Sector_Code"]],
     "Sampling_Houses": [["Sector_Code", "Sampling_House_Code"]],

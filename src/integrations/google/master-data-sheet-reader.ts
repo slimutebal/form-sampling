@@ -98,10 +98,11 @@ function parseEmployeeRows(dataRows: GoogleRows): Result<readonly EmployeeRefere
   const employees: EmployeeReference[] = []
   for (let index = 0; index < dataRows.length; index++) {
     const row = dataRows[index]
-    if (isRowBlank(row, 3)) continue
+    if (isRowBlank(row, 4)) continue
     const idText = cellText(row[0])
     const name = cellText(row[1])
-    const level = cellText(row[2])
+    // Employees.Initial is source-only; EmployeeReference preserves Level from column D.
+    const level = cellText(row[3])
     if (idText.length === 0 || name.length === 0) {
       return { ok: false, error: requiredCellsMissing('Employees', index) }
     }
