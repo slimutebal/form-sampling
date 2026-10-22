@@ -936,13 +936,16 @@ describe('RegistrationPage active-shift Setup', () => {
 
     await user.type(screen.getByLabelText('Pile_Id'), 'S1')
 
-    await waitFor(() =>
-      expect(dialog.querySelector('[data-ui="sample-dialog-pile-options"]')).toBeInTheDocument(),
-    )
-    const options = dialog.querySelector('[data-ui="sample-dialog-pile-options"]') as HTMLDivElement
-    expect(options).toHaveAttribute('data-placement', 'below')
-    expect(options).toHaveClass('top-full', 'mt-1')
-    expect(options).toHaveStyle({ maxHeight: '28px' })
+    await waitFor(() => {
+  const options = dialog.querySelector(
+    '[data-ui="sample-dialog-pile-options"]',
+  )
+
+  expect(options).toBeInTheDocument()
+  expect(options).toHaveAttribute('data-placement', 'below')
+  expect(options).toHaveClass('top-full', 'mt-1')
+  expect(options).toHaveStyle({ maxHeight: '28px' })
+})
   })
 
   it('keeps Sample selected through Delete, Undo, Add Sample, and Save', async () => {
