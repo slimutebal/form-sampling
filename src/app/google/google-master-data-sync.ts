@@ -25,6 +25,30 @@ function logMasterDataRefresh(event: string, details: Record<string, unknown>) {
 }
 
 let inFlightConfiguredRefresh: Promise<Result<MasterDataCacheEntry, DomainError>> | undefined
+const successfulRefreshSubscribers = new Set<(entry: MasterDataCacheEntry) => void>()
+
+/** Receives validated Master Data only after a refresh has persisted its cache entry. */
+export function subscribeToSuccessfulMasterDataRefresh(
+  subscriber: (entry: MasterDataCacheEntry) => void,
+): () => void {
+  successfulRefreshSubscribers.add(subscriber)
+  return () => successfulRefreshSubscribers.delete(subscriber)
+}
+
+function notifySuccessfulRefresh(request: Promise<Result<MasterDataCacheEntry, DomainError>>): void {
+  void request.then((result) => {
+    if (!result.ok) return
+    for (const subscriber of successfulRefreshSubscribers) {
+      try {
+        subscriber(result.value)
+      } catch {
+        logMasterDataRefresh('successful-refresh-subscriber-failed', {})
+      }
+    }
+  }, () => {
+    // Keep the refresh boundary result-based even if an unexpected rejection escapes it.
+  })
+}
 
 /**
  * Composition boundary: runtime config → `AppsScriptMasterDataRemoteReader`
@@ -43,7 +67,9 @@ export function refreshAppsScriptMasterData(
   const clock = overrides?.clock ?? systemClock
 
   if (overrides?.reader) {
-    return refreshMasterData({ reader: overrides.reader, cache, clock })
+    const request = refreshMasterData({ reader: overrides.reader, cache, clock })
+    notifySuccessfulRefresh(request)
+    return request
   }
 
   if (inFlightConfiguredRefresh) {
@@ -53,6 +79,7 @@ export function refreshAppsScriptMasterData(
 
   const request = refreshConfiguredMasterData(cache, clock)
   inFlightConfiguredRefresh = request
+  notifySuccessfulRefresh(request)
   void request.then(
     () => {
       if (inFlightConfiguredRefresh === request) inFlightConfiguredRefresh = undefined

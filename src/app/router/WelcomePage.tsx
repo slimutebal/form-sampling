@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useNavigate } from 'react-router'
 import { Calendar, Check, ChevronRight, FileCheck2, FilePlus2, FileSearch, ShieldCheck, Truck, Users, X } from 'lucide-react'
 import { localOperationalStore, type LocalShiftWorkspace } from '@/app/local-operational-store'
-import { refreshAppsScriptMasterData } from '@/app/google/google-master-data-sync'
+import { refreshAppsScriptMasterData, subscribeToSuccessfulMasterDataRefresh } from '@/app/google/google-master-data-sync'
 import { searchPersonnel, type PersonnelSearchResult } from '@/application/manpower/personnel-search'
 import { createDefaultShiftRegistrationFormValues, type ShiftRegistrationFormValues } from '@/application/shift-registration/shift-registration-form-values'
 import { validateShiftRegistrationForm } from '@/application/shift-registration/validate-shift-registration-form'
@@ -203,11 +203,13 @@ export function WelcomePage() {
   const triggerRef = useRef<HTMLButtonElement>(null)
   const mountedRef = useRef(true)
   const masterDataRequestInFlightRef = useRef(false)
+  const masterDataRequestVersionRef = useRef(0)
   const incompleteSetupPath = useMemo(() => recoverableSetupPath(), [])
 
   const loadMasterData = useCallback(async (isManualRetry = false) => {
     if (masterDataRequestInFlightRef.current) return
     masterDataRequestInFlightRef.current = true
+    const requestVersion = ++masterDataRequestVersionRef.current
     if (isManualRetry) setIsRetryingMasterData(true)
     setMasterDataStatus({ kind: 'loading' })
     try {
@@ -216,7 +218,7 @@ export function WelcomePage() {
         refreshMasterData: () => refreshAppsScriptMasterData(),
         isOnline: () => navigator.onLine,
       })
-      if (!mountedRef.current) return
+      if (!mountedRef.current || requestVersion !== masterDataRequestVersionRef.current) return
       if (result.kind === 'ready') {
         setMasterData(result.masterData)
         setMasterDataStatus({ kind: 'ready' })
@@ -234,6 +236,14 @@ export function WelcomePage() {
     void loadMasterData()
     return () => { mountedRef.current = false }
   }, [loadMasterData])
+
+  useEffect(() => subscribeToSuccessfulMasterDataRefresh(({ masterData: refreshedMasterData }) => {
+    masterDataRequestVersionRef.current += 1
+    if (!mountedRef.current) return
+    setMasterData(refreshedMasterData)
+    setMasterDataStatus({ kind: 'ready' })
+    setIsRetryingMasterData(false)
+  }), [])
 
   const completeIdentity = isComplete(identity, masterData)
   useEffect(() => {

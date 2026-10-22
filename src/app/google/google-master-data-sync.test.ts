@@ -5,7 +5,7 @@ import { err, ok } from '@/domain/common/result'
 import { parseSectorCode } from '@/domain/common/codes'
 import { createMasterData, type MasterData } from '@/domain/master/master-data'
 import { createSectorReference } from '@/domain/master/references'
-import { refreshAppsScriptMasterData } from './google-master-data-sync'
+import { refreshAppsScriptMasterData, subscribeToSuccessfulMasterDataRefresh } from './google-master-data-sync'
 
 function must<T>(result: Result<T, DomainError>): T {
   if (!result.ok) throw new Error('invalid test fixture')
@@ -113,5 +113,50 @@ describe('refreshAppsScriptMasterData', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.error.code).toBe('GOOGLE_CONFIG_UNAVAILABLE')
+  })
+
+  it('notifies subscribers only after a successful cache persistence and supports unsubscribe', async () => {
+    const masterData = buildMasterData()
+    const cache = new FakeCache()
+    const subscriber = vi.fn()
+    const unsubscribe = subscribeToSuccessfulMasterDataRefresh(subscriber)
+
+    await refreshAppsScriptMasterData({
+      reader: new FakeReader(ok(masterData)),
+      cache,
+      clock: { now: () => new Date('2026-09-05T00:00:00.000Z') },
+    })
+
+    expect(cache.replaceCalls).toBe(1)
+    expect(subscriber).toHaveBeenCalledWith(cache.entry)
+    unsubscribe()
+    await refreshAppsScriptMasterData({
+      reader: new FakeReader(ok(masterData)),
+      cache,
+      clock: { now: () => new Date('2026-09-06T00:00:00.000Z') },
+    })
+    expect(subscriber).toHaveBeenCalledOnce()
+  })
+
+  it('does not notify a failed refresh and notifies when the following request recovers', async () => {
+    const cache = new FakeCache()
+    const subscriber = vi.fn()
+    const unsubscribe = subscribeToSuccessfulMasterDataRefresh(subscriber)
+
+    await refreshAppsScriptMasterData({
+      reader: new FakeReader(err({ code: 'GOOGLE_REQUEST_FAILED', message: 'offline' })),
+      cache,
+      clock: { now: () => new Date() },
+    })
+    expect(subscriber).not.toHaveBeenCalled()
+
+    const masterData = buildMasterData()
+    await refreshAppsScriptMasterData({
+      reader: new FakeReader(ok(masterData)),
+      cache,
+      clock: { now: () => new Date('2026-09-07T00:00:00.000Z') },
+    })
+    expect(subscriber).toHaveBeenCalledWith(cache.entry)
+    unsubscribe()
   })
 })

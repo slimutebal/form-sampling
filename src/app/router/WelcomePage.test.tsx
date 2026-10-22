@@ -14,6 +14,7 @@ import { createDefaultShiftRegistrationFormValues } from '@/application/shift-re
 import type { LocalShiftWorkspace } from '@/app/local-operational-store'
 import { WelcomePage } from './WelcomePage'
 import { loadLandingMasterData } from './landing-master-data'
+import { refreshAppsScriptMasterData } from '@/app/google/google-master-data-sync'
 import { clearPreShiftSetupSession, savePreShiftSetupSession } from '@/infrastructure/device/pre-shift-setup-session-store'
 
 const store = vi.hoisted(() => ({
@@ -32,8 +33,8 @@ function must<T>(result: { readonly ok: boolean; readonly value?: T }): T {
   return result.value as T
 }
 
-function buildLandingMasterData(): MasterData {
-  const sector = must(parseSectorCode('BR1'))
+function buildLandingMasterData(sectorValue = 'BR1'): MasterData {
+  const sector = must(parseSectorCode(sectorValue))
   const house = must(parseSamplingHouseCode('SH_01'))
   return must(
     createMasterData({
@@ -168,6 +169,55 @@ describe('WelcomePage', () => {
     retry.resolve(ok({ masterData: buildLandingMasterData() }))
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Try Again / Coba Lagi' })).not.toBeInTheDocument())
     expect(screen.getByText('Ore Quality Assurance')).toBeInTheDocument()
+  })
+
+  it('keeps the Landing modal and operator selection while applying a successful background refresh', async () => {
+    const user = userEvent.setup()
+    const cachedMasterData = buildLandingMasterData('BR1')
+    const refreshedMasterData = buildLandingMasterData('BR2')
+    store.readCachedMasterData.mockResolvedValue(ok({ masterData: cachedMasterData, fetchedAt: new Date('2026-10-06') }))
+    renderLanding()
+
+    await user.click(screen.getByRole('button', { name: /^New Record/ }))
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Sector' })).toBeEnabled())
+    await user.click(screen.getByRole('combobox', { name: 'Sector' }))
+    await user.click(screen.getByRole('option', { name: 'BR1' }))
+
+    await refreshAppsScriptMasterData({
+      reader: { readMasterData: async () => ok(refreshedMasterData) },
+      cache: {
+        readCachedMasterData: async () => ok(undefined),
+        replaceMasterDataCache: async () => ok(undefined),
+      },
+      clock: { now: () => new Date('2026-10-07T00:00:00.000Z') },
+    })
+
+    expect(screen.getByRole('dialog', { name: 'NEW RECORD' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Sector' })).toHaveValue('BR1')
+    await user.click(screen.getByRole('combobox', { name: 'Sector' }))
+    expect(await screen.findByRole('option', { name: 'BR2' })).toBeInTheDocument()
+  })
+
+  it('keeps a successful background refresh when an earlier Landing cache read resolves afterwards', async () => {
+    const initialRead = deferred<ReturnType<typeof ok<{ readonly masterData: MasterData; readonly fetchedAt: Date }>>>()
+    const refreshedMasterData = buildLandingMasterData('BR2')
+    store.readCachedMasterData.mockImplementationOnce(() => initialRead.promise)
+    renderLanding()
+
+    await refreshAppsScriptMasterData({
+      reader: { readMasterData: async () => ok(refreshedMasterData) },
+      cache: {
+        readCachedMasterData: async () => ok(undefined),
+        replaceMasterDataCache: async () => ok(undefined),
+      },
+      clock: { now: () => new Date('2026-10-07T00:00:00.000Z') },
+    })
+    initialRead.resolve(ok({ masterData: buildLandingMasterData('BR1'), fetchedAt: new Date('2026-10-06') }))
+
+    await userEvent.setup().click(screen.getByRole('button', { name: /^New Record/ }))
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Sector' })).toBeEnabled())
+    await userEvent.setup().click(screen.getByRole('combobox', { name: 'Sector' }))
+    expect(await screen.findByRole('option', { name: 'BR2' })).toBeInTheDocument()
   })
 
   it('opens New Record as an accessible modal, keeps typed checker text readable, and closes on Escape', async () => {
